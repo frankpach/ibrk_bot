@@ -79,8 +79,10 @@ async def cmd_estado(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     else:
         pos_text = "  Sin posiciones abiertas"
+    ib_status = "✅ Conectado" if data.get('ib_connected') else "❌ Desconectado"
     msg = (
         f"Estado del sistema\n\n"
+        f"IB Gateway: {ib_status}\n"
         f"Modo: {data.get('mode', '?').upper()}\n"
         f"Pausado: {'Si' if data.get('paused') else 'No'}\n"
         f"Capital simulado: ${data.get('simulated_capital', 500)}\n"

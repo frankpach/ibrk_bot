@@ -337,8 +337,17 @@ def system_status():
     except Exception:
         from app.config.settings import CAPITAL_CAP
         _capital = CAPITAL_CAP
+    
+    # Estado de conexion IB Gateway
+    ib_connected = False
+    try:
+        ib_connected = client.ib.isConnected()
+    except Exception:
+        pass
+    
     return {
         **status,
+        "ib_connected": ib_connected,
         "open_positions": len(open_trades),
         "daily_pnl_usd": round(daily_pnl, 2),
         "daily_pnl_pct": round(daily_pnl / _capital * 100, 2) if _capital else 0.0,
