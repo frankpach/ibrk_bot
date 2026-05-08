@@ -1,174 +1,180 @@
-# app/ibkr/client.py
-"""Cliente IBKR con fallback a mock para desarrollo y reconexión automática."""
-import logging
-import os
-from typing import Any
+import asyncio
+import threading
+
+from ib_insync import IB, Stock
 
 from app.config.settings import (
-    IB_GATEWAY_HOST, IB_GATEWAY_PORT, IB_CLIENT_ID,
-    PAPER_TRADING_ONLY,
+    IB_HOST,
+    IB_PORT,
+    IB_CLIENT_ID,
+    MARKET_DATA_TYPE,
+    READ_ONLY,
 )
-
-logger = logging.getLogger(__name__)
-
-
-class _MockIB:
-    """Mock de ib_insync para desarrollo sin conexión a TWS/Gateway."""
-
-    def __init__(self):
-        self._connected = False
-        self._portfolio: list[dict] = []
-        self._orders: list[dict] = []
-        self._next_order_id = 1000
-
-    def isConnected(self) -> bool:
-        return self._connected
-
-    def connect(self, host: str, port: int, clientId: int, timeout: float = 10):
-        logger.warning(f"MOCK IB: connect({host}, {port}, {clientId})")
-        self._connected = True
-
-    def disconnect(self):
-        self._connected = False
-
-    def reqAccountSummary(self, reqId: int, groupName: str, tags: str):
-        return []
-
-    def reqPositions(self):
-        return []
+from app.ibkr.contract_factory import build_contract
 
 
 class IBKRClient:
-    """Wrapper sobre ib_insync con reconexión y modo mock."""
+    """
+    All ib_insync calls run inside a dedicated thread that owns the event loop.
+    Public methods are fully sync-safe from any calling thread.
+    """
 
-    def __init__(self, client_id: int | None = None):
-        self.client_id = client_id or IB_CLIENT_ID
-        self.ib: Any = None
-        self._mock = False
-        self._connect()
+    def __init__(self, client_id: int = None):
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
+        self.ib = IB()
+        self._lock = threading.Lock()
+        self._client_id = client_id if client_id is not None else IB_CLIENT_ID
+        self._run_sync(self._connect_async())
 
-    def _connect(self):
-        try:
-            from ib_insync import IB, Stock, MarketOrder, LimitOrder
-            self.ib = IB()
-            self.ib.connect(IB_GATEWAY_HOST, IB_GATEWAY_PORT, clientId=self.client_id, timeout=10)
-            logger.info(f"Connected to IB Gateway {IB_GATEWAY_HOST}:{IB_GATEWAY_PORT}")
-        except Exception as exc:
-            logger.warning(f"Could not connect to IB Gateway ({exc}). Falling back to MOCK.")
-            self.ib = _MockIB()
-            self.ib.connect(IB_GATEWAY_HOST, IB_GATEWAY_PORT, self.client_id)
-            self._mock = True
+    def _run_loop(self):
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_forever()
 
-    def _ensure_connected(self):
+    def _run_sync(self, coro):
+        fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return fut.result(timeout=30)
+
+    async def _connect_async(self):
         if not self.ib.isConnected():
-            logger.warning("IB disconnected – attempting reconnect...")
-            self._connect()
+            await self.ib.connectAsync(
+                host=IB_HOST,
+                port=IB_PORT,
+                clientId=self._client_id,
+                readonly=READ_ONLY,
+            )
+            # sendMsg must run inside the loop thread — call via loop directly
+            self._loop.call_soon(
+                lambda: self.ib.reqMarketDataType(MARKET_DATA_TYPE)
+            )
 
-    # ── Precios ──
-    def get_stock_price(self, symbol: str) -> dict[str, Any]:
-        self._ensure_connected()
-        if self._mock:
-            import random
-            price = round(random.uniform(50, 500), 2)
-            return {"market_price": price, "bid": price - 0.01, "ask": price + 0.01, "mock": True}
-
-        from ib_insync import Stock
-        contract = Stock(symbol, "SMART", "USD")
-        ticker = self.ib.reqMktData(contract, snapshot=True)
-        self.ib.sleep(2)
-        price = ticker.last or ticker.close or ticker.marketPrice()
-        if price is None or price <= 0:
-            raise RuntimeError(f"No price data for {symbol}")
-        return {"market_price": round(float(price), 2), "bid": ticker.bid, "ask": ticker.ask}
-
-    # ── Cuenta ──
-    def get_account(self) -> dict[str, Any]:
-        self._ensure_connected()
-        if self._mock:
-            return {"net_liquidation": 100_000.0, "available_funds": 50_000.0, "mock": True}
-
-        summary = self.ib.accountSummary()
-        data = {item.tag: item.value for item in summary}
+    async def _get_price_async(
+        self,
+        symbol: str,
+        sec_type: str = "STK",
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> dict:
+        await self._connect_async()
+        contract = build_contract(symbol, sec_type, exchange, currency)
+        # qualifyContractsAsync is a true coroutine — safe to await inside loop
+        await self.ib.qualifyContractsAsync(contract)
+        ticker = self.ib.reqMktData(contract)
+        await asyncio.sleep(5)
+        self.ib.cancelMktData(contract)
         return {
-            "net_liquidation": float(data.get("NetLiquidation", 0)),
-            "available_funds": float(data.get("AvailableFunds", 0)),
-            "maint_margin_req": float(data.get("MaintMarginReq", 0)),
+            "symbol": symbol.upper(),
+            "market_price": ticker.marketPrice(),
+            "last": ticker.last,
+            "bid": ticker.bid,
+            "ask": ticker.ask,
         }
 
-    # ── Portafolio ──
-    def get_portfolio(self) -> list[dict[str, Any]]:
-        self._ensure_connected()
-        if self._mock:
-            return self.ib._portfolio
+    def get_stock_price(
+        self,
+        symbol: str,
+        sec_type: str = "STK",
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> dict:
+        with self._lock:
+            return self._run_sync(
+                self._get_price_async(symbol, sec_type, exchange, currency)
+            )
 
-        positions = self.ib.positions()
+    async def _get_account_async(self) -> dict:
+        await self._connect_async()
+        summary = await self.ib.accountSummaryAsync()
+        result = {"net_liquidation": 0.0, "buying_power": 0.0, "cash_balance": 0.0, "currency": "USD"}
+        for item in summary:
+            if item.tag == "NetLiquidation":
+                result["net_liquidation"] = float(item.value)
+                result["currency"] = item.currency
+            elif item.tag == "BuyingPower":
+                result["buying_power"] = float(item.value)
+            elif item.tag == "TotalCashValue":
+                result["cash_balance"] = float(item.value)
+        return result
+
+    def get_account(self) -> dict:
+        with self._lock:
+            return self._run_sync(self._get_account_async())
+
+    async def _get_portfolio_async(self) -> list:
+        await self._connect_async()
+        items = self.ib.portfolio()
         return [
             {
-                "symbol": p.contract.symbol,
-                "quantity": int(p.position),
-                "market_price": float(p.marketPrice) if p.marketPrice else 0.0,
-                "avg_cost": float(p.avgCost) if p.avgCost else 0.0,
+                "symbol": item.contract.symbol,
+                "quantity": item.position,
+                "avg_cost": item.averageCost,
+                "market_value": item.marketValue,
+                "unrealized_pnl": item.unrealizedPNL,
             }
-            for p in positions
-            if p.position != 0
+            for item in items
         ]
 
-    # ── Órdenes ──
-    def place_order(self, symbol: str, action: str, quantity: int, order_type: str = "MKT", limit_price: float | None = None) -> dict[str, Any]:
-        self._ensure_connected()
-        if self._mock:
-            self.ib._next_order_id += 1
-            order_id = str(self.ib._next_order_id)
-            self.ib._portfolio.append({
-                "symbol": symbol, "quantity": quantity if action == "BUY" else -quantity,
-                "market_price": 0.0, "avg_cost": 0.0,
-            })
-            return {"order_id": order_id, "status": "submitted", "mock": True}
+    def get_portfolio(self) -> list:
+        with self._lock:
+            return self._run_sync(self._get_portfolio_async())
 
-        from ib_insync import Stock, MarketOrder, LimitOrder
-        contract = Stock(symbol, "SMART", "USD")
-        if order_type.upper() == "MKT":
-            order = MarketOrder(action.upper(), quantity)
-        elif order_type.upper() == "LMT" and limit_price is not None:
-            order = LimitOrder(action.upper(), quantity, limit_price)
-        else:
-            raise ValueError(f"Unsupported order type: {order_type}")
-
+    async def _place_order_async(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        order_type: str,
+        limit_price: float | None = None,
+        sec_type: str = "STK",
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> dict:
+        await self._connect_async()
+        from ib_insync import Order
+        contract = build_contract(symbol, sec_type, exchange, currency)
+        await self.ib.qualifyContractsAsync(contract)
+        order = Order(
+            action=action.upper(),
+            totalQuantity=quantity,
+            orderType=order_type.upper(),
+        )
+        if order_type.upper() == "LMT":
+            if limit_price is None:
+                raise ValueError("limit_price is required for LMT orders")
+            order.lmtPrice = float(limit_price)
         trade = self.ib.placeOrder(contract, order)
-        self.ib.sleep(1)
+        await asyncio.sleep(1)
         return {
-            "order_id": trade.order.orderId,
-            "status": trade.orderStatus.status if trade.orderStatus else "unknown",
+            "order_id": str(trade.order.orderId),
+            "symbol": symbol.upper(),
+            "action": action.upper(),
+            "quantity": quantity,
+            "order_type": order_type.upper(),
+            "status": trade.orderStatus.status,
         }
 
-    def close_position(self, symbol: str, quantity: int, action: str, order_type: str = "MKT", limit_price: float | None = None) -> dict[str, Any]:
-        """Envía orden de cierre para una posición existente."""
-        return self.place_order(symbol, action, quantity, order_type, limit_price)
+    def place_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: int,
+        order_type: str,
+        limit_price: float | None = None,
+        sec_type: str = "STK",
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> dict:
+        with self._lock:
+            return self._run_sync(
+                self._place_order_async(
+                    symbol, action, quantity, order_type,
+                    limit_price, sec_type, exchange, currency,
+                )
+            )
 
-    # ── Sincronización ──
-    def sync_positions(self) -> list[dict[str, Any]]:
-        """Retorna posiciones reales de IBKR para sincronizar con DB local."""
-        return self.get_portfolio()
-
-    # ── Historial de barras ──
-    def req_historical_data(self, symbol: str, duration: str = "30 D", bar_size: str = "1 day") -> list[Any]:
-        self._ensure_connected()
-        if self._mock:
-            import random
-            base = random.uniform(50, 500)
-            return [
-                type("Bar", (), {
-                    "close": base + random.uniform(-5, 5),
-                    "volume": random.randint(1_000_000, 10_000_000),
-                })()
-                for _ in range(30)
-            ]
-
-        from ib_insync import Stock
-        contract = Stock(symbol, "SMART", "USD")
-        bars = self.ib.reqHistoricalData(
-            contract, endDateTime="", durationStr=duration,
-            barSizeSetting=bar_size, whatToShow="TRADES",
-            useRTH=True, formatDate=1,
-        )
-        return bars or []
+    def disconnect(self):
+        async def _disc():
+            if self.ib.isConnected():
+                self.ib.disconnect()
+        self._run_sync(_disc())

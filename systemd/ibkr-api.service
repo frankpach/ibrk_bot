@@ -1,0 +1,20 @@
+[Unit]
+Description=IBKR AI Trader API + Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=frankpach
+WorkingDirectory=/home/frankpach/ibkr-bot
+EnvironmentFile=/home/frankpach/ibkr-bot/.env
+ExecStartPre=/bin/sleep 15
+ExecStart=/home/frankpach/ibkr-bot/.venv/bin/python3 /home/frankpach/ibkr-bot/run.py
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ibkr-trader
+
+[Install]
+WantedBy=multi-user.target

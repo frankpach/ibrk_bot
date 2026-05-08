@@ -1,0 +1,19 @@
+[Unit]
+Description=IB Gateway (headless via IBC + Xvfb)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=frankpach
+EnvironmentFile=/home/frankpach/ibkr-bot/.env
+ExecStart=/home/frankpach/ibkr-bot/scripts/start_gateway.sh
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=180
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ibkr-gateway
+
+[Install]
+WantedBy=multi-user.target

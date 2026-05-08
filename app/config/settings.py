@@ -1,49 +1,60 @@
 # app/config/settings.py
-"""Configuración centralizada del bot de trading."""
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from zoneinfo import ZoneInfo
 
-# ── Trading ──
-ALLOWED_SYMBOLS: list[str] = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "AMD"]
-MAX_POSITIONS: int = int(os.getenv("MAX_POSITIONS", "5"))
-MAX_RISK_PCT: float = float(os.getenv("MAX_RISK_PCT", "0.01"))      # 1% del capital por trade
-MIN_RISK_USD: float = float(os.getenv("MIN_RISK_USD", "50"))          # Riesgo mínimo en USD
-MAX_POSITION_USD: float = float(os.getenv("MAX_POSITION_USD", "5000")) # Máximo por posición
-MIN_PROFIT_PCT_MEDIUM: float = float(os.getenv("MIN_PROFIT_PCT_MEDIUM", "0.015"))  # 1.5%
-MAX_DAILY_LOSS_PCT: float = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))         # 3% diario
+# --- IB Gateway ---
+IB_HOST = os.getenv("IB_HOST", "127.0.0.1")
+IB_PORT = int(os.getenv("IB_PORT", "4002"))
+IB_CLIENT_ID = 10
+IB_CLIENT_ID_DATA = int(os.getenv("IB_CLIENT_ID_DATA", "12"))
+MARKET_DATA_TYPE = 3  # 3=delayed, 1=live
+IB_MOCK = os.getenv("IB_MOCK", "false").lower() == "true"
 
-# ── Mercado ──
+# --- Trading rules ---
+READ_ONLY = True
+PAPER_TRADING_ONLY = True
+REQUIRE_HUMAN_APPROVAL = False  # False en paper, True en live
+MAX_POSITIONS = 3
+MAX_RISK_PCT = 0.02
+MIN_RISK_USD = 1.0
+MAX_POSITION_USD = 500.0
+CAPITAL_CAP = float(os.getenv("CAPITAL_CAP", "500.0"))
+
+# DEPRECATED — kept for backward-compat with any external script.
+# The risk validator now reads approved symbols from the DB.
+ALLOWED_SYMBOLS = [
+    "AAPL", "MSFT", "SPY", "QQQ",
+    "TSLA", "NVDA", "AMZN", "GOOGL",
+    "META", "JPM",
+]
+
+# --- LLM ---
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.moonshot.cn/v1")
+LLM_MODEL = os.getenv("LLM_MODEL", "moonshot-v1-8k")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+OPENCODE_BIN = os.getenv("OPENCODE_BIN", "/home/frankpach/.opencode/bin/opencode")
+OPENCODE_MODEL = os.getenv("OPENCODE_MODEL", "opencode-go/qwen3.5-plus")
+
+# --- Internal API ---
+API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8088")
+
+# --- Scheduler ---
+SCAN_INTERVAL_MINUTES = 15
 MARKET_TZ = ZoneInfo("America/New_York")
-MARKET_OPEN_HOUR: int = 9
-MARKET_OPEN_MINUTE: int = 30
-MARKET_CLOSE_HOUR: int = 16
-MARKET_CLOSE_MINUTE: int = 0
+MARKET_OPEN_HOUR = 9
+MARKET_OPEN_MINUTE = 15
+MARKET_CLOSE_HOUR = 16
+MARKET_CLOSE_MINUTE = 15
 
-# ── IBKR ──
-IB_GATEWAY_HOST: str = os.getenv("IB_GATEWAY_HOST", "127.0.0.1")
-IB_GATEWAY_PORT: int = int(os.getenv("IB_GATEWAY_PORT", "7497"))
-IB_CLIENT_ID: int = int(os.getenv("IB_CLIENT_ID", "11"))
+POSITION_CHECK_MINUTES = 2
+MIN_PROFIT_PCT_MEDIUM = 0.01
 
-# ── LLM ──
-LLM_API_KEY: str | None = os.getenv("LLM_API_KEY")
-LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
-LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+# --- Telegram ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_APPROVAL_TIMEOUT_SECONDS = 300
 
-# ── Base de datos ──
-DB_PATH: str = os.getenv("DB_PATH", "data/trades.db")
-
-# ── Seguridad / Modo ──
-PAPER_TRADING_ONLY: bool = os.getenv("PAPER_TRADING_ONLY", "true").lower() in ("1", "true", "yes")
-REQUIRE_HUMAN_APPROVAL: bool = os.getenv("REQUIRE_HUMAN_APPROVAL", "false").lower() in ("1", "true", "yes")
-
-# ── Scheduler ──
-SCAN_INTERVAL_MINUTES: int = int(os.getenv("SCAN_INTERVAL_MINUTES", "15"))
-POSITION_CHECK_MINUTES: int = int(os.getenv("POSITION_CHECK_MINUTES", "5"))
-SYNC_INTERVAL_MINUTES: int = int(os.getenv("SYNC_INTERVAL_MINUTES", "10"))
-
-# ── Notificaciones ──
-TELEGRAM_BOT_TOKEN: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID: str | None = os.getenv("TELEGRAM_CHAT_ID")
-
-# ── Misc ──
-MIN_RR_RATIO: float = float(os.getenv("MIN_RR_RATIO", "2.0"))  # Mínimo reward/risk
+# --- DB ---
+DB_PATH = os.getenv("DB_PATH", "ibkr_trader.db")
