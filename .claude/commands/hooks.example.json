@@ -1,0 +1,70 @@
+{
+  "name": "Development Pipeline Hooks",
+  "description": "Validation and reminder hooks for the 10-phase workflow",
+  "version": "1.0",
+
+  "hooks": {
+    "pre-phase-1": {
+      "event": "before-phase-1-architecture",
+      "condition": "check if /docs/dev/artifacts/<module>/01-design-concept.md exists",
+      "action": "warn if missing - run phase 0 first",
+      "required": true
+    },
+
+    "pre-phase-2": {
+      "event": "before-phase-2-design",
+      "condition": "check if /docs/dev/artifacts/<module>/02-architecture-map.md exists",
+      "action": "warn if missing - run phase 1 first",
+      "required": true
+    },
+
+    "pre-phase-3": {
+      "event": "before-phase-3-requirements",
+      "condition": "check if /docs/dev/artifacts/<module>/03-interface-design.md exists",
+      "action": "warn if missing - run phase 2 first",
+      "required": true
+    },
+
+    "context-cleanup-reminder": {
+      "event": "after-any-workflow",
+      "condition": "workflow completes",
+      "action": "remind: 'Clear context before next phase: /clear'",
+      "required": false
+    },
+
+    "artifact-validation": {
+      "event": "after-skill-completes",
+      "condition": "skill produces artifact",
+      "action": "verify artifact saved to correct location",
+      "examples": [
+        "/docs/dev/artifacts/<module>/01-design-concept.md",
+        "/docs/dev/artifacts/<module>/02-architecture-map.md"
+      ],
+      "required": true
+    },
+
+    "issue-quality-check": {
+      "event": "before-phase-5-execution",
+      "condition": "issues from phase 4 are ready",
+      "action": "validate acceptance criteria are specific (not vague)",
+      "required": true
+    },
+
+    "smart-zone-check": {
+      "event": "during-skill-execution",
+      "condition": "token usage approaches 80k",
+      "action": "warn: 'approaching context limit, save work and clear context'",
+      "required": false
+    }
+  },
+
+  "implementation-notes": {
+    "location": ".claude/hooks.json (if Claude Code supports it)",
+    "format": "JSON with event-condition-action pattern",
+    "execution": "CLI or IDE plugin intercepts events",
+    "examples": {
+      "command-before": "hook runs BEFORE command execution",
+      "command-after": "hook runs AFTER command execution"
+    }
+  }
+}

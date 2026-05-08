@@ -1,0 +1,150 @@
+# Code Index: dev-plan
+module: dev-plan
+updated_at: "2026-05-07T15:30:00Z"
+
+models:
+  # EXISTENTES — con gaps identificados
+  - name: Signal
+    path: app/db/models.py
+    fields: [id, symbol, strength, rsi, macd, volume_ratio, extra_indicators, created_at, processed]
+    status: exists
+    gap: "Solo 3 indicadores. Necesita feature_snapshot_id FK para audit completo."
+  - name: Trade
+    path: app/db/models.py
+    fields: [id, symbol, action, entry_price, stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct, signal_strength, llm_justification, status, pnl_usd, pnl_pct, exit_reason, opened_at, closed_at, order_id]
+    status: exists
+    gap: "No guarda FeatureVector al momento de entrada."
+  - name: Pattern
+    path: app/db/models.py
+    status: exists
+    gap: "Texto libre. Reemplazar/complementar con symbol_parameters numérico."
+  - name: SymbolConfig
+    path: app/db/models.py
+    status: exists
+    gap: "Necesita category, watchlist_score, last_evaluated_at."
+  - name: Decision
+    path: app/db/models.py
+    status: exists
+    gap: "response es texto libre sin quant_score ni feature_snapshot_id."
+
+  # NUEVOS — a crear
+  - name: FeatureSnapshot
+    path: app/db/models.py
+    fields: [id, symbol, timestamp, timeframe, rsi_14, macd_line, macd_signal, macd_crossover, atr_pct, sma20, sma50, sma200, bollinger_upper, bollinger_lower, bollinger_position, vwap, volume_ratio_20d, hist_volatility_30d, impl_volatility, rs_vs_spy_30d, rs_vs_qqq_30d, feature_relevance_json]
+    status: to_create
+
+  - name: SymbolParameter
+    path: app/db/models.py
+    fields: [symbol, stop_loss_pct, take_profit_pct, min_profit_pct, momentum_weight, trend_weight, volume_weight, volatility_weight, portfolio_fit_weight, version, previous_json, updated_at, trade_count]
+    status: to_create
+
+  - name: CandidateDecision
+    path: app/db/models.py
+    fields: [id, symbol, date, decision, price_at_decision, quant_score, feature_snapshot_id, llm_summary, future_return_7d, future_return_30d, future_return_90d, alpha_vs_spy_7d, alpha_vs_spy_30d, evaluated_at]
+    status: to_create
+
+  - name: WatchlistScore
+    path: app/db/models.py
+    fields: [symbol, signal_quality_score, admission_score, trade_history_score, watchlist_score, last_updated]
+    status: to_create
+
+components:
+  # NO MODIFICAR
+  - name: IBKRClient
+    path: app/ibkr/client.py
+    methods: [get_stock_price, get_account, get_portfolio, place_order, disconnect]
+    status: stable_do_not_modify
+
+  - name: RiskValidator
+    path: app/risk/validator.py
+    methods: [validate_order]
+    status: stable_do_not_modify
+
+  # NUEVOS
+  - name: IBDataLayer
+    path: app/analysis/data.py
+    methods: [fetch_ohlcv, fetch_historical_volatility, fetch_implied_volatility, fetch_news_ib, run_scanner, fetch_earnings_date, get_cached]
+    client_id: 12
+    status: to_create
+
+  - name: IndicatorEngine
+    path: app/analysis/indicators.py
+    methods: [compute, compute_from_df, compute_single, get_feature_relevance, update_feature_relevance]
+    plugin_registry: [rsi_14, macd, atr_pct, sma20, sma50, sma200, bollinger, vwap, volume_profile, rs_vs_spy, rs_vs_qqq, hist_volatility, impl_volatility]
+    status: to_create
+
+  - name: QuantScorer
+    path: app/analysis/scorer.py
+    methods: [score, get_weights, update_weights_attenuated, get_recommendation]
+    global_weights: {momentum: 0.25, trend: 0.20, volume: 0.15, volatility: 0.10, portfolio_fit: 0.15, sentiment: 0.15}
+    thresholds: {rejected: 49, watchlist: 69, propose: 84, priority: 100}
+    status: to_create
+
+  - name: HardRules
+    path: app/analysis/hard_rules.py
+    methods: [check_all, check_earnings_gate, check_liquidity, check_correlation, check_capital]
+    status: to_create
+
+  - name: CandidateAdmissionFlow
+    path: app/analysis/admission.py
+    methods: [analyze, analyze_batch]
+    watchdog_timeout_total: 600
+    watchdog_timeouts_by_step: {fetch_data: 30, calc_indicators: 10, hard_rules: 5, llm_call: 60}
+    status: to_create
+
+  - name: MockIBClient
+    path: app/analysis/mock_client.py
+    methods: "same interface as IBKRClient"
+    activation: "IB_MOCK=true in .env"
+    status: to_create
+
+  # MIGRAR / REFACTORIZAR
+  - name: Preprocessor
+    path: app/scanner/preprocessor.py
+    migration: "remove _calc_indicators, classify_signal from here — import from IndicatorEngine"
+    status: to_migrate
+
+  - name: BacktestEngine
+    path: app/backtest/engine.py
+    migration: "replace import from preprocessor with import from IndicatorEngine"
+    status: to_migrate
+
+  - name: LLMAgent
+    path: app/llm/agent.py
+    migration: "receive FeatureSnapshot JSON instead of 3 raw numbers. Move OPENCODE_BIN to settings."
+    status: to_refactor
+
+  - name: PostMortem
+    path: app/llm/postmortem.py
+    migration: "replace openai.OpenAI with _call_opencode(). Add structured parameter suggestions."
+    bug: "LLM_API_KEY vacía — nunca ha corrido en producción"
+    status: to_fix_and_refactor
+
+events:
+  # SCHEDULER JOBS — existentes
+  - {id: scanner, trigger: "interval 15min in market hours", status: exists}
+  - {id: signal_processor, trigger: "interval 15min", status: exists}
+  - {id: position_manager, trigger: "interval 2min", status: exists}
+  - {id: circuit_breaker, trigger: "interval 2min", status: exists}
+  - {id: alert_checker, trigger: "interval 2min", status: exists}
+  - {id: weekly_report, trigger: "cron mon 8am ET", status: exists}
+  - {id: sunday_reminder, trigger: "cron sun 10pm ET", status: exists}
+  - {id: gateway_watchdog, trigger: "interval 5min", status: exists}
+
+  # SCHEDULER JOBS — nuevos
+  - {id: daily_discovery, trigger: "cron 8am ET weekdays", status: to_create, description: "IB Scanner + CandidateAdmissionFlow batch para top 20 candidatos"}
+  - {id: return_evaluator, trigger: "cron daily 6am ET", status: to_create, description: "Evalúa retornos 7/30/90d de candidate_decisions vs SPY"}
+  - {id: universe_rotation, trigger: "integrado en daily_discovery", status: to_create, description: "Actualiza watchlist_score, rota top 10"}
+
+services:
+  - {name: FastAPI, path: "app/api/main.py", endpoints: 23, note: "480 líneas — deuda técnica, refactorizar en Phase 6+"}
+  - {name: TelegramBot, path: "app/notifications/telegram_bot.py", note: "Agregar progress_update() para streaming"}
+  - {name: MCPServer, path: "app/mcp/server.py", note: "Agregar tools: candidate_analysis, get_price_free, get_indicator"}
+  - {name: SystemController, path: "app/system/controller.py", note: "Agregar register/unregister job para daily_discovery condicional"}
+
+utilities:
+  - name: attenuated_update
+    path: app/analysis/scorer.py
+    formula: "new_param = old_param + (suggestion - old_param) * confidence * learning_rate"
+    learning_rate: 0.15
+    status: to_create

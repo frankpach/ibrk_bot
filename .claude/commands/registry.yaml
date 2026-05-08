@@ -1,0 +1,196 @@
+﻿version: "1.0"
+updated_at: "2026-05-01"
+
+canonical_paths:
+  commands: ".claude/commands"
+  workflows: ".claude/commands/workflows"
+  skills: ".claude/commands/skills"
+  runtime_state: ".claude/current-dev-issues/.state"
+  automation_state: ".claude/scripts/.state"
+  project_memory: ".claude/project-memory"
+  dev_future: ".claude/dev-future"
+  dev_future_pattern: ".claude/dev-future/<module-or-system>"
+  archive: ".claude/archive"
+  docs_artifacts: "docs/dev/artifacts"
+  docs_modules: "docs/04-modules"
+  docs_roadmap: "docs/06-roadmap"
+  docs_project_memory: "docs/dev/project-memory.md"
+
+workflows:
+  - id: "000-system-health"
+    status: active
+    path: ".claude/commands/workflows/000-system-health.md"
+    group: standalone
+    inputs: ["registry.yaml", "SYSTEM_CONTRACT.md"]
+    outputs: ["health report"]
+  - id: "010-search-assess"
+    status: active
+    path: ".claude/commands/workflows/010-search-assess.md"
+    group: standalone
+    inputs: ["feature, domain, or question"]
+    outputs: ["reuse decision", "impact assessment"]
+  - id: "020-quick-task"
+    status: active
+    path: ".claude/commands/workflows/020-quick-task.md"
+    group: standalone
+    inputs: ["small task description"]
+    outputs: ["compact session note when needed"]
+  - id: "026-cross-layer-fix"
+    status: active
+    path: ".claude/commands/workflows/026-cross-layer-fix.md"
+    group: standalone
+    inputs: ["feature", "what-needs-to-change"]
+    outputs: ["BE files changed", "FE files changed", "validation results"]
+  - id: "030-bug-triage"
+    status: active
+    path: ".claude/commands/workflows/030-bug-triage.md"
+    group: standalone
+    inputs: ["symptom", "failing command or bug report"]
+    outputs: ["root cause", "fix plan", "validation evidence"]
+  - id: "040-pytest-repair"
+    status: active
+    path: ".claude/commands/workflows/040-pytest-repair.md"
+    group: standalone
+    inputs: ["optional pytest path, marker, keyword, or failing output"]
+    outputs: ["grouped failures", "targeted fixes", "targeted reruns", "full-suite result"]
+  - id: "100-state-init"
+    status: active
+    path: ".claude/commands/workflows/100-state-init.md"
+    group: definition_planning
+    inputs: ["module name"]
+    outputs: ["runtime state initialized"]
+  - id: "110-discovery"
+    status: active
+    path: ".claude/commands/workflows/110-discovery.md"
+    group: definition_planning
+    inputs: ["module name", "brief"]
+    outputs: ["design concept", "persona journey", "state update"]
+  - id: "120-architecture"
+    status: active
+    path: ".claude/commands/workflows/120-architecture.md"
+    group: definition_planning
+    inputs: ["phase 0 artifacts", "project docs"]
+    outputs: ["architecture map", "constraints", "decisions"]
+  - id: "130-design"
+    status: active
+    path: ".claude/commands/workflows/130-design.md"
+    group: definition_planning
+    inputs: ["design concept", "architecture map"]
+    outputs: ["interface design"]
+  - id: "140-requirements"
+    status: active
+    path: ".claude/commands/workflows/140-requirements.md"
+    group: definition_planning
+    inputs: ["design concept", "architecture map", "interface design"]
+    outputs: ["PRD"]
+  - id: "150-planning"
+    status: active
+    path: ".claude/commands/workflows/150-planning.md"
+    group: definition_planning
+    inputs: ["PRD", "constraints", "code index"]
+    outputs: ["WBS issues", "state update"]
+  - id: "200-execution"
+    status: active
+    path: ".claude/commands/workflows/200-execution.md"
+    group: delivery_validation
+    inputs: ["issue file", "constraints", "code index"]
+    outputs: ["implementation", "tests", "state update"]
+  - id: "210-quality"
+    status: active
+    path: ".claude/commands/workflows/210-quality.md"
+    group: delivery_validation
+    inputs: ["completed issues"]
+    outputs: ["quality report"]
+  - id: "220-review"
+    status: active
+    path: ".claude/commands/workflows/220-review.md"
+    group: delivery_validation
+    inputs: ["quality report", "changed code"]
+    outputs: ["review report"]
+  - id: "230-architecture-improvements"
+    status: active
+    path: ".claude/commands/workflows/230-architecture-improvements.md"
+    group: delivery_validation
+    inputs: ["completed module", "review report"]
+    outputs: ["architecture backlog"]
+  - id: "300-documentation"
+    status: active
+    path: ".claude/commands/workflows/300-documentation.md"
+    group: closure_memory
+    inputs: ["module artifacts", "architecture backlog"]
+    outputs: ["module docs", "project-memory docs"]
+  - id: "310-retrospective"
+    status: active
+    path: ".claude/commands/workflows/310-retrospective.md"
+    group: closure_memory
+    inputs: ["sprint artifacts", "state summaries"]
+    outputs: ["retro report", "process improvements"]
+  - id: "320-state-close"
+    status: active
+    path: ".claude/commands/workflows/320-state-close.md"
+    group: closure_memory
+    inputs: ["runtime state", "docs artifacts"]
+    outputs: ["promoted memory", "cleared runtime state"]
+  - id: "900-commit-push-github"
+    status: active
+    path: ".claude/commands/workflows/900-commit-push-github.md"
+    group: operations
+    inputs: ["validated changes", "commit message"]
+    outputs: ["pushed commit", "CI status"]
+  - id: "910-rotate-docker-tags"
+    status: active
+    path: ".claude/commands/workflows/910-rotate-docker-tags.md"
+    group: operations
+    inputs: ["registry access", "current git sha"]
+    outputs: ["rotated image tags", "registry verification"]
+  - id: "6-phase-x-execution"
+    status: deprecated
+    path: ".claude/commands/workflows/deprecated/6-phase-x-execution.md"
+    reason: "legacy workflow with stale external references"
+  - id: "8-quality-tests"
+    status: deprecated
+    path: ".claude/commands/workflows/deprecated/8-quality-tests.md"
+    reason: "legacy quality workflow with stale command references"
+skills:
+  - id: "grill-me"
+    status: active
+    path: ".claude/commands/skills/discovery/grill-me/SKILL.md"
+  - id: "discover-codebase"
+    status: active
+    path: ".claude/commands/skills/planning/discover-codebase/SKILL.md"
+  - id: "design-interface"
+    status: active
+    path: ".claude/commands/skills/planning/design-interface/SKILL.md"
+  - id: "code-search"
+    status: active
+    path: ".claude/commands/skills/planning/code-search/SKILL.md"
+  - id: "context-promoter"
+    status: active
+    path: ".claude/commands/skills/planning/context-promoter/SKILL.md"
+  - id: "module-preflight"
+    status: active
+    path: ".claude/commands/skills/execution/module-preflight/SKILL.md"
+  - id: "phase-run"
+    status: active
+    path: ".claude/commands/skills/execution/phase-run/SKILL.md"
+  - id: "generate-afk-prompt"
+    status: active
+    path: ".claude/commands/skills/execution/generate-afk-prompt/SKILL.md"
+  - id: "quality-gates"
+    status: active
+    path: ".claude/commands/skills/quality/quality-gates/SKILL.md"
+  - id: "code-review"
+    status: active
+    path: ".claude/commands/skills/review/code-review/SKILL.md"
+  - id: "improve-codebase"
+    status: active
+    path: ".claude/commands/skills/architecture/improve-codebase/SKILL.md"
+  - id: "state-validator"
+    status: active
+    path: ".claude/commands/skills/validation/state-validator/SKILL.md"
+  - id: "to-prd"
+    status: missing_deprecated
+    reason: "Phase 3 writes PRD directly"
+  - id: "to-issues"
+    status: missing_deprecated
+    reason: "Phase 4 writes WBS issues directly"

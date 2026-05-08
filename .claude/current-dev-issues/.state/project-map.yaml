@@ -1,0 +1,67 @@
+version: "1.0"
+module: dev-plan
+updated_at: "2026-05-07T18:00:00Z"
+
+objectives:
+  current: dev-plan
+  status: phase_5_pending
+  phases:
+    phase_0: {status: complete, completed_at: "2026-05-07T14:15:00Z", artifacts: ["docs/dev/artifacts/dev-plan/01-design-concept.md", "docs/dev/artifacts/dev-plan/02-persona-journey.md"]}
+    phase_1: {status: complete, completed_at: "2026-05-07T15:30:00Z", artifacts: ["docs/dev/artifacts/dev-plan/03-architecture-map.md", "docs/dev/artifacts/dev-plan/04-constraints.md", "docs/dev/artifacts/dev-plan/05-why-decisions.md"]}
+    phase_2: {status: complete, completed_at: "2026-05-07T16:30:00Z", artifacts: ["docs/dev/artifacts/dev-plan/06-interface-design.md"]}
+    phase_3: {status: complete, completed_at: "2026-05-07T17:30:00Z", artifacts: ["docs/dev/artifacts/dev-plan/08-prd.md"]}
+    phase_4: {status: complete, completed_at: "2026-05-07T18:00:00Z", artifacts: [".claude/current-dev-issues/001-settings-mock-client.md", ".claude/current-dev-issues/002-iblayer-indicator-engine.md", ".claude/current-dev-issues/003-postmortem-fix.md", ".claude/current-dev-issues/004-scorer-hardrules-db-pipeline.md", ".claude/current-dev-issues/005-migrations.md", ".claude/current-dev-issues/006-discovery-evaluator-endpoints.md"]}
+    phase_5: {status: pending, completed_at: null, issues_completed: 0, issues_total: 6}
+    phase_6: {status: pending, completed_at: null, artifact: null}
+    phase_7: {status: pending, completed_at: null, artifact: null}
+    phase_8: {status: pending, completed_at: null, artifact: null}
+
+personas:
+  - name: "Frank (Trader / Operator)"
+    device: mobile
+    environment: mobile
+    goal: "Supervisar sin microgestionar, análisis con progreso visible"
+    constraint: "Tiempo — respuestas rápidas"
+    critical_flows: ["analisis_on_demand", "señal_automatica", "rotacion_universo"]
+  - name: "Sistema Autónomo (Bot)"
+    device: raspberry_pi
+    environment: server_24_7
+    goal: "Detectar oportunidades, operar con disciplina, aprender"
+    constraint: "Latencia LLM, rate limits IB"
+    critical_flows: ["señal_automatica", "post_mortem", "ib_scanner_discovery"]
+  - name: "LLM Analista (OpenCode)"
+    device: subprocess_pi
+    environment: on_demand
+    goal: "Interpretar FeatureSet JSON, narrar riesgos, sugerir ajustes"
+    constraint: "No calcula ni decide — solo interpreta"
+    critical_flows: ["analisis_on_demand", "post_mortem"]
+
+constraints:
+  timeline: null
+  technical:
+    - "Pi 5 ARM64 Debian 13 Python 3.13"
+    - "IBDataLayer client_id=12, IBKRClient NO MODIFICAR"
+    - "TTL: 0=trade_entry, 120=on_demand, 900=scanner, 3600=backtest, 86400=fundamentals"
+    - "API_BASE + OPENCODE_BIN via os.getenv() en settings.py"
+    - "IB_MOCK=true activa MockIBClient"
+    - "learning_rate=0.15, ventana 5 trades, SL [0.5%-8%], pesos multiplicadores [0.5x-1.5x]"
+    - "AnalysisPipeline watchdog 10min total, timeouts por paso"
+  business:
+    - "Capital simulado $500, 2% riesgo"
+    - "Max 3 posiciones"
+    - "RiskValidator irrompible"
+    - "SPY + QQQ protegidos del universo"
+
+issues:
+  - {id: "001", title: "Settings + MockIBClient", status: pending, priority: P0, effort: S, blocked_by: []}
+  - {id: "002", title: "IBDataLayer + IndicatorEngine", status: pending, priority: P0, effort: L, blocked_by: ["001"]}
+  - {id: "003", title: "PostMortem v2 BUG-001 fix", status: pending, priority: P0, effort: S, blocked_by: ["001"]}
+  - {id: "004", title: "QuantScorer + HardRules + DB + Pipeline", status: pending, priority: P1, effort: XL, blocked_by: ["002"]}
+  - {id: "005", title: "Migrations agent + loop + telegram", status: pending, priority: P1, effort: M, blocked_by: ["004"]}
+  - {id: "006", title: "Discovery + Evaluator + Endpoints + MCP", status: pending, priority: P2, effort: L, blocked_by: ["004", "005"]}
+
+next_action:
+  phase: 5
+  goal: "Execute Issue 001: Settings + MockIBClient"
+  deadline: null
+  blockers: []
