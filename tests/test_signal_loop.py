@@ -62,9 +62,10 @@ def test_processes_all_pending_signals(mock_signals, mock_analyze, mock_mark):
 @patch("app.llm.loop.mark_signal_processed")
 @patch("app.llm.loop.analyze_signal")
 @patch("app.llm.loop.get_pending_signals")
-def test_marks_signal_processed_even_on_llm_error(mock_signals, mock_analyze, mock_mark):
+def test_does_not_mark_signal_processed_on_llm_error(mock_signals, mock_analyze, mock_mark):
+    """Si el LLM falla, la señal NO se marca como procesada para reintentar en el próximo ciclo."""
     mock_signals.return_value = [make_signal()]
     mock_analyze.side_effect = Exception("LLM timeout")
     from app.llm.loop import process_pending_signals
     process_pending_signals()
-    mock_mark.assert_called_once_with(1)
+    mock_mark.assert_not_called()
