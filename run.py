@@ -212,25 +212,25 @@ def main():
         replace_existing=True,
     )
 
-    # FUT_US: 17:45 ET, Sun-Thu
+    # FUT_US: 17:45 ET, Sun-Thu (APScheduler: sun=6, mon=0, thu=3)
     scheduler.add_job(
         lambda: select_top_symbols("FUT_US", ib_client, data_layer),
         trigger="cron",
         hour=17,
         minute=45,
-        day_of_week="sun-thu",
+        day_of_week="0-3,6",
         timezone=MARKET_TZ,
         id="preopen_fut_us",
         replace_existing=True,
     )
 
-    # CASH_FX: 16:45 ET, Sun-Thu
+    # CASH_FX: 16:45 ET, Sun-Thu (APScheduler: sun=6, mon=0, thu=3)
     scheduler.add_job(
         lambda: select_top_symbols("CASH_FX", ib_client, data_layer),
         trigger="cron",
         hour=16,
         minute=45,
-        day_of_week="sun-thu",
+        day_of_week="0-3,6",
         timezone=MARKET_TZ,
         id="preopen_cash_fx",
         replace_existing=True,
