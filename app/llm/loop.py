@@ -52,29 +52,36 @@ def process_pending_signals():
                 signal_id=signal.id,
             )
 
+            order_placed = False
             if decision.action in ("BUY", "SELL"):
                 notify(
                     f"LLM decide: <b>{decision.action} {signal.symbol}</b> [{decision.confidence}]\n"
                     f"SL: {decision.stop_loss_pct:.1%} | TP: {decision.take_profit_pct:.1%}\n"
                     f"{decision.justification}"
                 )
-                _execute_order(signal.symbol, decision)
+                order_placed = _execute_order(signal.symbol, decision)
             else:
                 notify(
                     f"LLM ignora señal <b>{signal.symbol}</b>\n"
                     f"{decision.justification}"
                 )
                 logger.info(f"LLM ignored signal for {signal.symbol}: {decision.justification}")
+                order_placed = True  # Procesada correctamente aunque no haya orden
 
         except Exception as e:
             logger.error(f"Error processing signal {signal.id} for {signal.symbol}: {e}")
             notify(f"Error procesando señal <b>{signal.symbol}</b>: {e}")
-        finally:
+            # No marcamos como procesada para reintentar en el proximo ciclo
+            continue
+
+        if order_placed:
             mark_signal_processed(signal.id)
+        else:
+            logger.warning(f"Signal {signal.id} {signal.symbol} not marked processed — order failed")
 
 
-def _execute_order(symbol: str, decision: LLMDecision):
-    """Envía la orden a FastAPI — el risk validator siempre se aplica ahí."""
+def _execute_order(symbol: str, decision: LLMDecision) -> bool:
+    """Envía la orden a FastAPI. Retorna True si fue aceptada."""
     payload = {
         "symbol": symbol,
         "action": decision.action,
@@ -90,6 +97,7 @@ def _execute_order(symbol: str, decision: LLMDecision):
             reasons = detail.get("detail", {}).get("reasons", [str(detail)])
             notify(f"Orden rechazada <b>{symbol}</b>:\n" + "\n".join(f"• {x}" for x in reasons))
             logger.warning(f"Order rejected by risk validator for {symbol}: {detail}")
+            return False
         elif r.status_code == 200:
             result = r.json()
             notify(
@@ -100,9 +108,12 @@ def _execute_order(symbol: str, decision: LLMDecision):
                 f"Order ID: {result.get('order_id', '?')}"
             )
             logger.info(f"Order placed: {symbol} {decision.action} — {result}")
+            return True
         else:
             logger.error(f"Unexpected status {r.status_code} for {symbol}: {r.text}")
             notify(f"Error al colocar orden <b>{symbol}</b>: HTTP {r.status_code}")
+            return False
     except Exception as e:
         logger.error(f"Failed to place order for {symbol}: {e}")
         notify(f"Fallo al colocar orden <b>{symbol}</b>: {e}")
+        return False

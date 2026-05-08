@@ -51,6 +51,25 @@ def check_positions():
         if exit_reason:
             emoji = "✅" if pnl_usd >= 0 else "❌"
             logger.info(f"Closing trade {trade.id} {trade.symbol} reason={exit_reason} pnl={pnl_pct:.2%} ${pnl_usd:.2f}")
+
+            # 1) Enviar orden de cierre REAL a IBKR
+            close_action = "SELL" if trade.action == "BUY" else "BUY"
+            try:
+                from app.ibkr.client import IBKRClient
+                ib = IBKRClient(client_id=15)
+                ib.place_order(
+                    symbol=trade.symbol,
+                    action=close_action,
+                    quantity=trade.quantity,
+                    order_type="MKT",
+                )
+                logger.info(f"IBKR close order sent: {close_action} {trade.quantity} {trade.symbol}")
+            except Exception as e:
+                logger.error(f"Failed to send IBKR close order for {trade.symbol}: {e}")
+                # Continuamos para no dejar la DB inconsistente,
+                # pero loggeamos para revision manual.
+
+            # 2) Actualizar base de datos local
             close_trade(
                 trade_id=trade.id, exit_price=price, exit_reason=exit_reason,
                 pnl_usd=round(pnl_usd, 2), pnl_pct=round(pnl_pct, 4),

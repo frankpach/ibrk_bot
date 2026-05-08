@@ -1,0 +1,4 @@
+.env
+ibkr_trader.db
+ibkr_trader.db.bak
+__pycache__

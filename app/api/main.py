@@ -138,6 +138,13 @@ def orders_preview(req: OrderPreviewRequest):
     estimated_risk = units * current_price * req.stop_loss_pct
     estimated_value = units * current_price
 
+    if req.action == "BUY":
+        stop_loss_price = round(current_price * (1 - req.stop_loss_pct), 2)
+        take_profit_price = round(current_price * (1 + req.take_profit_pct), 2)
+    else:  # SELL
+        stop_loss_price = round(current_price * (1 + req.stop_loss_pct), 2)
+        take_profit_price = round(current_price * (1 - req.take_profit_pct), 2)
+
     return {
         "approved": result.approved,
         "requires_human_approval": False,
@@ -149,8 +156,8 @@ def orders_preview(req: OrderPreviewRequest):
         "estimated_risk_usd": round(estimated_risk, 2),
         "stop_loss_pct": req.stop_loss_pct,
         "take_profit_pct": req.take_profit_pct,
-        "stop_loss_price": round(current_price * (1 - req.stop_loss_pct), 2),
-        "take_profit_price": round(current_price * (1 + req.take_profit_pct), 2),
+        "stop_loss_price": stop_loss_price,
+        "take_profit_price": take_profit_price,
         "reasons": result.reasons,
     }
 
@@ -262,8 +269,12 @@ def orders_place(req: OrderPreviewRequest):
     from app.db.database import insert_trade
     from app.db.models import Trade
     from datetime import datetime as dt
-    stop_loss_price = round(current_price * (1 - req.stop_loss_pct), 2)
-    take_profit_price = round(current_price * (1 + req.take_profit_pct), 2)
+    if req.action == "BUY":
+        stop_loss_price = round(current_price * (1 - req.stop_loss_pct), 2)
+        take_profit_price = round(current_price * (1 + req.take_profit_pct), 2)
+    else:  # SELL
+        stop_loss_price = round(current_price * (1 + req.stop_loss_pct), 2)
+        take_profit_price = round(current_price * (1 - req.take_profit_pct), 2)
     insert_trade(Trade(
         id=None, symbol=symbol, action=req.action, quantity=units,
         entry_price=current_price, stop_loss_price=stop_loss_price,
