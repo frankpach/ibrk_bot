@@ -398,6 +398,22 @@ def close_position(symbol: str):
         current_price = price_data["market_price"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not fetch price: {e}")
+    
+    # 1) Enviar orden de cierre REAL a IBKR
+    close_action = "SELL" if trade.action == "BUY" else "BUY"
+    try:
+        client.place_order(
+            symbol=trade.symbol,
+            action=close_action,
+            quantity=trade.quantity,
+            order_type="MKT",
+        )
+        logger.info(f"IBKR close order sent: {close_action} {trade.quantity} {trade.symbol}")
+    except Exception as e:
+        logger.error(f"Failed to send IBKR close order for {trade.symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"IBKR close order failed: {e}")
+    
+    # 2) Actualizar base de datos local
     pnl_pct = (current_price - trade.entry_price) / trade.entry_price
     if trade.action == "SELL":
         pnl_pct = -pnl_pct
@@ -418,10 +434,27 @@ def close_all_positions():
     if not trades:
         return {"status": "ok", "closed": 0}
     closed = []
+    failed = []
     for trade in trades:
         try:
             price_data = client.get_stock_price(trade.symbol)
             current_price = price_data["market_price"]
+            
+            # Enviar orden de cierre REAL a IBKR
+            close_action = "SELL" if trade.action == "BUY" else "BUY"
+            try:
+                client.place_order(
+                    symbol=trade.symbol,
+                    action=close_action,
+                    quantity=trade.quantity,
+                    order_type="MKT",
+                )
+                logger.info(f"IBKR close order sent: {close_action} {trade.quantity} {trade.symbol}")
+            except Exception as e:
+                logger.error(f"Failed to send IBKR close order for {trade.symbol}: {e}")
+                failed.append({"symbol": trade.symbol, "error": str(e)})
+                continue
+            
             pnl_pct = (current_price - trade.entry_price) / trade.entry_price
             if trade.action == "SELL":
                 pnl_pct = -pnl_pct
@@ -430,6 +463,9 @@ def close_all_positions():
             closed.append({"symbol": trade.symbol, "pnl_usd": round(pnl_usd, 2)})
         except Exception as e:
             logger.error(f"Could not close {trade.symbol}: {e}")
+            failed.append({"symbol": trade.symbol, "error": str(e)})
+    
+    return {"status": "ok", "closed": len(closed), "failed": len(failed), "positions": closed}
     return {"status": "ok", "closed": len(closed), "positions": closed}
 
 
