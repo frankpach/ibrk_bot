@@ -21,7 +21,7 @@ class ValidationResult:
 
 
 def validate_order(
-    symbol: str, action: str, quantity: int, order_type: str,
+    symbol: str, action: str, quantity: float, order_type: str,
     stop_loss_pct: float, capital: float, active_positions: int,
     now: datetime | None = None,
     liquid_hours: str | None = None,
@@ -53,7 +53,7 @@ def validate_order(
 
     max_risk_usd = max(capital * MAX_RISK_PCT, MIN_RISK_USD)
     max_position_usd = max_risk_usd / stop_loss_pct if stop_loss_pct > 0 else 0
-    position_size_units = int(max_position_usd / price) if price > 0 else 0
+    position_size_units = max_position_usd / price if price > 0 else 0.0
     estimated_risk_usd = position_size_units * stop_loss_pct
 
     if reasons:

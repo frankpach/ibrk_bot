@@ -16,7 +16,7 @@ client = IBKRClient(client_id=11)
 class OrderPreviewRequest(BaseModel):
     symbol: str
     action: str
-    quantity: int
+    quantity: float
     order_type: str
     stop_loss_pct: float
     take_profit_pct: float
@@ -122,10 +122,11 @@ def orders_preview(req: OrderPreviewRequest):
 
     max_risk_usd = max(capital * MAX_RISK_PCT, MIN_RISK_USD)
     max_position_usd = min(max_risk_usd / req.stop_loss_pct, MAX_POSITION_USD) if req.stop_loss_pct > 0 else 0
-    units = int(max_position_usd / current_price) if current_price > 0 else 0
+    units = max_position_usd / current_price if current_price > 0 else 0.0
+    units = round(units, 4)  # Soporta fraccionales (e.g., 1.7034 shares)
     buying_power = account.get("buying_power", 0.0)
     estimated_cost = units * current_price
-    if units == 0:
+    if units <= 0:
         raise HTTPException(
             status_code=400,
             detail=f"Position size is 0 units at ${current_price:.2f} — price too high for available capital",
@@ -217,10 +218,11 @@ def orders_place(req: OrderPreviewRequest):
 
     max_risk_usd = max(capital * MAX_RISK_PCT, MIN_RISK_USD)
     max_position_usd = min(max_risk_usd / req.stop_loss_pct, MAX_POSITION_USD) if req.stop_loss_pct > 0 else 0
-    units = int(max_position_usd / current_price) if current_price > 0 else 0
+    units = max_position_usd / current_price if current_price > 0 else 0.0
+    units = round(units, 4)
     buying_power = account.get("buying_power", 0.0)
     estimated_cost = units * current_price
-    if units == 0:
+    if units <= 0:
         raise HTTPException(
             status_code=400,
             detail=f"Position size is 0 units at ${current_price:.2f} — price too high for available capital",

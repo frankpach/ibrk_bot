@@ -124,7 +124,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS trades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol TEXT NOT NULL, action TEXT NOT NULL,
-                quantity INTEGER NOT NULL, entry_price REAL NOT NULL,
+                quantity REAL NOT NULL, entry_price REAL NOT NULL,
                 stop_loss_price REAL NOT NULL, take_profit_price REAL NOT NULL,
                 stop_loss_pct REAL NOT NULL, take_profit_pct REAL NOT NULL,
                 signal_strength TEXT NOT NULL, llm_justification TEXT,

@@ -22,7 +22,7 @@ class Trade:
     id: Optional[int]
     symbol: str
     action: str
-    quantity: int
+    quantity: float
     entry_price: float
     stop_loss_price: float
     take_profit_price: float
