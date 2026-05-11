@@ -55,8 +55,8 @@ def check_positions():
             # 1) Enviar orden de cierre REAL a IBKR
             close_action = "SELL" if trade.action == "BUY" else "BUY"
             try:
-                from app.ibkr.client import IBKRClient
-                ib = IBKRClient(client_id=15)
+                from app.ibkr.client import get_client
+                ib = get_client()
                 ib.place_order(
                     symbol=trade.symbol,
                     action=close_action,

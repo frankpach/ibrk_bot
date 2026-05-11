@@ -5,12 +5,12 @@ from fastapi import FastAPI, HTTPException
 
 from app.config.settings import ALLOWED_SYMBOLS, MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 from app.api.capital import get_operating_capital
-from app.ibkr.client import IBKRClient
+from app.ibkr.client import get_client
 from app.risk.validator import validate_order
 from app.db.database import get_pending_signals, get_open_trades, get_patterns_for_symbol, init_db
 
 app = FastAPI(title="IBKR AI Trader API")
-client = IBKRClient(client_id=11)
+client = get_client()
 
 
 class OrderPreviewRequest(BaseModel):

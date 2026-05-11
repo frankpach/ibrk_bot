@@ -7,7 +7,7 @@ import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.database import init_db, get_daily_pnl, init_alerts_table, get_active_alerts, mark_alert_triggered, init_market_permissions_table
-from app.ibkr.client import IBKRClient
+from app.ibkr.client import get_client
 from app.scanner.preprocessor import run_scan
 from app.scanner.market_open_selector import select_top_symbols
 from app.positions.manager import check_positions
@@ -101,7 +101,7 @@ def main():
 
     logger.info("Connecting to IB Gateway...")
     try:
-        ib_client = IBKRClient()
+        ib_client = get_client()
     except Exception as e:
         logger.error(f"Could not connect to IB Gateway: {e}")
         notify(f"Error conectando a IB Gateway: {e}\nEl sistema iniciará en modo limitado.")
@@ -138,15 +138,51 @@ def main():
             _cap = CAPITAL_CAP
         ctrl.check_circuit_breaker(daily_pnl, _cap)
 
+    def _safe_run_scan():
+        client = _ib_client_ref["client"]
+        if not client:
+            logger.warning("run_scan omitido: sin conexión IB")
+            return
+        try:
+            if not client.ib.isConnected():
+                raise ConnectionError("IB desconectado")
+            run_scan(client)
+        except Exception as e:
+            logger.error(f"run_scan falló: {e}")
+
     # Shared state for reconnection logic
     _ib_client_ref = {"client": ib_client, "data_layer": data_layer}
     _last_connected_at = time.time() if (ib_client and ib_client.ib.isConnected()) else None
     _MISSING_SCAN_JOBS = []  # cola de scans que fallaron por desconexión
 
-    def _safe_run_scan():
+    def _check_gateway_and_reconnect():
+        """Verifica la conexión a IB Gateway y reconecta si es necesario.
+        Si ib_client nunca se creó (arranque sin IB), lo instancia ahora.
+        """
+        nonlocal _last_connected_at
         client = _ib_client_ref["client"]
-        if not client:
-            logger.warning("run_scan omitido: sin conexión IB")
+
+        # Caso 1: nunca se conectó al arrancar → intentar crear cliente nuevo
+        if client is None:
+            if _is_gateway_online():
+                logger.info("IB Gateway disponible. Creando IBKRClient por primera vez...")
+                try:
+                    new_client = get_client()
+                    _ib_client_ref["client"] = new_client
+                    client = new_client
+                    # Crear data_layer si no existe
+                    if _ib_client_ref["data_layer"] is None:
+                        from app.analysis.data import IBDataLayer
+                        _ib_client_ref["data_layer"] = IBDataLayer(new_client)
+                        logger.info("IBDataLayer creado")
+                    notify("IB Gateway conectado por primera vez. Sistema recuperado.")
+                    logger.info("IBKRClient creado exitosamente")
+                    _last_connected_at = time.time()
+                    # Reconciliar y reintentar scans pendientes
+                    reconcile_positions(client)
+                    _retry_missed_scans()
+                except Exception as e:
+                    logger.error(f"No se pudo crear IBKRClient: {e}")
             return
         try:
             if not client.ib.isConnected():

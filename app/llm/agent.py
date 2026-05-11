@@ -113,9 +113,8 @@ def get_data_layer():
             _data_layer_instance = IBDataLayer(MockIBClient())
         else:
             try:
-                from app.config.settings import IB_CLIENT_ID_DATA
-                from app.ibkr.client import IBKRClient
-                _data_layer_instance = IBDataLayer(IBKRClient(client_id=IB_CLIENT_ID_DATA))
+                from app.ibkr.client import get_client
+                _data_layer_instance = IBDataLayer(get_client())
             except Exception as e:
                 logger.warning(f"Could not create IBKRClient for data layer: {e}")
                 from app.analysis.mock_client import MockIBClient

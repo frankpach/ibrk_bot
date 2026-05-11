@@ -13,13 +13,32 @@ from app.config.settings import (
 from app.ibkr.contract_factory import build_contract
 
 
+_client_instance = None
+_client_lock = threading.Lock()
+
+
 class IBKRClient:
     """
     All ib_insync calls run inside a dedicated thread that owns the event loop.
     Public methods are fully sync-safe from any calling thread.
+
+    SINGLETON: use get_client() instead of IBKRClient() to avoid multiple connections.
     """
 
+    def __new__(cls, client_id: int = None):
+        global _client_instance
+        if _client_instance is not None:
+            return _client_instance
+        with _client_lock:
+            if _client_instance is None:
+                instance = super().__new__(cls)
+                instance._initialized = False
+                _client_instance = instance
+            return _client_instance
+
     def __init__(self, client_id: int = None):
+        if getattr(self, "_initialized", False):
+            return
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -27,6 +46,7 @@ class IBKRClient:
         self._lock = threading.Lock()
         self._client_id = client_id if client_id is not None else IB_CLIENT_ID
         self._run_sync(self._connect_async())
+        self._initialized = True
 
     def _run_loop(self):
         asyncio.set_event_loop(self._loop)
@@ -260,3 +280,10 @@ class IBKRClient:
             if self.ib.isConnected():
                 self.ib.disconnect()
         self._run_sync(_disc())
+        global _client_instance
+        _client_instance = None
+
+
+def get_client() -> IBKRClient:
+    """Return the singleton IBKRClient instance."""
+    return IBKRClient()
