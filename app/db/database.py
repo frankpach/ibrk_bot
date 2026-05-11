@@ -474,9 +474,11 @@ def get_closed_trades(limit: int = 10) -> list:
 
 
 def get_daily_pnl() -> float:
-    """Retorna el P&L total de trades cerrados hoy."""
+    """Retorna el P&L total de trades cerrados hoy (horario ET)."""
+    from app.config.settings import MARKET_TZ
     conn = get_connection()
-    today = datetime.utcnow().date().isoformat()
+    today = datetime.now(MARKET_TZ).date().isoformat()
+    # Sumar trades cerrados hoy en ET (desde 00:00 ET)
     rows = conn.execute(
         "SELECT COALESCE(SUM(pnl_usd), 0) as total FROM trades WHERE status='CLOSED' AND closed_at >= ?",
         (today,)

@@ -8,7 +8,7 @@ from app.notifications.telegram import notify
 
 logger = logging.getLogger(__name__)
 
-CIRCUIT_BREAKER_PCT = 0.05  # 5% de perdida diaria detiene el sistema
+CIRCUIT_BREAKER_PCT = 0.50  # 50% de perdida diaria (desactivado efectivamente con capital pequeno)
 
 
 class SystemController:
