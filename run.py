@@ -438,9 +438,9 @@ def main():
         f"IBKR AI Trader v2 iniciado\n"
         f"Estado IB: {status}\n"
         f"Scanner multi-timeframe: cada {SCAN_INTERVAL_MINUTES} min\n"
-        f"Capital cap: ${CAPITAL_CAP}\n"
+        f"Capital simulado: ${CAPITAL_CAP}\n"
         f"Circuit breaker: 5% pérdida diaria\n"
-        f"Modo: Paper Trading\n"
+        f"Modo: Paper Trading (no envia ordenes reales)\n"
         f"Dashboard: http://aiutox-pi.tail2a2cda.ts.net:8088/dashboard\n"
         "Escribe /ayuda para ver comandos"
     )

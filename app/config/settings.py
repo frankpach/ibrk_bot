@@ -17,10 +17,10 @@ READ_ONLY = True
 PAPER_TRADING_ONLY = True
 REQUIRE_HUMAN_APPROVAL = False  # False en paper, True en live
 MAX_POSITIONS = 3
-MAX_RISK_PCT = 0.05  # 5% con capital pequeno
-MIN_RISK_USD = 0.50  # Minimo 50 centavos
-MAX_POSITION_USD = 39.0  # Ajustado a capital real ~$39
-CAPITAL_CAP = float(os.getenv("CAPITAL_CAP", "39.0"))
+MAX_RISK_PCT = 0.02
+MIN_RISK_USD = 1.0
+MAX_POSITION_USD = 500.0
+CAPITAL_CAP = float(os.getenv("CAPITAL_CAP", "500.0"))
 
 # DEPRECATED — kept for backward-compat with any external script.
 # The risk validator now reads approved symbols from the DB.
