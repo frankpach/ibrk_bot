@@ -42,7 +42,11 @@ class TestDailyDiscovery:
             from app.analysis.pipeline import AnalysisResult
             from app.analysis.scorer import QuantScore
             mock_result = AnalysisResult(symbol="NFLX", recommendation="PROPOSE")
-            mock_result.score = QuantScore("NFLX", 72.0, 0.7, 0.6, 0.7, 0.6, 0.8, 0.7, "PROPOSE", {})
+            mock_result.score = QuantScore(
+                symbol="NFLX", total=72.0, momentum=0.7, trend=0.6,
+                volume=0.7, volatility=0.6, portfolio_fit=0.8, sentiment=0.7,
+                price_change=0.5, recommendation="PROPOSE", weights_used={},
+            )
             mock_pipeline_instance.run.return_value = mock_result
             mock_pipeline_cls.return_value = mock_pipeline_instance
             run_daily_discovery(self.data_layer)

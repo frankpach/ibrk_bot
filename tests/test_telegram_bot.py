@@ -19,6 +19,7 @@ async def test_estado_calls_system_status():
             {"mode": "paper", "paused": False, "simulated_capital": 500,
              "daily_pnl_usd": 0.0, "daily_pnl_pct": 0.0, "open_positions": 0},
             [],
+            {"net_liquidation": 1000.0},
         ]
         from app.notifications.telegram_bot import cmd_estado
         update = make_update()

@@ -119,6 +119,42 @@ class IBKRClient:
         with self._lock:
             return self._run_sync(self._get_portfolio_async())
 
+    async def _get_executions_async(self, since_days: int = 7) -> list:
+        """Retorna fills/ejecuciones reales de IBKR en los ultimos N dias."""
+        await self._connect_async()
+        from ib_insync import ExecutionFilter
+        filt = ExecutionFilter()
+        self.ib.reqExecutions(filt)
+        await asyncio.sleep(1.5)
+        fills = self.ib.fills()
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+        result = []
+        for f in fills:
+            exec_time_str = getattr(f.execution, "time", "")
+            try:
+                exec_time = datetime.fromisoformat(exec_time_str.replace("Z", "+00:00"))
+            except Exception:
+                exec_time = cutoff
+            if exec_time < cutoff:
+                continue
+            result.append({
+                "symbol": f.contract.symbol,
+                "sec_type": f.contract.secType,
+                "action": f.execution.side,
+                "quantity": f.execution.shares,
+                "price": f.execution.price,
+                "time": exec_time_str,
+                "commission": getattr(f.commissionReport, "commission", 0.0),
+                "realized_pnl": getattr(f.commissionReport, "realizedPNL", None),
+            })
+        result.sort(key=lambda x: x["time"], reverse=True)
+        return result
+
+    def get_executions(self, since_days: int = 7) -> list:
+        with self._lock:
+            return self._run_sync(self._get_executions_async(since_days))
+
     async def _place_order_async(
         self,
         symbol: str,

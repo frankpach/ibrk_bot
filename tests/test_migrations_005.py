@@ -13,7 +13,7 @@ def test_analyze_signal_returns_llm_decision():
     mock_result.score = QuantScore(
         symbol="AAPL", total=82.0, momentum=0.8, trend=0.7,
         volume=0.6, volatility=0.7, portfolio_fit=0.8, sentiment=0.7,
-        recommendation="PRIORITY", weights_used={},
+        price_change=0.6, recommendation="PRIORITY", weights_used={},
     )
     mock_result.llm_narrative = "Strong signal"
 
@@ -93,7 +93,7 @@ def test_analyze_signal_action_mapping():
         mock_result.score = QuantScore(
             symbol="TSLA", total=70.0, momentum=0.7, trend=0.7,
             volume=0.6, volatility=0.7, portfolio_fit=0.7, sentiment=0.7,
-            recommendation=rec, weights_used={},
+            price_change=0.5, recommendation=rec, weights_used={},
         )
         mock_result.llm_narrative = "Test"
 
@@ -125,7 +125,7 @@ async def test_cmd_analizar_sends_result():
     mock_result.score = QuantScore(
         symbol="AAPL", total=72.0, momentum=0.7, trend=0.6,
         volume=0.7, volatility=0.6, portfolio_fit=0.8, sentiment=0.7,
-        recommendation="PROPOSE", weights_used={},
+        price_change=0.5, recommendation="PROPOSE", weights_used={},
     )
     mock_result.llm_narrative = "Favorable technical conditions"
     mock_result.hard_rules = HardRulesResult(passed=True, failures=[], warnings=[])

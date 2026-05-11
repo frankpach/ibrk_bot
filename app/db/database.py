@@ -295,9 +295,17 @@ def insert_signal(signal: Signal) -> int:
     return row_id
 
 
-def get_pending_signals() -> list:
+def get_pending_signals(since_hours: int = None) -> list:
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM signals WHERE processed=0 ORDER BY created_at ASC").fetchall()
+    sql = "SELECT * FROM signals WHERE processed=0"
+    params = []
+    if since_hours is not None:
+        from datetime import timezone
+        cutoff = (datetime.now(timezone.utc) - __import__("datetime").timedelta(hours=since_hours)).isoformat()
+        sql += " AND created_at >= ?"
+        params.append(cutoff)
+    sql += " ORDER BY created_at ASC"
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [Signal(
         id=r["id"], symbol=r["symbol"], strength=r["strength"],

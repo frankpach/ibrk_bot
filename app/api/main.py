@@ -78,7 +78,9 @@ def get_portfolio():
 
 @app.get("/allowed-symbols")
 def get_allowed_symbols():
-    return {"symbols": ALLOWED_SYMBOLS}
+    from app.db.database import get_approved_symbols_with_meta
+    symbols = get_approved_symbols_with_meta()
+    return {"symbols": [s["symbol"] for s in symbols], "meta": symbols}
 
 
 @app.post("/symbols/propose")
@@ -164,10 +166,10 @@ def orders_preview(req: OrderPreviewRequest):
 
 
 @app.get("/signals")
-def get_signals():
+def get_signals(since_hours: int = 24):
     return [{"id": s.id, "symbol": s.symbol, "strength": s.strength,
              "rsi": s.rsi, "macd": s.macd, "volume_ratio": s.volume_ratio,
-             "created_at": s.created_at.isoformat()} for s in get_pending_signals()]
+             "created_at": s.created_at.isoformat()} for s in get_pending_signals(since_hours=since_hours)]
 
 
 @app.get("/trades")
@@ -177,6 +179,15 @@ def get_trades():
              "stop_loss_price": t.stop_loss_price, "take_profit_price": t.take_profit_price,
              "signal_strength": t.signal_strength, "status": t.status,
              "opened_at": t.opened_at.isoformat()} for t in get_open_trades()]
+
+
+@app.get("/executions")
+def get_executions(limit: int = 10):
+    try:
+        fills = client.get_executions(since_days=7)
+        return {"source": "ibkr", "count": len(fills), "executions": fills[:limit]}
+    except Exception as exc:
+        return {"source": "ibkr", "error": str(exc), "count": 0, "executions": []}
 
 
 @app.get("/patterns/{symbol}")

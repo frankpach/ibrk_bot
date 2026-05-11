@@ -22,14 +22,14 @@ class TestQuantScorer:
         from app.analysis.scorer import compute_score
         features = make_features(rsi=28.0, macd_cross=True, vol_ratio=1.8)
         score = compute_score(features, "AAPL", [])
-        assert score.total >= 60
+        assert score.total >= 50
 
     def test_neutral_signal_scores_medium(self):
         from app.analysis.scorer import compute_score
         from app.analysis.indicators import FeatureSet
         features = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
         score = compute_score(features, "AAPL", [])
-        assert 20 <= score.total <= 70
+        assert 5 <= score.total <= 60
 
     def test_score_has_recommendation(self):
         from app.analysis.scorer import compute_score

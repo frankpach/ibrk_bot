@@ -6,15 +6,16 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 GLOBAL_WEIGHTS = {
-    "momentum": 0.25,
-    "trend": 0.20,
+    "momentum": 0.20,
+    "trend": 0.15,
     "volume": 0.15,
     "volatility": 0.10,
-    "portfolio_fit": 0.15,
-    "sentiment": 0.15,
+    "portfolio_fit": 0.10,
+    "sentiment": 0.10,
+    "price_change": 0.20,
 }
 
-THRESHOLDS = {"rejected": 49, "watchlist": 69, "propose": 84, "priority": 100}
+THRESHOLDS = {"rejected": 35, "watchlist": 55, "propose": 75, "priority": 100}
 
 LEARNING_RATE = 0.15
 MIN_TRADE_COUNT = 5
@@ -31,6 +32,7 @@ class QuantScore:
     volatility: float
     portfolio_fit: float
     sentiment: float
+    price_change: float
     recommendation: str
     weights_used: dict
 
@@ -40,82 +42,116 @@ class QuantScore:
 
 
 def _dim_momentum(features) -> float:
-    score = 0.4
+    score = 0.0
     if features.rsi_14 is not None:
-        if features.rsi_14 < 30 or features.rsi_14 > 70:
-            score += 0.4
-        elif features.rsi_14 < 40 or features.rsi_14 > 60:
+        if features.rsi_14 < 25 or features.rsi_14 > 75:
+            score += 0.5
+        elif features.rsi_14 < 35 or features.rsi_14 > 65:
+            score += 0.3
+        elif features.rsi_14 < 45 or features.rsi_14 > 55:
             score += 0.1
     if features.macd_crossover:
-        score += 0.3
+        score += 0.4
     return min(1.0, score)
 
 
 def _dim_trend(features) -> float:
-    score = 0.3
+    score = 0.0
     if features.sma50 and features.sma200:
         close = features.sma20 or features.sma50
         if close > features.sma50:
-            score += 0.2
+            score += 0.25
         if features.sma50 > features.sma200:
-            score += 0.2
-    if features.rs_vs_spy_30d is not None and features.rs_vs_spy_30d > 0:
-        score += 0.2
+            score += 0.25
+    if features.rs_vs_spy_30d is not None:
+        if features.rs_vs_spy_30d > 0.05:
+            score += 0.3
+        elif features.rs_vs_spy_30d > 0:
+            score += 0.15
     if features.bollinger_position is not None:
-        if features.bollinger_position > 0.5:
+        if features.bollinger_position > 0.6:
+            score += 0.2
+        elif features.bollinger_position > 0.4:
             score += 0.1
     return min(1.0, score)
 
 
 def _dim_volume(features) -> float:
     if features.volume_ratio_20d is None:
-        return 0.5
+        return 0.0
     vr = features.volume_ratio_20d
-    if vr >= 2.0:
+    if vr >= 3.0:
         return 1.0
+    if vr >= 2.0:
+        return 0.85
     if vr >= 1.5:
-        return 0.8
+        return 0.7
     if vr >= 1.0:
-        return 0.6
+        return 0.5
     if vr >= 0.7:
-        return 0.4
-    return 0.2
+        return 0.3
+    return 0.1
 
 
 def _dim_volatility(features) -> float:
     if features.atr_pct is None:
-        return 0.5
+        return 0.0
     atr = features.atr_pct
-    if 1.5 <= atr <= 4.0:
-        return 0.8
-    if 1.0 <= atr <= 5.0:
-        return 0.6
-    return 0.3
+    if atr >= 4.0:
+        return 1.0
+    if atr >= 2.5:
+        return 0.85
+    if atr >= 1.5:
+        return 0.7
+    if atr >= 1.0:
+        return 0.5
+    if atr >= 0.5:
+        return 0.3
+    return 0.1
 
 
 def _dim_portfolio_fit(portfolio: list, capital: float = 500.0) -> float:
-    score = 0.5
+    score = 0.0
     positions = len(portfolio) if portfolio else 0
     if positions == 0:
-        score += 0.3
+        score += 1.0
     elif positions == 1:
-        score += 0.1
-    elif positions >= 3:
-        score -= 0.3
+        score += 0.7
+    elif positions == 2:
+        score += 0.4
+    else:
+        score += 0.0
     return max(0.0, min(1.0, score))
 
 
 def _dim_sentiment(news_items: list) -> float:
     if not news_items:
-        return 0.5
+        return 0.0
     pos = sum(1 for n in news_items if n.get("sentiment") == "positive")
     neg = sum(1 for n in news_items if n.get("sentiment") == "negative")
     total = len(news_items)
     if pos > neg:
-        return 0.7 + 0.1 * (pos / total)
+        return 0.6 + 0.4 * (pos / total)
     if neg > pos:
-        return 0.3 - 0.1 * (neg / total)
+        return max(0.0, 0.4 - 0.4 * (neg / total))
     return 0.5
+
+
+def _dim_price_change(features) -> float:
+    if features.price_change_pct is None:
+        return 0.0
+    pc = abs(features.price_change_pct)
+    if pc >= 5.0:
+        return 1.0
+    if pc >= 3.0:
+        return 0.85
+    if pc >= 2.0:
+        return 0.7
+    if pc >= 1.0:
+        return 0.5
+    if pc >= 0.5:
+        return 0.3
+    return 0.1
 
 
 def _get_multipliers(symbol: str) -> dict:
@@ -131,6 +167,7 @@ def _get_multipliers(symbol: str) -> dict:
                 "volatility": getattr(params, "volatility_mult", 1.0),
                 "portfolio_fit": getattr(params, "portfolio_fit_mult", 1.0),
                 "sentiment": getattr(params, "sentiment_mult", 1.0),
+                "price_change": 1.0,
             }
     except Exception:
         pass
@@ -146,6 +183,7 @@ def compute_score(features, symbol: str, portfolio: list, news_items: list = Non
         "volatility": _dim_volatility(features),
         "portfolio_fit": _dim_portfolio_fit(portfolio),
         "sentiment": _dim_sentiment(news_items or []),
+        "price_change": _dim_price_change(features),
     }
     effective = {k: GLOBAL_WEIGHTS[k] * multipliers.get(k, 1.0) for k in GLOBAL_WEIGHTS}
     total_weight = sum(effective.values())
@@ -172,6 +210,7 @@ def compute_score(features, symbol: str, portfolio: list, news_items: list = Non
         volatility=round(dims["volatility"], 3),
         portfolio_fit=round(dims["portfolio_fit"], 3),
         sentiment=round(dims["sentiment"], 3),
+        price_change=round(dims["price_change"], 3),
         recommendation=rec,
         weights_used={k: round(normalized[k], 4) for k in normalized},
     )

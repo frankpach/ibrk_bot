@@ -72,6 +72,8 @@ def _only_owner(func):
 async def cmd_estado(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = _api("get", "/system/status")
     portfolio = _api("get", "/portfolio")
+    acc = _api("get", "/account") or {}
+
     if isinstance(portfolio, list) and portfolio:
         pos_text = "\n".join(
             f"  {p['symbol']}: {p['quantity']} acc @ ${p['avg_cost']:.2f} | P&L: ${p['unrealized_pnl']:.2f}"
@@ -79,15 +81,20 @@ async def cmd_estado(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     else:
         pos_text = "  Sin posiciones abiertas"
+
     ib_status = "✅ Conectado" if data.get('ib_connected') else "❌ Desconectado"
+    real_cap = acc.get("net_liquidation", 0)
+    op_cap = data.get("operating_capital", real_cap)
+
     msg = (
         f"Estado del sistema\n\n"
         f"IB Gateway: {ib_status}\n"
         f"Modo: {data.get('mode', '?').upper()}\n"
         f"Pausado: {'Si' if data.get('paused') else 'No'}\n"
-        f"Capital simulado: ${data.get('simulated_capital', 500)}\n"
-        f"P&L hoy: ${data.get('daily_pnl_usd', 0):.2f} ({data.get('daily_pnl_pct', 0):.2f}%)\n"
-        f"Posiciones: {data.get('open_positions', 0)}/3\n\n"
+        f"Capital real IB: ${real_cap:,.2f}\n"
+        f"Capital operativo: ${op_cap:,.2f}\n"
+        f"P&L hoy (DB local): ${data.get('daily_pnl_usd', 0):.2f} ({data.get('daily_pnl_pct', 0):.2f}%)\n"
+        f"Posiciones abiertas (IBKR): {len(portfolio) if isinstance(portfolio, list) else '?'}/3\n\n"
         f"Posiciones abiertas:\n{pos_text}"
     )
     await update.message.reply_text(msg)
@@ -95,50 +102,121 @@ async def cmd_estado(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_only_owner
 async def cmd_posiciones(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    trades = _api("get", "/trades")
-    if not trades or not isinstance(trades, list):
-        await update.message.reply_text("Sin posiciones abiertas.")
+    # Fuente de verdad: IBKR real
+    portfolio = _api("get", "/portfolio")
+    if portfolio is None:
+        portfolio = []
+    if not isinstance(portfolio, list):
+        portfolio = []
+
+    # Cruzar con DB local para SL/TP si existen
+    local_trades = _api("get", "/trades") or []
+    local_map = {t["symbol"]: t for t in local_trades if isinstance(t, dict)}
+
+    if not portfolio:
+        # Si IBKR no tiene pero la DB local sí, alertar
+        if local_trades:
+            await update.message.reply_text(
+                "IBKR: Sin posiciones abiertas.\n"
+                f"⚠️ Pero hay {len(local_trades)} trade(s) en DB local que parecen huérfanos.\n"
+                "Usa /diagnostico para revisar."
+            )
+        else:
+            await update.message.reply_text("Sin posiciones abiertas en IBKR.")
         return
-    lines = []
-    for t in trades:
+
+    lines = ["Posiciones abiertas (IBKR):"]
+    for p in portfolio:
+        sym = p.get("symbol", "?")
+        qty = p.get("quantity", 0)
+        avg = p.get("avg_cost", 0)
+        mkt = p.get("market_value", 0)
+        pnl = p.get("unrealized_pnl", 0)
+        emoji = "🟢" if pnl >= 0 else "🔴"
+        t = local_map.get(sym)
+        if t:
+            sl = t.get("stop_loss_price")
+            tp = t.get("take_profit_price")
+            extra = f"  SL: ${sl:.2f} | TP: ${tp:.2f} | DB local"
+        else:
+            extra = "  ⚠️ No hay registro local (SL/TP desconocidos)"
         lines.append(
-            f"{t['symbol']} {t['action']} x{t['quantity']}\n"
-            f"  Entrada: ${t['entry_price']:.2f}\n"
-            f"  SL: ${t['stop_loss_price']:.2f} | TP: ${t['take_profit_price']:.2f}\n"
-            f"  Senal: {t['signal_strength']}"
+            f"{emoji} {sym}: {qty} acc @ ${avg:.2f} | Mkt: ${mkt:.2f} | P&L: ${pnl:.2f}\n{extra}"
         )
-    await update.message.reply_text("Posiciones abiertas:\n\n" + "\n\n".join(lines))
+
+    # Alertar si hay trades locales sin posición en IBKR
+    orphaned = [s for s in local_map if s not in {x.get("symbol") for x in portfolio}]
+    if orphaned:
+        lines.append("")
+        lines.append(f"⚠️ DB local tiene trades sin posición IBKR: {', '.join(orphaned)}")
+
+    await update.message.reply_text("\n".join(lines))
 
 
 @_only_owner
 async def cmd_historial(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    trades = _api("get", "/trades/closed?limit=5")
-    if not trades or not isinstance(trades, list):
-        await update.message.reply_text("Sin historial de operaciones.")
-        return
+    # Intentar IBKR real primero
+    ibkr = _api("get", "/executions?limit=5")
     lines = []
-    for t in trades:
-        pnl = t.get("pnl_usd") or 0
-        emoji = "+" if pnl >= 0 else "-"
-        lines.append(f"{emoji} {t['symbol']} {t['action']} | ${pnl:.2f} ({t.get('exit_reason','?')})")
-    await update.message.reply_text("Ultimas operaciones:\n" + "\n".join(lines))
+    source = None
+
+    if ibkr and isinstance(ibkr, dict) and ibkr.get("count", 0) > 0 and not ibkr.get("error"):
+        source = "IBKR"
+        lines.append("Ultimas operaciones (IBKR real):")
+        for e in ibkr["executions"]:
+            pnl = e.get("realized_pnl")
+            pnl_str = f" | P&L: ${pnl:.2f}" if pnl is not None else ""
+            lines.append(
+                f"{e['action']} {e['symbol']} x{e['quantity']} @ ${e['price']:.2f}{pnl_str}\n"
+                f"  {e.get('time','')}"
+            )
+    else:
+        # Fallback a DB local
+        trades = _api("get", "/trades/closed?limit=5")
+        if trades and isinstance(trades, list) and len(trades) > 0:
+            source = "local"
+            lines.append("Ultimas operaciones (historial LOCAL — IBKR no disponible):")
+            for t in trades:
+                pnl = t.get("pnl_usd") or 0
+                emoji = "+" if pnl >= 0 else "-"
+                lines.append(f"{emoji} {t['symbol']} {t['action']} | ${pnl:.2f} ({t.get('exit_reason','?')})")
+        else:
+            await update.message.reply_text("Sin historial de operaciones (ni en IBKR ni en DB local).")
+            return
+
+    await update.message.reply_text("\n".join(lines))
 
 
 @_only_owner
 async def cmd_senales(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    signals = _api("get", "/signals")
+    signals = _api("get", "/signals?since_hours=24")
     if not signals or not isinstance(signals, list):
-        await update.message.reply_text("Sin senales pendientes.")
+        await update.message.reply_text("Sin senales pendientes en las ultimas 24h.")
         return
-    lines = [f"{s['symbol']} [{s['strength']}] RSI:{s['rsi']} Vol:{s['volume_ratio']}x" for s in signals]
-    await update.message.reply_text("Senales pendientes:\n" + "\n".join(lines))
+    lines = [f"Senales pendientes (ultimas 24h): {len(signals)}", ""]
+    for s in signals:
+        age = s.get("created_at", "?")
+        lines.append(
+            f"{s['symbol']} [{s['strength']}] RSI:{s.get('rsi','?')} Vol:{s.get('volume_ratio','?')}x\n"
+            f"  Creada: {age}"
+        )
+    await update.message.reply_text("\n".join(lines))
 
 
 @_only_owner
 async def cmd_simbolos(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = _api("get", "/allowed-symbols")
     symbols = data.get("symbols", [])
-    await update.message.reply_text("Universo activo:\n" + ", ".join(symbols))
+    meta = data.get("meta", [])
+    if not symbols:
+        await update.message.reply_text("Universo activo vacio. Ningun simbolo aprobado en la DB.")
+        return
+    lines = [f"Universo activo: {len(symbols)} simbolos", ""]
+    for m in meta:
+        lines.append(
+            f"{m['symbol']} ({m.get('market_key','?')}) — {m.get('sec_type','?')}/{m.get('exchange','?')}"
+        )
+    await update.message.reply_text("\n".join(lines))
 
 
 @_only_owner
@@ -267,10 +345,11 @@ async def cmd_eliminar_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_diagnostico(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     from app.db.database import get_connection
     from app.config.settings import CAPITAL_CAP
+    from datetime import datetime, timezone
 
     lines = ["DIAGNOSTICO DEL SISTEMA", ""]
 
-    # Capital operativo
+    # Capital operativo (IBKR real)
     acc = _api("get", "/account") or {}
     real_cap = acc.get("net_liquidation", 0)
     op_cap = min(real_cap, CAPITAL_CAP)
@@ -278,42 +357,84 @@ async def cmd_diagnostico(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines.append(f"Capital operativo:  ${op_cap:,.2f} (cap=${CAPITAL_CAP:.0f})")
     lines.append("")
 
+    # Posiciones reales IBKR
+    portfolio = _api("get", "/portfolio") or []
+    if isinstance(portfolio, list):
+        lines.append(f"Posiciones abiertas (IBKR): {len(portfolio)}")
+        for p in portfolio:
+            pnl = p.get("unrealized_pnl", 0)
+            emoji = "🟢" if pnl >= 0 else "🔴"
+            lines.append(
+                f"  {emoji} {p['symbol']}: {p['quantity']} @ ${p['avg_cost']:.2f} | P&L: ${pnl:.2f}"
+            )
+    else:
+        lines.append("Posiciones abiertas (IBKR): error al consultar")
+    lines.append("")
+
     conn = get_connection()
     try:
-        signals_count = conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
-        trades_count = conn.execute("SELECT COUNT(*) FROM trades WHERE status='CLOSED'").fetchone()[0]
+        signals_total = conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0]
+        signals_pending = conn.execute("SELECT COUNT(*) FROM signals WHERE processed=0").fetchone()[0]
+        trades_closed = conn.execute("SELECT COUNT(*) FROM trades WHERE status='CLOSED'").fetchone()[0]
+        trades_open_local = conn.execute("SELECT COUNT(*) FROM trades WHERE status='OPEN'").fetchone()[0]
         patterns_count = conn.execute("SELECT COUNT(*) FROM patterns").fetchone()[0]
 
-        last_signals = conn.execute(
-            "SELECT symbol, strength, rsi, volume_ratio, created_at FROM signals ORDER BY created_at DESC LIMIT 3"
-        ).fetchall()
-        last_decisions = conn.execute(
-            "SELECT symbol, action, created_at FROM decisions ORDER BY created_at DESC LIMIT 3"
-        ).fetchall()
+        last_signal = conn.execute(
+            "SELECT symbol, strength, created_at FROM signals ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        last_decision = conn.execute(
+            "SELECT symbol, action, created_at FROM decisions ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        last_trade = conn.execute(
+            "SELECT symbol, status, closed_at, opened_at FROM trades ORDER BY closed_at DESC, opened_at DESC LIMIT 1"
+        ).fetchone()
     finally:
         conn.close()
 
-    lines.append(f"Senales totales:     {signals_count}")
-    lines.append(f"Trades cerrados:     {trades_count}")
-    lines.append(f"Patrones aprendidos: {patterns_count}")
+    lines.append("--- Datos locales (DB) ---")
+    lines.append(f"Senales totales:     {signals_total} ({signals_pending} pendientes)")
+    lines.append(f"Trades cerrados:     {trades_closed}")
+    lines.append(f"Trades abiertos DB:  {trades_open_local}")
+    lines.append(f"Patrones:            {patterns_count}")
     lines.append("")
 
-    if last_signals:
-        lines.append("Ultimas senales:")
-        for s in last_signals:
-            rsi = s["rsi"] if s["rsi"] is not None else "?"
-            vol = s["volume_ratio"] if s["volume_ratio"] is not None else "?"
-            lines.append(f"  {s['symbol']} [{s['strength']}] RSI:{rsi} Vol:{vol}x")
-        lines.append("")
+    if last_signal:
+        age = "?"
+        try:
+            dt = datetime.fromisoformat(last_signal["created_at"])
+            age = str(datetime.now(timezone.utc) - dt).split(".")[0]
+        except Exception:
+            pass
+        lines.append(f"Ultima senal: {last_signal['symbol']} [{last_signal['strength']}] (hace {age})")
+    else:
+        lines.append("Ultima senal: ninguna")
 
-    if last_decisions:
-        lines.append("Ultimas decisiones:")
-        for d in last_decisions:
-            lines.append(f"  {d['symbol']} -> {d['action']}")
-        lines.append("")
+    if last_decision:
+        age = "?"
+        try:
+            dt = datetime.fromisoformat(last_decision["created_at"])
+            age = str(datetime.now(timezone.utc) - dt).split(".")[0]
+        except Exception:
+            pass
+        lines.append(f"Ultima decision: {last_decision['symbol']} -> {last_decision['action']} (hace {age})")
+    else:
+        lines.append("Ultima decision: ninguna")
 
+    if last_trade:
+        ts = last_trade.get("closed_at") or last_trade.get("opened_at")
+        age = "?"
+        try:
+            dt = datetime.fromisoformat(ts)
+            age = str(datetime.now(timezone.utc) - dt).split(".")[0]
+        except Exception:
+            pass
+        lines.append(f"Ultimo trade: {last_trade['symbol']} ({last_trade['status']}) (hace {age})")
+    else:
+        lines.append("Ultimo trade: ninguno")
+
+    lines.append("")
     connected = (_api("get", "/health") or {}).get("connected", False)
-    lines.append("IB Gateway: " + ("conectado" if connected else "DESCONECTADO"))
+    lines.append("IB Gateway: " + ("✅ conectado" if connected else "❌ DESCONECTADO"))
 
     await update.message.reply_text("\n".join(lines))
 
