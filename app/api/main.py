@@ -190,6 +190,15 @@ def get_executions(limit: int = 10):
         return {"source": "ibkr", "error": str(exc), "count": 0, "executions": []}
 
 
+@app.get("/account/commission-report")
+def get_commission_report():
+    """Retorna historial real de comisiones y P&L de IBKR."""
+    try:
+        return client.get_commissions(since_days=30)
+    except Exception as exc:
+        return {"error": str(exc), "fills": [], "total_commission": 0, "total_realized_pnl": 0, "fill_count": 0}
+
+
 @app.get("/patterns/{symbol}")
 def get_patterns(symbol: str):
     return [{"id": p.id, "pattern": p.pattern_text, "wins": p.win_count,

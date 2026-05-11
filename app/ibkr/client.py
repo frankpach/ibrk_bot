@@ -151,6 +151,52 @@ class IBKRClient:
         result.sort(key=lambda x: x["time"], reverse=True)
         return result
 
+    async def _get_commissions_async(self, since_days: int = 30) -> list:
+        """Obtiene historial de comisiones y fees reales de IBKR."""
+        await self._connect_async()
+        from ib_insync import ExecutionFilter
+        filt = ExecutionFilter()
+        self.ib.reqExecutions(filt)
+        await asyncio.sleep(1.5)
+        fills = self.ib.fills()
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+        result = []
+        total_commission = 0.0
+        total_realized_pnl = 0.0
+        for f in fills:
+            exec_time_str = getattr(f.execution, "time", "")
+            try:
+                exec_time = datetime.fromisoformat(exec_time_str.replace("Z", "+00:00"))
+            except Exception:
+                exec_time = cutoff
+            if exec_time < cutoff:
+                continue
+            comm = getattr(f.commissionReport, "commission", 0.0)
+            pnl = getattr(f.commissionReport, "realizedPNL", 0.0)
+            total_commission += comm
+            total_realized_pnl += pnl
+            result.append({
+                "symbol": f.contract.symbol,
+                "action": f.execution.side,
+                "quantity": f.execution.shares,
+                "price": f.execution.price,
+                "time": exec_time_str,
+                "commission": round(comm, 2),
+                "realized_pnl": round(pnl, 2) if pnl is not None else None,
+            })
+        result.sort(key=lambda x: x["time"], reverse=True)
+        return {
+            "fills": result,
+            "total_commission": round(total_commission, 2),
+            "total_realized_pnl": round(total_realized_pnl, 2),
+            "fill_count": len(result),
+        }
+
+    def get_commissions(self, since_days: int = 30) -> dict:
+        with self._lock:
+            return self._run_sync(self._get_commissions_async(since_days))
+
     def get_executions(self, since_days: int = 7) -> list:
         with self._lock:
             return self._run_sync(self._get_executions_async(since_days))

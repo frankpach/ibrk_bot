@@ -220,6 +220,55 @@ async def cmd_simbolos(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 @_only_owner
+async def cmd_costos(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Muestra comisiones reales y P&L del historial de IBKR."""
+    data = _api("get", "/account/commission-report") or {}
+    fills = data.get("fills", [])
+    total_comm = data.get("total_commission", 0)
+    total_pnl = data.get("total_realized_pnl", 0)
+    fill_count = data.get("fill_count", 0)
+
+    if fill_count == 0:
+        await update.message.reply_text(
+            "Sin historial de ejecuciones en IBKR (ultimos 30 dias).\n"
+            "Esto puede significar que no hay operaciones, o que IB Gateway "
+            "no tiene permisos para leer el historial."
+        )
+        return
+
+    lines = [
+        "REPORTE DE COSTOS REALES (IBKR)",
+        "",
+        f"Total ejecuciones: {fill_count}",
+        f"Total comisiones:  ${total_comm:,.2f}",
+        f"Total P&L realizado: ${total_pnl:,.2f}",
+        f"Neto despues de fees: ${total_pnl - total_comm:,.2f}",
+        "",
+        "Ultimas 5 operaciones:",
+    ]
+    for f in fills[:5]:
+        pnl_str = f" | P&L: ${f['realized_pnl']:.2f}" if f.get('realized_pnl') is not None else ""
+        lines.append(
+            f"{f['action']} {f['symbol']} x{f['quantity']} @ ${f['price']:.2f}\n"
+            f"  Comision: ${f['commission']:.2f}{pnl_str}\n"
+            f"  {f.get('time','')}"
+        )
+
+    # Proyeccion para $39
+    if total_comm > 0 and fill_count > 0:
+        avg_comm_per_trade = total_comm / fill_count
+        lines.append("")
+        lines.append("--- Proyeccion con tu capital ($39) ---")
+        lines.append(f"Comision promedio por operacion: ${avg_comm_per_trade:.2f}")
+        lines.append(f"Costo round-trip (buy+sell): ${avg_comm_per_trade * 2:.2f}")
+        lines.append(f"Capital necesario para cubrir 1 round-trip: ${avg_comm_per_trade * 2 + 1:.2f}")
+        if avg_comm_per_trade * 2 > 39 * 0.05:
+            lines.append("⚠️ Las comisiones superan tu riesgo maximo por trade (5% = $1.95)")
+
+    await update.message.reply_text("\n".join(lines))
+
+
+@_only_owner
 async def cmd_pausar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     _api("post", "/system/pause")
     await update.message.reply_text("Sistema pausado. Usa /reanudar para continuar.")

@@ -1,0 +1,34 @@
+# 1. Matar el proceso actual del bot
+kill 142532
+
+# 2. Verificar que murió
+ps aux | grep run.py | grep -v grep
+
+# 3. Copiar servicios a systemd
+sudo cp ~/ibkr-bot/systemd/ibkr-api.service /etc/systemd/system/
+sudo cp ~/ibkr-bot/systemd/ibkr-gateway.service /etc/systemd/system/
+
+# 4. Recargar systemd
+sudo systemctl daemon-reload
+
+# 5. Habilitar arranque automático del bot
+sudo systemctl enable ibkr-api.service
+
+# 6. Iniciar el servicio
+sudo systemctl start ibkr-api.service
+
+# 7. Verificar que está corriendo
+sudo systemctl status ibkr-api.service --no-pager
+
+# 8. Ver logs
+sudo journalctl -u ibkr-api.service -n 20 --no-pager
+
+
+
+ssh aiutox-pi "sudo systemctl restart ibkr-api.service"
+
+
+
+python3 /home/aiutox-pi/ibkr-bot/run.py
+
+python3 /home/aiutox-pi/ibkr-bot/tests/test_api.py
