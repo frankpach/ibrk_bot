@@ -29,14 +29,21 @@ from app.analysis.indicators import (
 
 def _fetch_bars(ib_client, contract, duration: str, bar_size: str) -> pd.DataFrame:
     """Descarga barras historicas de IB y retorna DataFrame."""
-    bars = ib_client.ib.reqHistoricalData(
-        contract, endDateTime="", durationStr=duration,
-        barSizeSetting=bar_size, whatToShow="TRADES",
-        useRTH=True, formatDate=1,
-    )
+    try:
+        bars = ib_client.ib.reqHistoricalData(
+            contract, endDateTime="", durationStr=duration,
+            barSizeSetting=bar_size, whatToShow="TRADES",
+            useRTH=True, formatDate=1,
+        )
+    except Exception as e:
+        logger.warning(f"reqHistoricalData failed for {contract.symbol}: {e}")
+        return pd.DataFrame()
     if not bars or len(bars) < 15:
         return pd.DataFrame()
-    return pd.DataFrame([{"close": b.close, "volume": b.volume} for b in bars])
+    return pd.DataFrame([{
+        "open": b.open, "high": b.high, "low": b.low,
+        "close": b.close, "volume": b.volume
+    } for b in bars])
 
 
 def _is_market_hours(now: datetime) -> bool:
@@ -101,7 +108,7 @@ def scan_symbol(symbol: str, ib_client=None, symbol_meta: dict | None = None) ->
             f"SCAN {symbol}: daily={sig_daily} hourly={sig_hourly} 5min={sig_5min} -> {strength}"
         )
 
-        if strength in ("STRONG", "MEDIUM"):
+        if strength in ("STRONG", "MEDIUM", "WEAK"):
             insert_signal(Signal(
                 id=None, symbol=symbol, strength=strength,
                 rsi=ind_daily["rsi"], macd=ind_daily["macd"],

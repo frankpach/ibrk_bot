@@ -294,65 +294,102 @@ def compute_single_indicator(indicator_name: str, df: pd.DataFrame):
 # --- Migrated from preprocessor.py (reexported for backwards compatibility) ---
 
 def classify_signal(rsi: float, macd_crossover: bool, volume_ratio: float) -> str:
-    """Classify signal from a single timeframe."""
-    conditions = [
-        rsi < 30 or rsi > 70 if rsi is not None else False,
-        bool(macd_crossover),
-        volume_ratio > 1.5 if volume_ratio is not None else False,
-    ]
-    count = sum(conditions)
-    if count == 3:
+    """Classify signal from a single timeframe.
+    Criterio relajado para capturar mas oportunidades en dias movidos.
+    """
+    conditions = []
+    # RSI extremo o al menos direccional
+    if rsi is not None:
+        if rsi < 35 or rsi > 65:
+            conditions.append("rsi_extreme")
+        elif rsi < 40 or rsi > 60:
+            conditions.append("rsi_directional")
+    # MACD crossover
+    if bool(macd_crossover):
+        conditions.append("macd")
+    # Volumen elevado o al menos activo
+    if volume_ratio is not None:
+        if volume_ratio > 1.5:
+            conditions.append("volume_high")
+        elif volume_ratio > 1.0:
+            conditions.append("volume_active")
+
+    count = len(conditions)
+    if count >= 3:
         return "STRONG"
-    if count == 2:
+    if count >= 2:
         return "MEDIUM"
-    return "WEAK"
+    if count >= 1:
+        return "WEAK"
+    return "NONE"
 
 
 def classify_multitimeframe(daily: str, hourly: str, minute: str) -> str:
     """
     Classify combined signal from 3 timeframes.
-    STRONG: all three >= MEDIUM.
-    MEDIUM: daily + one sub-timeframe, or both sub-timeframes.
-    WEAK: everything else.
+    STRONG: daily STRONG + al menos uno sub >= MEDIUM.
+    MEDIUM: daily MEDIUM + al menos uno sub >= WEAK, o dos sub >= MEDIUM.
+    WEAK: daily WEAK + al menos uno sub >= WEAK.
     """
-    strength_val = {"STRONG": 2, "MEDIUM": 1, "WEAK": 0}
-    d, h, m = strength_val[daily], strength_val[hourly], strength_val[minute]
-    if d >= 1 and h >= 1 and m >= 1:
+    strength_val = {"STRONG": 2, "MEDIUM": 1, "WEAK": 0, "NONE": -1}
+    d = strength_val.get(daily, 0)
+    h = strength_val.get(hourly, 0)
+    m = strength_val.get(minute, 0)
+    subs = [h, m]
+    sub_max = max(subs)
+    sub_count_medium = sum(1 for s in subs if s >= 1)
+
+    if d >= 2 and sub_max >= 1:
         return "STRONG"
-    if (d >= 1 and (h >= 1 or m >= 1)) or (h >= 1 and m >= 1):
+    if (d >= 1 and sub_max >= 0) or sub_count_medium >= 2:
         return "MEDIUM"
-    return "WEAK"
+    if d >= 0 or sub_max >= 0:
+        return "WEAK"
+    return "NONE"
 
 
 
 def classify_signal_v2(features: FeatureSet) -> str:
     """
-    Criterio de entrada con 4 condiciones. Requiere todas para STRONG.
-    MEDIUM si cumple 2-3. WEAK si cumple < 2.
+    Criterio de entrada relajado para capturar movimientos del dia.
+    STRONG: 3-4 condiciones. MEDIUM: 2. WEAK: 1.
     """
     conditions = 0
 
-    # Condicion 1: RSI extremo
+    # Condicion 1: RSI direccional o extremo
     rsi = features.rsi_14
-    if rsi is not None and (rsi < 35 or rsi > 65):
-        conditions += 1
+    if rsi is not None:
+        if rsi < 30 or rsi > 70:
+            conditions += 1
+        elif rsi < 40 or rsi > 60:
+            conditions += 0.5
 
     # Condicion 2: MACD crossover
     if features.macd_crossover is True:
         conditions += 1
 
-    # Condicion 3: Volumen elevado
+    # Condicion 3: Volumen activo o elevado
     vol = features.volume_ratio_20d
-    if vol is not None and vol > 1.5:
+    if vol is not None:
+        if vol > 1.5:
+            conditions += 1
+        elif vol > 1.0:
+            conditions += 0.5
+
+    # Condicion 4: Movimiento de precio significativo
+    pc = features.price_change_pct
+    if pc is not None and abs(pc) > 1.0:
         conditions += 1
 
-    # Condicion 4: Precio en zona de soporte/resistencia tecnica
+    # Condicion 5: Zona Bollinger extrema
     boll = features.bollinger_position
     if boll is not None and (boll < 0.15 or boll > 0.85):
-        conditions += 1
+        conditions += 0.5
 
-    if conditions == 4:
+    if conditions >= 3:
         return 'STRONG'
     elif conditions >= 2:
         return 'MEDIUM'
-    return 'WEAK'
+    elif conditions >= 1:
+        return 'WEAK'
+    return 'NONE'

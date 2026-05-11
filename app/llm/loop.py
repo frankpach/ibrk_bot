@@ -81,17 +81,43 @@ def process_pending_signals():
 
 
 def _execute_order(symbol: str, decision: LLMDecision) -> bool:
-    """Envía la orden a FastAPI. Retorna True si fue aceptada."""
-    payload = {
+    """Envía la orden a FastAPI. Primero hace preview para obtener unidades fraccionales."""
+    preview_payload = {
         "symbol": symbol,
         "action": decision.action,
-        "quantity": 1,
+        "quantity": 1,  # placeholder, se recalcula en preview
         "order_type": "MKT",
         "stop_loss_pct": decision.stop_loss_pct,
         "take_profit_pct": decision.take_profit_pct,
+        "limit_price": None,
     }
     try:
-        r = httpx.post(f"{API_BASE}/orders/place", json=payload, timeout=30)
+        # 1) Preview para obtener unidades calculadas
+        preview_r = httpx.post(f"{API_BASE}/orders/preview", json=preview_payload, timeout=30)
+        if preview_r.status_code != 200:
+            detail = preview_r.json().get("detail", str(preview_r.text))
+            notify(f"Preview rechazado <b>{symbol}</b>: {detail}")
+            logger.warning(f"Preview rejected for {symbol}: {detail}")
+            return False
+
+        preview = preview_r.json()
+        units = preview.get("recommended_units", 0)
+        if units <= 0:
+            notify(f"Preview <b>{symbol}</b>: tamaño de posición = 0 (precio muy alto para capital)")
+            logger.warning(f"Preview {symbol}: units = 0")
+            return False
+
+        # 2) Place order con unidades reales
+        place_payload = {
+            "symbol": symbol,
+            "action": decision.action,
+            "quantity": units,
+            "order_type": "MKT",
+            "stop_loss_pct": decision.stop_loss_pct,
+            "take_profit_pct": decision.take_profit_pct,
+            "limit_price": None,
+        }
+        r = httpx.post(f"{API_BASE}/orders/place", json=place_payload, timeout=30)
         if r.status_code == 403:
             detail = r.json()
             reasons = detail.get("detail", {}).get("reasons", [str(detail)])
@@ -107,7 +133,7 @@ def _execute_order(symbol: str, decision: LLMDecision) -> bool:
                 f"Take-profit: ${result.get('take_profit_price', '?')}\n"
                 f"Order ID: {result.get('order_id', '?')}"
             )
-            logger.info(f"Order placed: {symbol} {decision.action} — {result}")
+            logger.info(f"Order placed: {symbol} {decision.action} {result.get('units')} — {result}")
             return True
         else:
             logger.error(f"Unexpected status {r.status_code} for {symbol}: {r.text}")
