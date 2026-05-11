@@ -114,6 +114,19 @@ class AnalysisPipeline:
         try:
             self._fetch_data()
             self._check_abort()
+
+            # Validate data quality before continuing
+            if self._df_daily is None or len(self._df_daily) < 15:
+                self._result.recommendation = "ERROR"
+                self._result.failed_at_step = "fetch_data"
+                self._notify(
+                    f"❌ <b>{self.symbol}</b>: No se pudieron obtener datos históricos.\n"
+                    f"Verifica que IB Gateway esté conectado y que el símbolo sea operable.\n"
+                    f"Reintenta con /analizar {self.symbol}"
+                )
+                self._persist()
+                return self._result
+
             self._compute_indicators()
             self._check_abort()
             self._score()
@@ -160,6 +173,8 @@ class AnalysisPipeline:
         # SPY and QQQ for relative strength
         self._spy_df = self._data_layer.get_ohlcv("SPY", "180 D", "1 day", ctx)
         self._qqq_df = self._data_layer.get_ohlcv("QQQ", "180 D", "1 day", ctx)
+
+
 
     def _compute_indicators(self):
         self.current_step = "compute_indicators"

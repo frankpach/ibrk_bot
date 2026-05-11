@@ -42,6 +42,8 @@ class IBDataLayer:
         return None
 
     def _set_cached(self, key: str, data, context: str):
+        if data is None and context == "on_demand":
+            return  # on_demand: never cache failures, retry next time
         ttl = TTL.get(context, 120)
         if ttl == 0:
             return  # trade_entry: never cache
@@ -95,13 +97,33 @@ class IBDataLayer:
                 contract = self._resolve_future_front_month(contract)
             what_to_show = get_what_to_show(sec_type)
             use_rth = get_use_rth(sec_type)
+
+            # Primary request
             bars = self._client.ib.reqHistoricalData(
                 contract, endDateTime="", durationStr=duration,
                 barSizeSetting=bar_size, whatToShow=what_to_show,
                 useRTH=use_rth, formatDate=1,
             )
-            if not bars:
+
+            # Fallback: if empty, try shorter durations progressively
+            fallback_durations = ["30 D", "10 D", "5 D", "2 D"]
+            for fallback in fallback_durations:
+                if bars and len(bars) >= 15:
+                    break
+                try:
+                    logger.info(f"Retrying {symbol} with duration={fallback} (primary={duration} returned {len(bars) if bars else 0})")
+                    bars = self._client.ib.reqHistoricalData(
+                        contract, endDateTime="", durationStr=fallback,
+                        barSizeSetting=bar_size, whatToShow=what_to_show,
+                        useRTH=use_rth, formatDate=1,
+                    )
+                except Exception as retry_err:
+                    logger.warning(f"Fallback {fallback} for {symbol} failed: {retry_err}")
+
+            if not bars or len(bars) < 15:
+                logger.warning(f"No historical bars for {symbol} after all retries (last got {len(bars) if bars else 0})")
                 return None
+
             df = pd.DataFrame([{
                 "open": b.open, "high": b.high, "low": b.low,
                 "close": b.close, "volume": b.volume

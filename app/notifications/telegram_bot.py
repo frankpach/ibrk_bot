@@ -501,11 +501,30 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     }
     rec_emoji = rec_emoji_map.get(result.recommendation, "⚪")
 
+    # Dimension breakdown for transparency
+    dim_lines = []
+    if result.score:
+        dim_map = {
+            "momentum": "Momentum", "trend": "Trend", "volume": "Volume",
+            "volatility": "Volatility", "portfolio_fit": "Portfolio",
+            "sentiment": "Sentiment", "price_change": "Price Δ",
+        }
+        for key, label in dim_map.items():
+            val = getattr(result.score, key, None)
+            if val is not None:
+                bar = "█" * int(val * 10) + "░" * (10 - int(val * 10))
+                dim_lines.append(f"  {label:12s} {bar} {val:.2f}")
+
     msg_parts = [
         f"{rec_emoji} <b>{symbol}</b> — Score: {score_str} [{result.recommendation}]",
         f"Confidence: {result.llm_confidence:.0%}",
         "",
     ]
+
+    if dim_lines:
+        msg_parts.append("Dimensiones:")
+        msg_parts.extend(dim_lines)
+        msg_parts.append("")
 
     if result.llm_narrative:
         msg_parts.append(result.llm_narrative)
@@ -517,6 +536,11 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if result.hard_rules and not result.hard_rules.passed:
         msg_parts.append("❌ Blocked: " + "; ".join(result.hard_rules.failures[:2]))
+
+    if result.recommendation == "ERROR":
+        msg_parts.append("")
+        msg_parts.append(f"❌ Error en análisis: {result.failed_at_step or 'unknown'}")
+        msg_parts.append("Reintenta con /analizar o revisa /diagnostico")
 
     if not result.in_universe and result.recommendation in ("PROPOSE", "PRIORITY"):
         msg_parts.append("")
