@@ -138,6 +138,11 @@ def main():
             _cap = CAPITAL_CAP
         ctrl.check_circuit_breaker(daily_pnl, _cap)
 
+    # Shared state for reconnection logic
+    _ib_client_ref = {"client": ib_client, "data_layer": data_layer}
+    _last_connected_at = time.time() if (ib_client and ib_client.ib.isConnected()) else None
+    _MISSING_SCAN_JOBS = []  # cola de scans que fallaron por desconexión
+
     def _safe_run_scan():
         client = _ib_client_ref["client"]
         if not client:
@@ -149,10 +154,6 @@ def main():
             run_scan(client)
         except Exception as e:
             logger.error(f"run_scan falló: {e}")
-
-        _ib_client_ref = {"client": ib_client, "data_layer": data_layer}
-    _last_connected_at = time.time() if (ib_client and ib_client.ib.isConnected()) else None
-    _MISSING_SCAN_JOBS = []  # cola de scans que fallaron por desconexión
 
     def _check_gateway_and_reconnect():
         """Verifica la conexión a IB Gateway y reconecta si es necesario.
