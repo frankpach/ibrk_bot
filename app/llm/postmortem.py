@@ -53,6 +53,10 @@ def run_postmortem(trade: Trade, feature_snapshot=None):
 
     outcome = "WIN" if (trade.pnl_pct or 0) >= 0 else "LOSS"
 
+    from app.ml.postmortem_stats import enrich_postmortem_context
+    ctx = enrich_postmortem_context(trade.symbol)
+    ctx_str = f"\n\n{ctx.to_prompt_str()}" if ctx is not None else ""
+
     feature_context = ""
     if feature_snapshot is not None:
         try:
@@ -74,7 +78,8 @@ def run_postmortem(trade: Trade, feature_snapshot=None):
         f"Result: {outcome}\n"
         f"PnL: {(trade.pnl_pct or 0):.2%} (${(trade.pnl_usd or 0):.2f})\n"
         f"Exit reason: {trade.exit_reason}"
-        f"{feature_context}\n\n"
+        f"{feature_context}"
+        f"{ctx_str}\n\n"
         f"Respond ONLY with this JSON (no extra text):\n"
         '{{"pattern_text": "short pattern description", '
         '"suggestions": [{{"dimension": "stop_loss_pct", "suggested_multiplier": 1.1, "confidence": 0.7, "reason": "brief reason"}}]}}'
