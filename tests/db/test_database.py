@@ -8,6 +8,7 @@ from app.db.database import (
     insert_pattern, get_patterns_for_symbol,
     insert_decision, get_approved_symbols, get_approved_symbols_with_meta,
     save_symbol_proposal, get_pending_proposals, approve_symbol,
+    insert_feature_snapshot, get_feature_snapshot_by_id, get_closed_trades_with_snapshots,
 )
 from app.db.models import Signal, Trade, Pattern, Decision
 
@@ -123,3 +124,46 @@ def test_symbol_proposal_and_approval():
     proposals = get_pending_proposals()
     assert not any(p["symbol"] == "NFLX" for p in proposals)
     assert "NFLX" in get_approved_symbols()
+
+
+# ---------- feature_snapshot_id / new functions ----------
+
+def test_get_feature_snapshot_by_id_not_found():
+    """Returns None for a non-existent snapshot id without raising."""
+    result = get_feature_snapshot_by_id(999999)
+    assert result is None
+
+
+def test_get_feature_snapshot_by_id_found():
+    """Insert a snapshot and retrieve it by id."""
+    snap_id = insert_feature_snapshot({
+        "symbol": "AAPL",
+        "timestamp": datetime.utcnow().isoformat(),
+        "context": "test",
+        "rsi_14": 42.0,
+        "macd_line": 0.5,
+        "atr_pct": 1.5,
+        "volume_ratio_20d": 1.2,
+        "bollinger_position": 0.4,
+        "rs_vs_spy_30d": 0.02,
+    })
+    result = get_feature_snapshot_by_id(snap_id)
+    assert result is not None
+    assert result["id"] == snap_id
+    assert result["symbol"] == "AAPL"
+    assert result["rsi_14"] == pytest.approx(42.0)
+
+
+def test_get_closed_trades_with_snapshots_empty():
+    """Returns empty list when no closed trades with snapshots exist."""
+    result = get_closed_trades_with_snapshots()
+    assert result == []
+
+
+def test_trades_table_has_feature_snapshot_id_column():
+    """Verify the migration added feature_snapshot_id to trades table."""
+    conn = get_connection()
+    info = conn.execute("PRAGMA table_info(trades)").fetchall()
+    conn.close()
+    col_names = [row["name"] for row in info]
+    assert "feature_snapshot_id" in col_names

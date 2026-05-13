@@ -178,6 +178,17 @@ def init_db():
                 action TEXT NOT NULL, stop_loss_pct REAL, take_profit_pct REAL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                entity_type TEXT,
+                entity_id INTEGER,
+                symbol TEXT,
+                details TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_open_symbol ON trades(symbol) WHERE status='OPEN';
+            CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log(event_type, created_at);
         """)
         _migrate_symbol_config(conn)
         _migrate_trades_state_machine(conn)
@@ -698,7 +709,41 @@ def init_analysis_tables():
         );
     """)
     conn.commit()
+    _add_column_if_missing(conn, "trades", "feature_snapshot_id", "INTEGER")
+    conn.commit()
     conn.close()
+
+
+def get_feature_snapshot_by_id(snapshot_id: int) -> dict | None:
+    """Return feature snapshot as dict, or None if not found."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM feature_snapshots WHERE id=?", (snapshot_id,)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return dict(row)
+
+
+def get_closed_trades_with_snapshots(limit: int = 200) -> list:
+    """Return closed trades that have a feature_snapshot_id, as dicts with snapshot fields."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT t.id, t.symbol, t.action, t.pnl_pct, t.pnl_usd, t.exit_reason,
+                  t.stop_loss_pct, t.take_profit_pct, t.signal_strength,
+                  t.feature_snapshot_id,
+                  fs.rsi_14, fs.macd_line, fs.atr_pct, fs.volume_ratio_20d,
+                  fs.bollinger_position, fs.rs_vs_spy_30d
+           FROM trades t
+           JOIN feature_snapshots fs ON t.feature_snapshot_id = fs.id
+           WHERE t.status = 'CLOSED'
+           ORDER BY t.closed_at DESC
+           LIMIT ?""",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def insert_feature_snapshot(fs_dict: dict) -> int:

@@ -115,51 +115,77 @@ class SignalFilter:
         p_win = self.predict(features)
         return p_win < self.THRESHOLD
 
-    def retrain(self, trades: list) -> bool:
+    def retrain(self, trades: list) -> "float | bool":
         """
-        Retrain model with new trade data.
-        Requires scikit-learn.
+        Retrain model with trade data. trades can be:
+        - list of dicts (from get_closed_trades_with_snapshots)
+        - list of Trade objects with feature_snapshot_id
+        Returns AUC float on success, False on failure/insufficient data.
         """
         try:
             from sklearn.linear_model import LogisticRegression
             from sklearn.preprocessing import StandardScaler
-            
+            from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+
             X = []
             y = []
-            
+
             for trade in trades:
-                if not hasattr(trade, 'feature_snapshot_id'):
-                    continue
-                # Load feature snapshot
-                # This requires DB access — simplified here
-                feat = getattr(trade, 'features', None)
-                if feat is None:
-                    continue
-                
-                X.append(self._extract_features(feat))
-                y.append(1 if (trade.pnl_pct or 0) > 0 else 0)
-            
+                # Support both dict (from JOIN query) and Trade objects
+                if isinstance(trade, dict):
+                    snap = trade  # dict has all snapshot fields
+                    pnl = trade.get("pnl_pct", 0) or 0
+                else:
+                    snap_id = getattr(trade, "feature_snapshot_id", None)
+                    if not snap_id:
+                        continue
+                    from app.db.database import get_feature_snapshot_by_id
+                    snap = get_feature_snapshot_by_id(snap_id)
+                    if snap is None:
+                        continue
+                    pnl = getattr(trade, "pnl_pct", 0) or 0
+
+                X.append(self._extract_features(snap))
+                y.append(1 if pnl > 0 else 0)
+
             if len(X) < 10:
                 logger.warning(f"Not enough data to retrain: {len(X)} samples")
                 return False
-            
+
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
-            
-            model = LogisticRegression(max_iter=1000)
-            model.fit(X_scaled, y)
-            
+
+            # Evaluate with TimeSeriesSplit (no future leakage)
+            n_splits = min(5, max(2, len(X) // 5))
+            tscv = TimeSeriesSplit(n_splits=n_splits)
+            try:
+                model_eval = LogisticRegression(max_iter=1000)
+                auc_scores = cross_val_score(
+                    model_eval, X_scaled, y, cv=tscv, scoring="roc_auc"
+                )
+                auc = float(auc_scores.mean())
+            except Exception as cv_err:
+                logger.warning(f"CV failed ({cv_err}), using 0.5 as AUC")
+                auc = 0.5
+
+            # Train final model on all data
+            try:
+                model = LogisticRegression(max_iter=1000)
+                model.fit(X_scaled, y)
+            except Exception as fit_err:
+                logger.warning(f"Final model fit failed ({fit_err}), returning AUC only")
+                return auc
+
             # Save
             Path(self.model_path).parent.mkdir(parents=True, exist_ok=True)
             with open(self.model_path, "wb") as f:
                 pickle.dump({"model": model, "scaler": scaler}, f)
-            
+
             self._model = model
             self._scaler = scaler
-            
-            logger.info(f"Model retrained with {len(X)} samples")
-            return True
-            
+            logger.info(f"Model retrained with {len(X)} samples. CV AUC: {auc:.3f}")
+            return auc
+
         except ImportError:
             logger.warning("scikit-learn not available, cannot retrain")
             return False

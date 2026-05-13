@@ -151,7 +151,8 @@ def test_retrain_insufficient_data():
 def test_retrain_no_sklearn():
     sf = SignalFilter(model_path="/nonexistent")
     trades = [MagicMock(features=MagicMock(), pnl_pct=0.01) for _ in range(15)]
-    with patch.dict("sys.modules", {"sklearn": None}):
+    with patch.dict("sys.modules", {"sklearn": None, "sklearn.linear_model": None,
+                                    "sklearn.preprocessing": None, "sklearn.model_selection": None}):
         assert sf.retrain(trades) is False
 
 
@@ -160,25 +161,54 @@ def test_retrain_success(tmp_path):
         import sklearn
     except ImportError:
         pytest.skip("sklearn not available")
-    path = tmp_path / "model.pkl"
-    sf = SignalFilter(model_path=str(path))
+    # Use dict format (from get_closed_trades_with_snapshots)
     trades = []
     for i in range(15):
-        t = MagicMock()
-        t.features = MagicMock()
-        t.features.rsi_14 = 50 + i
-        t.features.macd_line = 0
-        t.features.atr_pct = 2.0
-        t.features.volume_ratio_20d = 1.0
-        t.features.bollinger_position = 0.5
-        t.features.rs_vs_spy_30d = 0.0
-        t.features.day_of_week = 0
-        t.features.hour = 10
-        t.pnl_pct = 0.01 if i % 2 == 0 else -0.01
-        trades.append(t)
+        trades.append({
+            "pnl_pct": 0.01 if i % 2 == 0 else -0.01,
+            "rsi_14": 50 + i, "macd_line": 0, "atr_pct": 2.0,
+            "volume_ratio_20d": 1.0, "bollinger_position": 0.5,
+            "rs_vs_spy_30d": 0.0, "day_of_week": 0, "hour": 10,
+        })
+    path = tmp_path / "model.pkl"
+    sf = SignalFilter(model_path=str(path))
     result = sf.retrain(trades)
-    assert result is True
+    assert isinstance(result, float)  # returns AUC now
     assert path.exists()
+
+
+def test_retrain_skips_missing_snapshot_id():
+    """Trade objects without feature_snapshot_id are silently skipped."""
+    sf = SignalFilter(model_path="/nonexistent")
+    trades = []
+    for i in range(15):
+        t = MagicMock(spec=[])  # no attributes at all → no feature_snapshot_id
+        trades.append(t)
+    # All skipped → insufficient data → False
+    result = sf.retrain(trades)
+    assert result is False
+
+
+def test_retrain_all_same_class(tmp_path):
+    """When all wins or all losses, CV fails gracefully → returns 0.5 AUC."""
+    try:
+        import sklearn
+    except ImportError:
+        pytest.skip("sklearn not available")
+    trades = []
+    for i in range(15):
+        trades.append({
+            "pnl_pct": 0.01,  # all wins → single class
+            "rsi_14": 50 + i, "macd_line": 0, "atr_pct": 2.0,
+            "volume_ratio_20d": 1.0, "bollinger_position": 0.5,
+            "rs_vs_spy_30d": 0.0, "day_of_week": 0, "hour": 10,
+        })
+    path = tmp_path / "model_same_class.pkl"
+    sf = SignalFilter(model_path=str(path))
+    result = sf.retrain(trades)
+    # CV fails on single class → AUC falls back to 0.5; final fit also fails → returns 0.5 float
+    assert isinstance(result, float)
+    assert result == pytest.approx(0.5)
 
 
 # ---------- singleton ----------
