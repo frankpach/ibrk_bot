@@ -8,7 +8,7 @@ import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.database import init_db, get_daily_pnl, init_alerts_table, get_active_alerts, mark_alert_triggered, init_market_permissions_table
-from app.ibkr.client import get_client
+from app.ibkr.client import IBKRClient, get_client
 from app.scanner.preprocessor import run_scan
 from app.scanner.market_open_selector import select_top_symbols
 from app.positions.manager import check_positions
@@ -52,7 +52,7 @@ def wait_for_gateway() -> bool:
 
     logger.warning("IB Gateway not available, waiting...")
     notify(
-        "IB Gateway no disponible en el puerto 4002.\n"
+        f"IB Gateway no disponible en el puerto {IB_PORT}.\n"
         "Esperando hasta 10 minutos...\n"
         "Asegúrate de que IB Gateway esté iniciado y con sesión activa."
     )
@@ -185,6 +185,9 @@ def main():
             logger.info(f"Account snapshot saved: NL=${nl:.2f} BP=${bp:.2f}")
         except Exception as e:
             logger.debug(f"Account snapshot skipped: {e}")
+
+    if ib_client and ib_client.ib.isConnected():
+        _save_account_snapshot(ib_client)
 
     def _check_gateway_and_reconnect():
         """Verifica la conexión a IB Gateway y reconecta si es necesario.
@@ -505,14 +508,17 @@ def main():
     logger.info("Telegram bot thread started")
 
     _startup_client = _ib_client_ref["client"]
+    startup_mode = "paper" if ctrl.mode == "paper" else "live"
+    capital_label = "Capital simulado" if startup_mode == "paper" else "Capital operativo"
+    mode_label = "Paper Trading" if startup_mode == "paper" else "Live Trading"
     status = "conectado a IB Gateway" if (_startup_client and _startup_client.ib.isConnected()) else "SIN conexión a IB Gateway"
     notify(
         f"IBKR AI Trader v2 iniciado\n"
         f"Estado IB: {status}\n"
         f"Scanner multi-timeframe: cada {SCAN_INTERVAL_MINUTES} min\n"
-        f"Capital simulado: ${CAPITAL_CAP}\n"
+        f"{capital_label}: ${CAPITAL_CAP}\n"
         f"Circuit breaker: 5% pérdida diaria\n"
-        f"Modo: Paper Trading (no envia ordenes reales)\n"
+        f"Modo: {mode_label}\n"
         f"Dashboard: http://aiutox-pi.tail2a2cda.ts.net:8088/dashboard\n"
         "Escribe /ayuda para ver comandos"
     )

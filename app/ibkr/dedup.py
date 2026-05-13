@@ -89,8 +89,8 @@ class PreflightChecker:
 
     def _check_symbol_tradable(self, symbol, action, quantity, order_type, limit_price):
         # Basic check — symbol must be in allowed list
-        from app.config.settings import ALLOWED_SYMBOLS
-        if symbol.upper() not in ALLOWED_SYMBOLS:
+        from app.db.database import get_approved_symbols
+        if symbol.upper() not in set(get_approved_symbols()):
             return PreflightResult(ok=False, reason=f"Symbol {symbol} not in allowed universe")
         return PreflightResult(ok=True, reason=None)
 

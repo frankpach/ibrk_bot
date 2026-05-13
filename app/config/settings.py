@@ -14,8 +14,8 @@ IB_MOCK = os.getenv("IB_MOCK", "false").lower() == "true"
 
 # --- Trading rules ---
 READ_ONLY = True
-PAPER_TRADING_ONLY = True
-REQUIRE_HUMAN_APPROVAL = False  # False en paper, True en live
+PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "true").lower() == "true"
+REQUIRE_HUMAN_APPROVAL = not PAPER_TRADING_ONLY
 MAX_POSITIONS = 3
 MAX_RISK_PCT = 0.02
 MIN_RISK_USD = 1.0

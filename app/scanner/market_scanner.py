@@ -10,6 +10,38 @@ SECTOR_ETFS = {
 }
 
 
+def _build_scanner_row(data_layer, symbol: str) -> dict:
+    change_pct = None
+    volume_ratio = None
+    try:
+        df = data_layer.get_ohlcv(symbol, "2 D", "1 day", "dashboard_chart")
+        if df is not None and len(df) >= 2:
+            prev = float(df["close"].iloc[-2])
+            curr = float(df["close"].iloc[-1])
+            if prev > 0:
+                change_pct = round((curr - prev) / prev * 100, 2)
+    except Exception as e:
+        logger.debug(f"Scanner change_pct {symbol}: {e}")
+
+    try:
+        indicators = data_layer.get_indicators(symbol)
+        volume_ratio = indicators.get("volume_ratio")
+        if volume_ratio is None:
+            volume_ratio = indicators.get("volume_ratio_20d")
+        if volume_ratio is not None:
+            volume_ratio = round(float(volume_ratio), 2)
+    except Exception as e:
+        logger.debug(f"Scanner volume_ratio {symbol}: {e}")
+
+    return {
+        "symbol": symbol,
+        "name": "",
+        "change_pct": change_pct,
+        "volume_ratio": volume_ratio,
+        "extra_json": "{}",
+    }
+
+
 def fetch_and_cache_scanner(data_layer) -> None:
     """Fetch scanner results for most_active, gainers, losers, top_movers."""
     from app.db.database import upsert_scanner_results
@@ -22,11 +54,7 @@ def fetch_and_cache_scanner(data_layer) -> None:
     for scan_type, scan_code in scan_map.items():
         try:
             raw = data_layer.run_scanner(scan_code)
-            results = [
-                {"symbol": s, "name": "", "change_pct": None,
-                 "volume_ratio": None, "extra_json": "{}"}
-                for s in (raw or [])[:10]
-            ]
+            results = [_build_scanner_row(data_layer, s) for s in (raw or [])[:10]]
             upsert_scanner_results(scan_type, results)
         except Exception as e:
             logger.warning(f"Scanner {scan_type} ({scan_code}) failed: {e}")

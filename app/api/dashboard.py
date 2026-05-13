@@ -268,7 +268,7 @@ def render_dashboard_html() -> str:
     }
 
     /* Header */
-    function Header({ data, interval, onTick }) {
+    function Header({ data, interval, onTick, onTogglePause }) {
       const st = data?.status || {};
       const isLive = (st.mode || 'paper').toUpperCase() === 'LIVE';
       const ibConnected = data?.ib_connected;
@@ -305,6 +305,7 @@ def render_dashboard_html() -> str:
               className="hbtn hbtn-pause"
               disabled={!ibConnected}
               title={!ibConnected ? 'IB Gateway offline' : ''}
+              onClick={onTogglePause}
             >⏸ Pausar</button>
             <button className="theme-btn" onClick={handleToggle}>
               <span>{isDark ? '☀️' : '🌙'}</span>
@@ -347,18 +348,20 @@ def render_dashboard_html() -> str:
       const netLiq = acct.net_liquidation || st.operating_capital || st.simulated_capital || 0;
       const buyPow = acct.buying_power || st.operating_capital || 0;
       const openCount = data?.open_trades?.length || 0;
+      const accountSubtitle = st.ib_data_live ? 'IBKR snapshot · hoy' : 'último snapshot guardado';
 
       return (
         <div className="row-4">
           <div className="sc fade-up">
             <div className="sl">Net Liquidation</div>
             <div className="sv blue">{f.usd(netLiq)}</div>
+            <div className="ss">{accountSubtitle}</div>
             <div className="ss">IBKR real · cuenta</div>
           </div>
           <div className="sc fade-up">
             <div className="sl">P&amp;L Hoy</div>
             <div className={'sv ' + (pnl >= 0 ? 'green' : 'red')}>{f.usd(pnl)}</div>
-            <div className="ss">{f.pct(pct * 100)} · drawdown</div>
+            <div className="ss">{f.pct(pct)} · drawdown</div>
             <DrawdownGauge drawdownPct={st.drawdown_pct} />
           </div>
           <div className="sc fade-up">
@@ -379,8 +382,8 @@ def render_dashboard_html() -> str:
 
     /* R/R bar */
     function RRBar({ trade, snapshots }) {
-      const snap = (snapshots || []).find(s => s.trade_id === trade.id) || {};
-      const current = parseFloat(snap.current_price || trade.entry_price || 0);
+      const snap = (snapshots || []).find(s => s.trade_id === (trade.trade_id || trade.id)) || {};
+      const current = parseFloat(snap.current_price || trade.current_price || trade.entry_price || 0);
       const sl = parseFloat(trade.stop_loss_price || 0);
       const tp = parseFloat(trade.take_profit_price || 0);
 
@@ -417,17 +420,17 @@ def render_dashboard_html() -> str:
       const strCls = s => s === 'STRONG' ? 'str-s' : s === 'MEDIUM' ? 'str-m' : 'str-w';
 
       const items = trades.map((t, i) => {
-        const snap = snapshots.find(s => s.trade_id === t.id) || {};
+        const snap = snapshots.find(s => s.trade_id === (t.trade_id || t.id)) || {};
         const pnlUsd = parseFloat(snap.pnl_usd != null ? snap.pnl_usd : (t.pnl_usd || 0));
         const pnlPct = parseFloat(snap.pnl_pct != null ? snap.pnl_pct : (t.pnl_pct || 0));
-        const currentPrice = snap.current_price || t.entry_price;
+        const currentPrice = snap.current_price || t.current_price || t.entry_price;
         const earningsDays = earningsWarnings[t.symbol];
         let extra = {};
         try { extra = JSON.parse(t.extra_indicators || '{}'); } catch(e) {}
         const trend = extra.weekly_trend;
 
         return (
-          <div key={t.id || i} className="pos fade-up">
+          <div key={t.trade_id || t.id || i} className="pos fade-up">
             <div className="pos-top">
               <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
                 <span className="psym">{t.symbol}</span>
@@ -450,7 +453,7 @@ def render_dashboard_html() -> str:
                   className="bcl"
                   disabled={!ibConnected}
                   title={!ibConnected ? 'IB Gateway offline' : ''}
-                  onClick={() => closePosition(t.id)}
+                  onClick={() => closePosition(t.trade_id || t.id)}
                 >Cerrar</button>
               </div>
             </div>
@@ -1049,16 +1052,16 @@ def render_dashboard_html() -> str:
             {tab === 'sector' ? (
               <div style={{display:'flex',flexDirection:'column',gap:6,padding:'10px 0'}}>
                 {rows.map((r,i)=>{
-                  const pct = parseFloat(r.change_pct||0);
-                  const color = pct>=0?'var(--green)':'var(--red)';
+                  const pct = r.change_pct == null ? null : parseFloat(r.change_pct);
+                  const color = (pct ?? 0)>=0?'var(--green)':'var(--red)';
                   return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.73rem'}}>
                       <span style={{width:36,color:'var(--text)',fontWeight:500}}>{r.symbol}</span>
                       <span style={{width:80,color:'var(--muted)',fontSize:'.68rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>
                       <div style={{flex:1,height:7,borderRadius:4,background:'rgba(255,255,255,.04)',overflow:'hidden'}}>
-                        <div style={{height:'100%',width:`${Math.min(Math.abs(pct)*10,100)}%`,background:color,borderRadius:4}}/>
+                        <div style={{height:'100%',width:`${Math.min(Math.abs(pct ?? 0)*10,100)}%`,background:color,borderRadius:4}}/>
                       </div>
-                      <span style={{color,width:44,textAlign:'right'}}>{pct>=0?'+':''}{pct.toFixed(1)}%</span>
+                      <span style={{color,width:44,textAlign:'right'}}>{pct == null ? '—' : `${pct>=0?'+':''}${pct.toFixed(1)}%`}</span>
                     </div>
                   );
                 })}
@@ -1066,15 +1069,15 @@ def render_dashboard_html() -> str:
             ) : tab === 'implied_move' ? (
               <div style={{display:'flex',flexDirection:'column',gap:4,padding:'8px 0'}}>
                 {rows.map((r,i)=>{
-                  const move = parseFloat(r.change_pct||0);
-                  const color = move>3?'var(--amber)':'var(--green)';
+                  const move = r.change_pct == null ? null : parseFloat(r.change_pct);
+                  const color = (move ?? 0)>3?'var(--amber)':'var(--green)';
                   return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.73rem'}}>
                       <span style={{width:48,color:'var(--text)',fontWeight:500,fontFamily:'"Bebas Neue",cursive',fontSize:'1rem'}}>{r.symbol}</span>
                       <div style={{flex:1,height:7,borderRadius:4,background:'rgba(255,255,255,.04)',overflow:'hidden'}}>
-                        <div style={{height:'100%',width:`${Math.min(move*12,100)}%`,background:color,borderRadius:4}}/>
+                        <div style={{height:'100%',width:`${Math.min((move ?? 0)*12,100)}%`,background:color,borderRadius:4}}/>
                       </div>
-                      <span style={{color,width:44,textAlign:'right'}}>±{move.toFixed(1)}%</span>
+                      <span style={{color,width:44,textAlign:'right'}}>{move == null ? '—' : `±${move.toFixed(1)}%`}</span>
                       <span style={{color:'var(--dimmer)',fontSize:'.63rem'}}>7d</span>
                     </div>
                   );
@@ -1086,17 +1089,17 @@ def render_dashboard_html() -> str:
                   {tab==='most_active'?'Most active by volume':tab==='top_movers'?'Largest % moves':tab==='gainers'?'Top gainers':'Top losers'} · 5min
                 </div>
                 {rows.slice(0,6).map((r,i)=>{
-                  const pct = parseFloat(r.change_pct||0);
-                  const vr = parseFloat(r.volume_ratio||0);
+                  const pct = r.change_pct == null ? null : parseFloat(r.change_pct);
+                  const vr = r.volume_ratio == null ? null : parseFloat(r.volume_ratio);
                   return (
                     <div key={i} style={{display:'grid',gridTemplateColumns:'48px 1fr 60px 55px 66px',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)',gap:4,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
                       <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.05rem',color:'var(--text)'}}>{r.symbol}</span>
                       <span style={{color:'var(--muted)',fontSize:'.68rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||''}</span>
-                      <span style={{color:pct>=0?'var(--green)':'var(--red)'}}>{pct>=0?'+':''}{pct.toFixed(1)}%</span>
+                      <span style={{color:(pct ?? 0)>=0?'var(--green)':'var(--red)'}}>{pct == null ? '—' : `${pct>=0?'+':''}${pct.toFixed(1)}%`}</span>
                       <span style={{padding:'1px 5px',borderRadius:3,fontSize:'.63rem',
-                        background:vr>2?'var(--green-bg)':'var(--amber-bg)',
-                        color:vr>2?'var(--green)':'var(--amber)',
-                        border:`1px solid ${vr>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}`}}>{vr.toFixed(1)}×</span>
+                        background:(vr ?? 0)>2?'var(--green-bg)':'var(--amber-bg)',
+                        color:(vr ?? 0)>2?'var(--green)':'var(--amber)',
+                        border:`1px solid ${(vr ?? 0)>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}`}}>{vr == null ? '—' : `${vr.toFixed(1)}×`}</span>
                       <button onClick={()=>proposeSymbol(r.symbol)}
                         style={{background:'var(--blue-bg)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',padding:'2px 7px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
                         + añadir
@@ -1119,7 +1122,7 @@ def render_dashboard_html() -> str:
       async function recalibrate(symbol) {
         try {
           await fetch(`/symbols/approve/${symbol}`, {method:'POST'});
-          alert(`Calibración iniciada para ${symbol}. Recibirás notificación en Telegram.`);
+          alert(`Recalibración solicitada para ${symbol}. Revisa Telegram o logs para confirmar la ejecución real.`);
         } catch(e) {}
       }
 
@@ -1138,7 +1141,20 @@ def render_dashboard_html() -> str:
               <tbody>
                 {syms.map(s=>(
                   <tr key={s.symbol} style={{borderBottom:'1px solid var(--border)'}}>
-                    <td style={{padding:'5px 8px',color:'var(--text)',fontWeight:500}}>{s.symbol}</td>
+                    <td style={{padding:'5px 8px',color:'var(--text)',fontWeight:500}}>
+                      {s.symbol}
+                      {s.is_open && (
+                        <span style={{
+                          marginLeft: 6,
+                          background:'var(--green-bg)',
+                          color:'var(--green)',
+                          border:'1px solid rgba(16,185,129,.3)',
+                          padding:'1px 6px',
+                          borderRadius:3,
+                          fontSize:'.63rem'
+                        }}>OPEN</span>
+                      )}
+                    </td>
                     <td style={{padding:'5px 8px'}}>
                       {s.backtest_calibrated
                         ? <span style={{background:'var(--green-bg)',color:'var(--green)',border:'1px solid rgba(16,185,129,.3)',padding:'1px 6px',borderRadius:3,fontSize:'.63rem'}}>✓ backtest</span>
@@ -1249,12 +1265,20 @@ def render_dashboard_html() -> str:
 
       const ibConnected = data?.ib_connected;
 
+      async function toggleScanner() {
+        if (!ibConnected) return;
+        const paused = data?.status?.paused;
+        const ep = paused ? '/system/resume' : '/system/pause';
+        await fetch(ep, {method:'POST'}).catch(()=>{});
+        load();
+      }
+
       return (
         <div style={{minHeight:'100vh',background:'var(--bg)'}}>
 
           <IbStatusBar ibConnected={ibConnected} />
 
-          <Header data={data} interval={interval} onTick={() => setTick(k => k+1)} />
+          <Header data={data} interval={interval} onTick={() => setTick(k => k+1)} onTogglePause={toggleScanner} />
 
           <div className="page">
 

@@ -4,11 +4,17 @@ from datetime import datetime
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 
-from app.config.settings import ALLOWED_SYMBOLS, MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
+from app.config.settings import MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 from app.api.capital import get_operating_capital
 from app.ibkr.client import get_client
 from app.risk.validator import validate_order
-from app.db.database import get_pending_signals, get_open_trades, get_patterns_for_symbol, init_db
+from app.db.database import (
+    get_pending_signals,
+    get_open_trades,
+    get_patterns_for_symbol,
+    init_db,
+    get_approved_symbols,
+)
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="IBKR AI Trader API")
@@ -43,7 +49,7 @@ def health():
 @app.get("/price/{symbol}")
 def get_price(symbol: str):
     symbol = symbol.upper()
-    if symbol not in ALLOWED_SYMBOLS:
+    if symbol not in set(get_approved_symbols()):
         raise HTTPException(status_code=403, detail=f"Symbol {symbol} not allowed")
     try:
         return client.get_stock_price(symbol)
@@ -53,7 +59,7 @@ def get_price(symbol: str):
 
 @app.get("/price/free/{symbol}")
 def get_price_free(symbol: str):
-    """Obtiene precio de cualquier simbolo sin restriccion de ALLOWED_SYMBOLS.
+    """Obtiene precio de cualquier simbolo sin restriccion del universo aprobado.
     Solo para analisis — no para operar."""
     symbol = symbol.upper()
     try:
@@ -295,9 +301,6 @@ def orders_place(req: OrderPreviewRequest):
     if dedup.is_duplicate(symbol, req.action):
         raise HTTPException(status_code=429, detail={"approved": False, "reasons": ["Duplicate order blocked (within 30s window)"]})
 
-    if not PAPER_TRADING_ONLY:
-        raise HTTPException(status_code=500, detail="Neither paper nor approval mode configured")
-
     # Place and monitor order
     from app.notifications.order_monitor import OrderExecutionMonitor
     monitor = OrderExecutionMonitor(client)
@@ -343,6 +346,7 @@ def orders_place(req: OrderPreviewRequest):
 
     return {
         "status": "placed",
+        "mode": "paper" if PAPER_TRADING_ONLY else "live",
         "symbol": symbol,
         "action": req.action,
         "units": units,
@@ -363,12 +367,10 @@ def get_proposals():
 @app.post("/symbols/approve/{symbol}")
 def approve_symbol_endpoint(symbol: str):
     from app.db.database import approve_symbol
-    from app.config.settings import ALLOWED_SYMBOLS
     symbol = symbol.upper()
-    approve_symbol(symbol)
-    if symbol not in ALLOWED_SYMBOLS:
-        ALLOWED_SYMBOLS.append(symbol)
-    return {"status": "approved", "symbol": symbol, "message": f"{symbol} added to active trading universe."}
+    ib_client = client if client and client.ib.isConnected() else None
+    approve_symbol(symbol, ib_client=ib_client)
+    return {"status": "approved", "symbol": symbol, "message": f"{symbol} approved in DB universe."}
 
 
 
@@ -378,11 +380,16 @@ def approve_symbol_endpoint(symbol: str):
 def system_status():
     from app.system.controller import get_controller
     from app.db.database import get_daily_pnl, get_open_trades
+    from app.config.settings import PAPER_TRADING_ONLY
     try:
         ctrl = get_controller()
         status = ctrl.status()
     except RuntimeError:
-        status = {"paused": False, "mode": "paper", "circuit_breaker_threshold": "5%"}
+        status = {
+            "paused": False,
+            "mode": "paper" if PAPER_TRADING_ONLY else "live",
+            "circuit_breaker_threshold": "5%",
+        }
     open_trades = get_open_trades()
     daily_pnl = get_daily_pnl()
     try:
@@ -625,51 +632,43 @@ def dashboard():
 @app.get("/dashboard/data")
 def dashboard_data():
     """JSON endpoint consumed by the React dashboard every 30s."""
-    import os
     from pathlib import Path
     from app.db.database import (
         get_open_trades, get_closed_trades, get_pending_signals,
         get_patterns_for_symbol, get_daily_pnl, get_closed_trades_by_symbol,
-        get_approved_symbols,
+        get_approved_symbols, get_account_history,
     )
 
     # ── Status ──
     daily_pnl = get_daily_pnl()
     open_trades = get_open_trades()
 
-    # Try live IBKR account data first; fall back to last DB snapshot
-    _acct = {}
-    _acct_live = False
+    account_history = []
+    latest_account = {}
     try:
-        _acct = client.get_account()
-        _acct_live = bool(_acct.get("net_liquidation"))
-    except Exception:
-        pass
+        account_history = get_account_history(days=30)
+        if account_history:
+            latest_account = account_history[-1]
+    except Exception as e:
+        logger.warning(f"Account history failed: {e}")
 
-    # Fallback: use last account_snapshots entry when IB is offline
-    if not _acct_live:
-        try:
-            from app.db.database import get_account_history
-            hist = get_account_history(days=1)
-            if hist:
-                last = hist[-1]
-                _acct = {
-                    "net_liquidation": last.get("net_liquidation", 0.0),
-                    "buying_power": last.get("buying_power", 0.0),
-                }
-        except Exception:
-            pass
-
-    _nl = float(_acct.get("net_liquidation") or 0.0)
-    _bp = float(_acct.get("buying_power") or 0.0)
+    _nl = float(latest_account.get("net_liquidation") or 0.0)
+    _bp = float(latest_account.get("buying_power") or 0.0)
     _capital = get_operating_capital(_nl) if _nl else None
     if not _capital:
         from app.config.settings import CAPITAL_CAP
         _capital = CAPITAL_CAP
+    if not latest_account:
+        latest_account = {
+            "net_liquidation": round(_nl, 2),
+            "buying_power": round(_bp, 2),
+        }
 
     # Detect mode from settings + controller
     from app.config.settings import PAPER_TRADING_ONLY
     _mode = "paper" if PAPER_TRADING_ONLY else "live"
+    latest_account_date = str(latest_account.get("date") or "")
+    today_utc = datetime.utcnow().strftime("%Y-%m-%d")
 
     status = {
         "mode": _mode,
@@ -681,7 +680,7 @@ def dashboard_data():
         "simulated_capital": _capital,
         "net_liquidation": round(_nl, 2),
         "buying_power": round(_bp, 2),
-        "ib_data_live": _acct_live,
+        "ib_data_live": bool(latest_account_date and latest_account_date == today_utc),
     }
     try:
         from app.system.controller import get_controller
@@ -695,6 +694,7 @@ def dashboard_data():
     # ── Open trades ──
     trades_out = [
         {
+            "id": t.id,
             "trade_id": t.id,
             "symbol": t.symbol, "action": t.action,
             "quantity": t.quantity,
@@ -786,17 +786,9 @@ def dashboard_data():
                 t["snapshot_at"] = None
     except Exception as e:
         logger.warning(f"Position snapshots failed: {e}")
+        pos_snaps = {}
 
-    # --- 2. Account history for equity curve ---
-    account_history = []
-    latest_account = {}
-    try:
-        from app.db.database import get_account_history
-        account_history = get_account_history(days=30)
-        if account_history:
-            latest_account = account_history[-1]
-    except Exception as e:
-        logger.warning(f"Account history failed: {e}")
+    position_snapshots_out = list(pos_snaps.values()) if pos_snaps else []
 
     # --- 3. News (filtered by approved symbols) ---
     news = []
@@ -820,6 +812,7 @@ def dashboard_data():
     symbols_universe = []
     try:
         from app.db.database import get_or_create_symbol_parameters
+        open_symbols = {t.symbol for t in open_trades}
         for sym in get_approved_symbols():
             try:
                 params = get_or_create_symbol_parameters(sym)
@@ -841,9 +834,11 @@ def dashboard_data():
                     "trade_count": params.trade_count,
                     "win_rate": win_rate,
                     "multipliers_drifted": multipliers_drifted,
+                    "is_open": sym in open_symbols,
                 })
             except Exception:
                 pass
+        symbols_universe.sort(key=lambda item: (not item["is_open"], item["symbol"]))
     except Exception as e:
         logger.warning(f"Symbols universe failed: {e}")
 
@@ -875,6 +870,7 @@ def dashboard_data():
         "closed_trades": closed_out,
         "signals": signals_out,
         "patterns": patterns_out,
+        "position_snapshots": position_snapshots_out,
         "learning": learning,
         "account_history": account_history,
         "latest_account": latest_account,
@@ -894,9 +890,9 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
         data_layer = get_data_layer()
         result: dict = {"symbol": symbol.upper(), "period": period, "bars": []}
         if period == "intraday":
-            df = data_layer.get_ohlcv(symbol, "1 D", "5 mins", "scanner")
+            df = data_layer.get_ohlcv(symbol, "1 D", "5 mins", "dashboard_chart")
         else:
-            df = data_layer.get_ohlcv(symbol, "30 D", "1 day", "scanner")
+            df = data_layer.get_ohlcv(symbol, "30 D", "1 day", "dashboard_chart")
         if df is not None and len(df) > 0:
             result["bars"] = [
                 {"close": round(float(r["close"]), 4),
@@ -924,8 +920,8 @@ def run_backtest_endpoint(symbol: str, days: int = 180):
     from app.backtest.engine import run_backtest
     from app.backtest.reporter import format_api
     symbol = symbol.upper()
-    if symbol not in ALLOWED_SYMBOLS:
-        raise HTTPException(status_code=403, detail=f"Symbol {symbol} not in allowed list")
+    if symbol not in set(get_approved_symbols()):
+        raise HTTPException(status_code=403, detail=f"Symbol {symbol} not in approved DB list")
     try:
         _acct = client.get_account()
         _capital = get_operating_capital(_acct.get("net_liquidation", 0.0))
@@ -983,14 +979,13 @@ def single_indicator_endpoint(symbol: str, indicator_name: str):
 def universe_watchlist():
     """Return universe symbols with their watchlist scores."""
     from app.db.database import get_connection
-    from app.config.settings import ALLOWED_SYMBOLS
     conn = get_connection()
     rows = conn.execute("SELECT * FROM watchlist_scores ORDER BY watchlist_score DESC").fetchall()
     conn.close()
     scores = {r["symbol"]: r["watchlist_score"] for r in rows}
     return [
         {"symbol": s, "watchlist_score": scores.get(s, 0.5), "active": True}
-        for s in ALLOWED_SYMBOLS
+        for s in get_approved_symbols()
     ]
 
 
@@ -1026,4 +1021,3 @@ def get_market_permissions_endpoint(refresh: bool = False):
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=503, detail=str(e))
-

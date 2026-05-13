@@ -7,7 +7,8 @@ def test_pause_stops_scanner():
     mock_scheduler = MagicMock()
     ctrl = SystemController(mock_scheduler)
     ctrl.pause()
-    mock_scheduler.pause_job.assert_called_with("scanner")
+    mock_scheduler.pause_job.assert_any_call("scanner")
+    mock_scheduler.pause_job.assert_any_call("scanner_fetch")
     assert ctrl.is_paused is True
 
 
@@ -16,7 +17,8 @@ def test_resume_restarts_scanner():
     ctrl = SystemController(mock_scheduler)
     ctrl.pause()
     ctrl.resume()
-    mock_scheduler.resume_job.assert_called_with("scanner")
+    mock_scheduler.resume_job.assert_any_call("scanner")
+    mock_scheduler.resume_job.assert_any_call("scanner_fetch")
     assert ctrl.is_paused is False
 
 

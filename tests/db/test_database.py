@@ -130,6 +130,11 @@ def test_symbol_proposal_and_approval():
     assert "NFLX" in get_approved_symbols()
 
 
+def test_approve_symbol_inserts_missing_symbol_into_symbol_config():
+    approve_symbol("AAOI")
+    assert "AAOI" in get_approved_symbols()
+
+
 # ---------- feature_snapshot_id / new functions ----------
 
 def test_get_feature_snapshot_by_id_not_found():

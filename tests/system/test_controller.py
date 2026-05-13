@@ -10,10 +10,12 @@ def test_pause_resume():
     assert ctrl.is_paused is True
     sched.pause_job.assert_any_call("signal_processor")
     sched.pause_job.assert_any_call("scanner")
+    sched.pause_job.assert_any_call("scanner_fetch")
     ctrl.resume()
     assert ctrl.is_paused is False
     sched.resume_job.assert_any_call("signal_processor")
     sched.resume_job.assert_any_call("scanner")
+    sched.resume_job.assert_any_call("scanner_fetch")
 
 
 def test_set_mode_live():
@@ -97,3 +99,10 @@ def test_init_controller():
     assert ctrl is not None
     assert get_controller() is ctrl
     ctrl_mod._controller = old
+
+
+@patch("app.config.settings.PAPER_TRADING_ONLY", False)
+def test_controller_defaults_to_live_when_env_is_live():
+    sched = MagicMock()
+    ctrl = SystemController(sched)
+    assert ctrl.mode == "live"

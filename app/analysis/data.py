@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 TTL = {
     "trade_entry": 0,
     "on_demand": 120,
+    "dashboard_chart": 300,
     "scanner": 900,
     "backtest": 3600,
     "fundamentals": 86400,

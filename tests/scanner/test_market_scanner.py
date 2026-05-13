@@ -42,6 +42,26 @@ def test_fetch_and_cache_scanner_writes_results():
     assert most_active_call.args[1][0]["symbol"] == "AAPL"
 
 
+def test_fetch_and_cache_scanner_enriches_rows_with_change_and_volume_ratio():
+    """Scanner rows should include actionable pct move and volume ratio data."""
+    from app.scanner.market_scanner import fetch_and_cache_scanner
+
+    data_layer = MagicMock()
+    data_layer.run_scanner.return_value = ["AAPL"]
+    data_layer.get_ohlcv.return_value = pd.DataFrame({"close": [100.0, 103.0]})
+    data_layer.get_indicators.return_value = {"volume_ratio_20d": 2.4}
+
+    with patch("app.db.database.upsert_scanner_results") as mock_upsert, \
+         patch("app.db.database.get_scanner_results", return_value=[]):
+        fetch_and_cache_scanner(data_layer)
+
+    most_active_call = next(c for c in mock_upsert.call_args_list if c.args[0] == "most_active")
+    row = most_active_call.args[1][0]
+    assert row["symbol"] == "AAPL"
+    assert row["change_pct"] == 3.0
+    assert row["volume_ratio"] == 2.4
+
+
 def test_fetch_and_cache_sectors_handles_empty():
     """data_layer.get_ohlcv returns None — no crash, upsert not called for empty results."""
     from app.scanner.market_scanner import fetch_and_cache_sectors

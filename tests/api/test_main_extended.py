@@ -1,5 +1,6 @@
 # tests/api/test_main_extended.py
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
@@ -509,7 +510,22 @@ def test_approve_symbol():
             resp = client.post("/symbols/approve/NFLX")
             assert resp.status_code == 200
             assert resp.json()["status"] == "approved"
-            mock_approve.assert_called_once()
+            mock_approve.assert_called_once_with("NFLX", ib_client=mock)
+
+
+def test_allowed_symbols_endpoint_uses_db_approved_symbols():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+        with patch("app.db.database.get_approved_symbols_with_meta", return_value=[
+            {"symbol": "AAOI"},
+            {"symbol": "MSFT"},
+        ]):
+            resp = client.get("/allowed-symbols")
+            assert resp.status_code == 200
+            assert resp.json()["symbols"] == ["AAOI", "MSFT"]
 
 
 # ---- System status with no controller ----
@@ -525,6 +541,20 @@ def test_system_status_no_controller():
             resp = client.get("/system/status")
             assert resp.status_code == 200
             assert resp.json()["mode"] == "paper"
+
+
+def test_system_status_no_controller_uses_live_env_default():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        mock.get_account.return_value = {"net_liquidation": 1000.0}
+        MockClient.return_value = mock
+        client = _fresh_client()
+        with patch("app.system.controller.get_controller", side_effect=RuntimeError("not init")), \
+             patch("app.config.settings.PAPER_TRADING_ONLY", False):
+            resp = client.get("/system/status")
+            assert resp.status_code == 200
+            assert resp.json()["mode"] == "live"
 
 
 # ---- Orders place human approval timeout ----
@@ -620,6 +650,7 @@ def test_dashboard_data_returns_all_fields():
         assert resp.status_code == 200
         data = resp.json()
         required = ["status", "open_trades", "closed_trades", "signals",
+                    "position_snapshots",
                     "patterns", "learning", "account_history", "latest_account",
                     "news", "scanner", "symbols_universe", "ib_connected",
                     "earnings_warnings"]
@@ -651,3 +682,121 @@ def test_dashboard_symbol_endpoint():
         data = resp.json()
         assert data["symbol"] == "AAPL"
         assert "bars" in data
+
+
+def test_dashboard_data_exposes_snapshot_data_for_open_trades():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        mock.get_account.return_value = {"net_liquidation": 1000.0, "buying_power": 400.0}
+        MockClient.return_value = mock
+        client = _fresh_client()
+
+        trade = SimpleNamespace(
+            id=42,
+            symbol="AAOI",
+            action="BUY",
+            quantity=0.08,
+            entry_price=149.7725,
+            entry_fill_price=None,
+            stop_loss_price=140.0,
+            take_profit_price=230.0,
+            signal_strength="MANUAL_RECONCILED",
+            opened_at=SimpleNamespace(isoformat=lambda: "2026-05-13T14:00:00"),
+        )
+        symbol_params = SimpleNamespace(
+            stop_loss_pct=0.025,
+            take_profit_pct=0.06,
+            trade_count=0,
+            backtest_calibrated=0,
+            backtest_calibrated_at=None,
+            backtest_profit_factor=None,
+            momentum_mult=1.0,
+            trend_mult=1.0,
+            volume_mult=1.0,
+            volatility_mult=1.0,
+        )
+
+        with patch("app.db.database.get_open_trades", return_value=[trade]), \
+             patch("app.db.database.get_position_snapshots", return_value={
+                 42: {
+                     "trade_id": 42,
+                     "symbol": "AAOI",
+                     "current_price": 228.16,
+                     "pnl_usd": 6.27,
+                     "pnl_pct": 0.4186,
+                     "updated_at": "2026-05-13T14:22:51",
+                 }
+             }), \
+             patch("app.db.database.get_approved_symbols", return_value=["MSFT", "AAOI"]), \
+             patch("app.db.database.get_or_create_symbol_parameters", return_value=symbol_params):
+            resp = client.get("/dashboard/data")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["open_trades"][0]["trade_id"] == 42
+        assert data["open_trades"][0]["current_price"] == 228.16
+        assert data["open_trades"][0]["pnl_usd"] == 6.27
+        assert data["open_trades"][0]["pnl_pct"] == 0.4186
+        assert data["position_snapshots"][0]["trade_id"] == 42
+
+
+def test_dashboard_data_sorts_open_symbol_first_in_universe():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        mock.get_account.return_value = {"net_liquidation": 1000.0, "buying_power": 400.0}
+        MockClient.return_value = mock
+        client = _fresh_client()
+
+        trade = SimpleNamespace(
+            id=99,
+            symbol="AAOI",
+            action="BUY",
+            quantity=0.08,
+            entry_price=149.7725,
+            entry_fill_price=None,
+            stop_loss_price=140.0,
+            take_profit_price=230.0,
+            signal_strength="MANUAL_RECONCILED",
+            opened_at=SimpleNamespace(isoformat=lambda: "2026-05-13T14:00:00"),
+        )
+        symbol_params = SimpleNamespace(
+            stop_loss_pct=0.025,
+            take_profit_pct=0.06,
+            trade_count=0,
+            backtest_calibrated=0,
+            backtest_calibrated_at=None,
+            backtest_profit_factor=None,
+            momentum_mult=1.0,
+            trend_mult=1.0,
+            volume_mult=1.0,
+            volatility_mult=1.0,
+        )
+
+        with patch("app.db.database.get_open_trades", return_value=[trade]), \
+             patch("app.db.database.get_approved_symbols", return_value=["MSFT", "AAOI", "AAPL"]), \
+             patch("app.db.database.get_or_create_symbol_parameters", return_value=symbol_params):
+            resp = client.get("/dashboard/data")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["symbols_universe"][0]["symbol"] == "AAOI"
+
+
+def test_dashboard_data_prefers_controller_mode_over_settings():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+
+        ctrl = SimpleNamespace(mode="live", is_paused=True)
+        with patch("app.system.controller.get_controller", return_value=ctrl), \
+             patch("app.config.settings.PAPER_TRADING_ONLY", True):
+            resp = client.get("/dashboard/data")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"]["mode"] == "live"
+        assert data["status"]["paused"] is True

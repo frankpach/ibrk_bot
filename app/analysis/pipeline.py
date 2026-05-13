@@ -210,9 +210,8 @@ class AnalysisPipeline:
         self._result.score = compute_score(
             self._result.features, self.symbol, portfolio, self._news
         )
-        self._result.in_universe = self.symbol in __import__(
-            "app.config.settings", fromlist=["ALLOWED_SYMBOLS"]
-        ).ALLOWED_SYMBOLS
+        from app.db.database import get_approved_symbols
+        self._result.in_universe = self.symbol in set(get_approved_symbols())
 
     def _check_hard_rules(self):
         self.current_step = "hard_rules"

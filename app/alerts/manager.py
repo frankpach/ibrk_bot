@@ -57,7 +57,7 @@ def check_alert_triggered(
 def _get_price_and_prev_close(symbol: str) -> tuple[float, float]:
     """Obtiene precio actual y cierre anterior via FastAPI."""
     try:
-        data = httpx.get(f"{API_BASE}/price/{symbol}", timeout=15).json()
+        data = httpx.get(f"{API_BASE}/price/free/{symbol}", timeout=15).json()
         current = float(data.get("market_price", 0.0) or 0.0)
         prev_close = float(data.get("close", current) or current)
         return current, prev_close

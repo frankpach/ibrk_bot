@@ -13,19 +13,26 @@ CIRCUIT_BREAKER_PCT = 0.05  # 5% de perdida diaria detiene el sistema
 
 class SystemController:
     def __init__(self, scheduler):
+        import app.config.settings as s
         self.scheduler = scheduler
         self.is_paused = False
-        self.mode = "paper"
+        self.mode = "paper" if s.PAPER_TRADING_ONLY else "live"
 
     def pause(self):
-        self.scheduler.pause_job("signal_processor")
-        self.scheduler.pause_job("scanner")
+        for job_id in ("signal_processor", "scanner", "scanner_fetch"):
+            try:
+                self.scheduler.pause_job(job_id)
+            except Exception:
+                pass
         self.is_paused = True
         logger.info("System paused")
 
     def resume(self):
-        self.scheduler.resume_job("signal_processor")
-        self.scheduler.resume_job("scanner")
+        for job_id in ("signal_processor", "scanner", "scanner_fetch"):
+            try:
+                self.scheduler.resume_job(job_id)
+            except Exception:
+                pass
         self.is_paused = False
         logger.info("System resumed")
 

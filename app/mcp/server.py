@@ -20,7 +20,7 @@ TIMEOUT = 30.0
 mcp = FastMCP(
     name="IBKR AI Trader",
     instructions=(
-        "Herramienta de trading conectada a Interactive Brokers via paper trading. "
+        "Herramienta de trading conectada a Interactive Brokers via la FastAPI local. "
         "Usa preview_order antes de place_order. "
         "El motor de riesgo bloquea ordenes que superen limites de capital o posiciones. "
         "Maximo 3 posiciones activas simultaneas. Maximo $1000 por operacion."
@@ -57,7 +57,7 @@ def get_price(symbol: str) -> dict:
     """
     Obtiene el precio actual de un simbolo de bolsa.
     Retorna market_price, bid, ask, last.
-    Simbolos permitidos: AAPL, MSFT, SPY, QQQ, TSLA, NVDA, AMZN, GOOGL, META, JPM.
+    Solo funciona para simbolos aprobados en el universo activo del sistema.
     """
     return _get(f"/price/{symbol.upper()}")
 
@@ -195,10 +195,6 @@ def propose_symbol(symbol: str, reason: str) -> dict:
     })
 
 
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-
-
 @mcp.tool()
 def candidate_analysis(symbol: str) -> dict:
     """
@@ -230,3 +226,7 @@ def get_universe_watchlist() -> list:
     Higher score = more likely to be kept in universe.
     """
     return _get("/universe/watchlist")
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

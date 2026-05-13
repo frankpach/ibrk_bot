@@ -2,7 +2,7 @@
 """Daily discovery and universe rotation using AnalysisPipeline."""
 import logging
 from datetime import datetime
-from app.config.settings import ALLOWED_SYMBOLS, MARKET_TZ
+from app.config.settings import MARKET_TZ
 from app.notifications.telegram import notify
 from app.analysis.pipeline import AnalysisPipeline, AnalysisContext
 
@@ -29,7 +29,8 @@ def run_daily_discovery(data_layer):
             logger.error(f"Scanner {scan_code} failed: {e}")
 
     # Filter: exclude already active symbols
-    active = set(ALLOWED_SYMBOLS)
+    from app.db.database import get_approved_symbols
+    active = set(get_approved_symbols())
     new_candidates = [s for s in candidates if s not in active][:20]
 
     if not new_candidates:
@@ -58,8 +59,7 @@ def run_daily_discovery(data_layer):
 
 def _rotate_universe(scored_candidates: list):
     """Rotate universe if a candidate scores higher than the weakest current member."""
-    from app.db.database import upsert_watchlist_score, get_connection
-    from app.config.settings import ALLOWED_SYMBOLS
+    from app.db.database import get_approved_symbols, get_connection
 
     # Get current watchlist scores
     conn = get_connection()
@@ -74,7 +74,8 @@ def _rotate_universe(scored_candidates: list):
         return  # Not strong enough
 
     # Find weakest in current universe (excluding protected)
-    unprotected = [(s, current_scores.get(s, 0.5)) for s in ALLOWED_SYMBOLS if s not in PROTECTED_SYMBOLS]
+    active_symbols = get_approved_symbols()
+    unprotected = [(s, current_scores.get(s, 0.5)) for s in active_symbols if s not in PROTECTED_SYMBOLS]
     if not unprotected:
         return
 
@@ -97,9 +98,3 @@ def _rotate_universe(scored_candidates: list):
         conn.commit()
         conn.close()
         approve_symbol(sym)
-
-        # Update in-memory list
-        if weakest_sym in ALLOWED_SYMBOLS:
-            ALLOWED_SYMBOLS.remove(weakest_sym)
-        if sym not in ALLOWED_SYMBOLS:
-            ALLOWED_SYMBOLS.append(sym)

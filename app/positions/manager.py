@@ -32,7 +32,7 @@ def _is_trade_open(trade_id: int) -> bool:
 
 def _get_current_price(symbol: str) -> float | None:
     try:
-        return httpx.get(f"{API_BASE}/price/{symbol}", timeout=15).json().get("market_price")
+        return httpx.get(f"{API_BASE}/price/free/{symbol}", timeout=15).json().get("market_price")
     except Exception as e:
         logger.error(f"Could not fetch price for {symbol}: {e}")
         return None

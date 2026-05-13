@@ -3,7 +3,6 @@ import sqlite3
 import json
 import logging
 from datetime import datetime
-from app.config.settings import ALLOWED_SYMBOLS
 from app.db.models import Signal, Trade, Pattern, Decision
 
 logger = logging.getLogger(__name__)
@@ -580,9 +579,18 @@ def save_symbol_proposal(symbol: str, reason: str):
 
 
 def approve_symbol(symbol: str, ib_client=None) -> None:
-    """Aprueba un simbolo propuesto para que el scanner lo incluya."""
+    """Aprueba un simbolo — inserta en symbol_config si no existe, luego lo activa."""
+    sym = symbol.upper()
     conn = get_connection()
-    conn.execute("UPDATE symbol_config SET approved=1 WHERE symbol=?", (symbol.upper(),))
+    # Insert if not already in symbol_config (handles symbols outside the seed)
+    conn.execute(
+        """INSERT OR IGNORE INTO symbol_config
+           (symbol, extra_indicators, approved, proposed_by, created_at,
+            sec_type, exchange, currency, market_key)
+           VALUES (?, '[]', 0, 'dashboard', ?, 'STK', 'SMART', 'USD', 'STK_US')""",
+        (sym, datetime.utcnow().isoformat())
+    )
+    conn.execute("UPDATE symbol_config SET approved=1 WHERE symbol=?", (sym,))
     conn.commit()
     conn.close()
     # Trigger background calibration if IB client available

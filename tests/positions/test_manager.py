@@ -91,6 +91,16 @@ def test_check_positions_price_fetch_failure(mock_get_trades, mock_get):
 
 @patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
+def test_check_positions_uses_unrestricted_price_endpoint(mock_get_trades, mock_get):
+    trade = _open_trade(symbol="AAOI")
+    mock_get_trades.return_value = [trade]
+    mock_get.return_value = MagicMock(json=lambda: {"market_price": 150.0})
+    check_positions()
+    assert "/price/free/AAOI" in mock_get.call_args.args[0]
+
+
+@patch("app.positions.manager.httpx.get")
+@patch("app.positions.manager.get_open_trades")
 def test_check_positions_sell_stop_loss(mock_get_trades, mock_get):
     trade = _open_trade(action="SELL", entry=100.0, sl=102.0, tp=94.0)
     mock_get_trades.return_value = [trade]
