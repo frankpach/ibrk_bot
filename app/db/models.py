@@ -130,6 +130,9 @@ class SymbolParameter:
     version: int = 1
     previous_json: Optional[str] = None
     updated_at: str = ""
+    backtest_calibrated: int = 0
+    backtest_calibrated_at: Optional[str] = None
+    backtest_profit_factor: Optional[float] = None
 
 
 @dataclass

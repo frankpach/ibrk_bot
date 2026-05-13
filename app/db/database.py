@@ -758,6 +758,43 @@ def init_analysis_tables():
             trade_history_score REAL DEFAULT 0.5, watchlist_score REAL DEFAULT 0.5,
             last_updated TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS position_snapshots (
+            trade_id INTEGER PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            current_price REAL,
+            pnl_usd REAL,
+            pnl_pct REAL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS account_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            net_liquidation REAL,
+            buying_power REAL,
+            daily_pnl_usd REAL,
+            daily_pnl_pct REAL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS news_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            headline TEXT NOT NULL,
+            provider TEXT,
+            sentiment TEXT,
+            article_id TEXT,
+            published_at TEXT,
+            fetched_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS scanner_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_type TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            name TEXT,
+            change_pct REAL,
+            volume_ratio REAL,
+            extra_json TEXT DEFAULT '{}',
+            fetched_at TEXT NOT NULL
+        );
     """)
     conn.commit()
     _add_column_if_missing(conn, "trades", "feature_snapshot_id", "INTEGER")
@@ -769,6 +806,8 @@ def init_analysis_tables():
     # MTE-010: backtest calibration columns
     _add_column_if_missing(conn, "symbol_parameters", "backtest_calibrated", "INTEGER DEFAULT 0")
     _add_column_if_missing(conn, "symbol_parameters", "backtest_calibrated_at", "TEXT")
+    # LD-001: backtest_profit_factor column
+    _add_column_if_missing(conn, "symbol_parameters", "backtest_profit_factor", "REAL")
     conn.commit()
     conn.close()
 
@@ -880,6 +919,9 @@ def get_or_create_symbol_parameters(symbol: str):
             portfolio_fit_mult=row["portfolio_fit_mult"], sentiment_mult=row["sentiment_mult"],
             trade_count=row["trade_count"], version=row["version"],
             previous_json=row["previous_json"], updated_at=row["updated_at"],
+            backtest_calibrated=row["backtest_calibrated"] if "backtest_calibrated" in row.keys() else 0,
+            backtest_calibrated_at=row["backtest_calibrated_at"] if "backtest_calibrated_at" in row.keys() else None,
+            backtest_profit_factor=row["backtest_profit_factor"] if "backtest_profit_factor" in row.keys() else None,
         )
     # Create default
     conn = get_connection()
@@ -891,7 +933,9 @@ def get_or_create_symbol_parameters(symbol: str):
     )
     conn.commit()
     conn.close()
-    return SymbolParameter(symbol=symbol.upper(), updated_at=now)
+    return SymbolParameter(symbol=symbol.upper(), updated_at=now,
+                           backtest_calibrated=0, backtest_calibrated_at=None,
+                           backtest_profit_factor=None)
 
 
 def update_symbol_parameters(symbol: str, **kwargs):
@@ -978,3 +1022,119 @@ def get_market_permissions_age_hours() -> float | None:
     last = datetime.fromisoformat(row["checked_at"])
     now = datetime.utcnow()
     return (now - last).total_seconds() / 3600
+
+
+# --- LD-001: Live Dashboard CRUD ---
+
+def upsert_position_snapshot(trade_id: int, symbol: str, current_price: float,
+                              pnl_usd: float, pnl_pct: float) -> None:
+    conn = get_connection()
+    conn.execute(
+        """INSERT OR REPLACE INTO position_snapshots
+           (trade_id, symbol, current_price, pnl_usd, pnl_pct, updated_at)
+           VALUES (?,?,?,?,?,?)""",
+        (trade_id, symbol, current_price, pnl_usd, pnl_pct, datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_position_snapshots() -> dict:
+    """Return {trade_id: {current_price, pnl_usd, pnl_pct, updated_at}}."""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM position_snapshots").fetchall()
+    conn.close()
+    return {r["trade_id"]: dict(r) for r in rows}
+
+
+def upsert_account_snapshot(date: str, net_liquidation: float, buying_power: float,
+                             daily_pnl_usd: float, daily_pnl_pct: float) -> None:
+    conn = get_connection()
+    conn.execute(
+        """INSERT OR REPLACE INTO account_snapshots
+           (date, net_liquidation, buying_power, daily_pnl_usd, daily_pnl_pct, created_at)
+           VALUES (?,?,?,?,?,?)""",
+        (date, net_liquidation, buying_power, daily_pnl_usd, daily_pnl_pct,
+         datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_account_history(days: int = 30) -> list:
+    """Return last N days of account snapshots, oldest first."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM account_snapshots ORDER BY date DESC LIMIT ?", (days,)
+    ).fetchall()
+    conn.close()
+    return list(reversed([dict(r) for r in rows]))
+
+
+def insert_news_cache(symbol: str, headline: str, provider: str, sentiment: str,
+                      article_id: str, published_at: str) -> None:
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO news_cache
+           (symbol, headline, provider, sentiment, article_id, published_at, fetched_at)
+           VALUES (?,?,?,?,?,?,?)""",
+        (symbol, headline, provider, sentiment, article_id, published_at,
+         datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_news_cache(symbols: list = None, limit: int = 20) -> list:
+    """Return cached news, optionally filtered by symbol list."""
+    conn = get_connection()
+    if symbols:
+        placeholders = ",".join("?" * len(symbols))
+        rows = conn.execute(
+            f"SELECT * FROM news_cache WHERE symbol IN ({placeholders}) "
+            f"ORDER BY fetched_at DESC LIMIT ?",
+            list(symbols) + [limit]
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM news_cache ORDER BY fetched_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def clear_news_cache_older_than(hours: int = 24) -> None:
+    from datetime import timedelta
+    cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+    conn = get_connection()
+    conn.execute("DELETE FROM news_cache WHERE fetched_at < ?", (cutoff,))
+    conn.commit()
+    conn.close()
+
+
+def upsert_scanner_results(scan_type: str, results: list) -> None:
+    """Replace all results for a scan_type with fresh data."""
+    conn = get_connection()
+    conn.execute("DELETE FROM scanner_results WHERE scan_type=?", (scan_type,))
+    now = datetime.utcnow().isoformat()
+    for r in results:
+        conn.execute(
+            """INSERT INTO scanner_results
+               (scan_type, symbol, name, change_pct, volume_ratio, extra_json, fetched_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (scan_type, r.get("symbol"), r.get("name"), r.get("change_pct"),
+             r.get("volume_ratio"), r.get("extra_json", "{}"), now)
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_scanner_results(scan_type: str) -> list:
+    """Return scanner results for a given scan_type."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM scanner_results WHERE scan_type=? ORDER BY rowid",
+        (scan_type,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

@@ -9,6 +9,10 @@ from app.db.database import (
     insert_decision, get_approved_symbols, get_approved_symbols_with_meta,
     save_symbol_proposal, get_pending_proposals, approve_symbol,
     insert_feature_snapshot, get_feature_snapshot_by_id, get_closed_trades_with_snapshots,
+    upsert_position_snapshot, get_position_snapshots,
+    upsert_account_snapshot, get_account_history,
+    insert_news_cache, get_news_cache,
+    upsert_scanner_results, get_scanner_results,
 )
 from app.db.models import Signal, Trade, Pattern, Decision
 
@@ -294,3 +298,97 @@ def test_get_patterns_for_symbol_no_limit():
     result = get_patterns_for_symbol("QQQ")
     assert len(result) == 3
     assert all(p.symbol == "QQQ" for p in result)
+
+
+# --- LD-001: Live Dashboard table tests ---
+
+def test_upsert_and_get_position_snapshot():
+    """Test insert and update (upsert) of position_snapshots."""
+    upsert_position_snapshot(9001, "AAPL", 175.0, 50.0, 0.025)
+    snapshots = get_position_snapshots()
+    assert 9001 in snapshots
+    assert snapshots[9001]["symbol"] == "AAPL"
+    assert snapshots[9001]["current_price"] == pytest.approx(175.0)
+
+    # Update — same trade_id should replace, not duplicate
+    upsert_position_snapshot(9001, "AAPL", 180.0, 100.0, 0.05)
+    snapshots = get_position_snapshots()
+    # Still only one entry for trade_id 9001
+    assert snapshots[9001]["current_price"] == pytest.approx(180.0)
+    assert snapshots[9001]["pnl_usd"] == pytest.approx(100.0)
+
+
+def test_upsert_account_snapshot_unique_date():
+    """Test that same date updates, not inserts twice."""
+    upsert_account_snapshot("2026-05-10", 100000.0, 50000.0, 500.0, 0.005)
+    upsert_account_snapshot("2026-05-10", 101000.0, 51000.0, 600.0, 0.006)
+
+    history = get_account_history(days=30)
+    dates = [r["date"] for r in history]
+    # date must appear exactly once (UNIQUE constraint + INSERT OR REPLACE)
+    assert dates.count("2026-05-10") == 1
+    # The second upsert should have won
+    entry = next(r for r in history if r["date"] == "2026-05-10")
+    assert entry["net_liquidation"] == pytest.approx(101000.0)
+
+
+def test_get_account_history_oldest_first():
+    """Insert 3 distinct dates, verify oldest comes first."""
+    upsert_account_snapshot("2026-05-01", 90000.0, 40000.0, 100.0, 0.001)
+    upsert_account_snapshot("2026-05-02", 91000.0, 41000.0, 200.0, 0.002)
+    upsert_account_snapshot("2026-05-03", 92000.0, 42000.0, 300.0, 0.003)
+
+    history = get_account_history(days=30)
+    # Filter to just our 3 test dates
+    test_dates = [r["date"] for r in history if r["date"] in ("2026-05-01", "2026-05-02", "2026-05-03")]
+    assert test_dates == ["2026-05-01", "2026-05-02", "2026-05-03"]
+
+
+def test_news_cache_insert_and_filter():
+    """Insert news for AAPL and NVDA, filter by AAPL only."""
+    insert_news_cache("AAPL", "Apple beats earnings", "Reuters", "positive",
+                      "art_aapl_001", "2026-05-13T10:00:00")
+    insert_news_cache("NVDA", "Nvidia launches new GPU", "Bloomberg", "positive",
+                      "art_nvda_001", "2026-05-13T10:05:00")
+
+    aapl_news = get_news_cache(symbols=["AAPL"], limit=10)
+    assert len(aapl_news) >= 1
+    assert all(n["symbol"] == "AAPL" for n in aapl_news)
+
+    all_news = get_news_cache(limit=50)
+    symbols_in_result = {n["symbol"] for n in all_news}
+    assert "AAPL" in symbols_in_result
+    assert "NVDA" in symbols_in_result
+
+
+def test_scanner_results_upsert_replaces():
+    """Insert gainers, re-insert gainers, verify old data is gone."""
+    first_batch = [
+        {"symbol": "AAA", "name": "Alpha Corp", "change_pct": 5.0, "volume_ratio": 2.0},
+        {"symbol": "BBB", "name": "Beta Inc",   "change_pct": 4.5, "volume_ratio": 1.8},
+    ]
+    upsert_scanner_results("gainers", first_batch)
+
+    # Re-insert with different data
+    second_batch = [
+        {"symbol": "CCC", "name": "Gamma Ltd", "change_pct": 6.0, "volume_ratio": 3.0},
+    ]
+    upsert_scanner_results("gainers", second_batch)
+
+    results = get_scanner_results("gainers")
+    symbols = [r["symbol"] for r in results]
+    # Old symbols must be gone
+    assert "AAA" not in symbols
+    assert "BBB" not in symbols
+    # New symbol must be present
+    assert "CCC" in symbols
+    assert len(results) == 1
+
+
+def test_symbol_parameter_has_new_fields():
+    """SymbolParameter dataclass has the 3 new backtest fields with correct defaults."""
+    from app.db.models import SymbolParameter
+    sp = SymbolParameter(symbol="AAPL", updated_at="2026-01-01")
+    assert sp.backtest_calibrated == 0
+    assert sp.backtest_calibrated_at is None
+    assert sp.backtest_profit_factor is None
