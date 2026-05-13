@@ -183,30 +183,22 @@ def run_backtest(
     Descarga datos historicos de IB y corre el backtest completo.
     period_days: cuantos dias hacia atras analizar
     """
-    from ib_insync import Stock
-
     try:
-        contract = Stock(symbol, "SMART", "USD")
-        bars = ib_client.ib.reqHistoricalData(
-            contract,
-            endDateTime="",
-            durationStr=f"{period_days} D",
-            barSizeSetting="1 day",
-            whatToShow="TRADES",
-            useRTH=True,
-            formatDate=1,
-        )
+        from app.analysis.data import IBDataLayer
 
-        if not bars or len(bars) < 30:
-            logger.warning(f"Not enough data for {symbol}: {len(bars) if bars else 0} bars")
+        data_layer = IBDataLayer(ib_client)
+        df = data_layer.get_ohlcv(symbol, f"{period_days} D", "1 day", "backtest")
+
+        if df is None or len(df) < 30:
+            logger.warning(f"Not enough data for {symbol}: {len(df) if df is not None else 0} bars")
             result = calculate_metrics([], capital)
             result.symbol = symbol
             result.period_days = period_days
             return result
 
-        df = pd.DataFrame([{"close": b.close, "volume": b.volume} for b in bars])
-        df = apply_signals_to_df(df)
-        trades = simulate_trades(df, stop_loss_pct, take_profit_pct, capital)
+        bars_df = pd.DataFrame(df[["close", "volume"]].copy())
+        bars_df = apply_signals_to_df(bars_df)
+        trades = simulate_trades(bars_df, stop_loss_pct, take_profit_pct, capital)
         result = calculate_metrics(trades, capital)
         result.symbol = symbol
         result.period_days = period_days

@@ -370,7 +370,8 @@ async def cmd_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if alert is None:
         await update.message.reply_text(f"Formato invalido. Usa: /alerta {symbol} 5%")
         return
-    from app.db.database import insert_alert
+    from app.db.database import init_alerts_table, insert_alert
+    init_alerts_table()
     alert_id = insert_alert(alert.symbol, alert.threshold_pct)
     await update.message.reply_text(
         f"Alerta creada (ID:{alert_id})\n"
@@ -380,7 +381,8 @@ async def cmd_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_only_owner
 async def cmd_alertas(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    from app.db.database import get_active_alerts
+    from app.db.database import get_active_alerts, init_alerts_table
+    init_alerts_table()
     alerts = get_active_alerts()
     if not alerts:
         await update.message.reply_text("Sin alertas activas.")
@@ -396,7 +398,8 @@ async def cmd_eliminar_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     try:
         alert_id = int(ctx.args[0])
-        from app.db.database import delete_alert
+        from app.db.database import delete_alert, init_alerts_table
+        init_alerts_table()
         delete_alert(alert_id)
         await update.message.reply_text(f"Alerta {alert_id} eliminada.")
     except ValueError:
