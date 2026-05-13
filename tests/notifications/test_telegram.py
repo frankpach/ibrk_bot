@@ -23,10 +23,13 @@ def test_notify_success():
         mock_get_bot.return_value = mock_bot
         mock_policy = MagicMock()
         mock_policy.should_notify.return_value = True
+        mock_throttler = MagicMock()
+        mock_throttler.notify_if_changed.return_value = True
         with patch("app.notifications.policy.get_policy", return_value=mock_policy):
-            with patch("asyncio.run") as mock_asyncio:
-                assert notify("hello", "circuit_breaker") is True
-                mock_asyncio.assert_called_once()
+            with patch("app.notifications.throttler.get_throttler", return_value=mock_throttler):
+                with patch("asyncio.run") as mock_asyncio:
+                    assert notify("hello", "circuit_breaker") is True
+                    mock_asyncio.assert_called_once()
 
 
 def test_notify_failure():
@@ -35,9 +38,12 @@ def test_notify_failure():
         mock_get_bot.return_value = mock_bot
         mock_policy = MagicMock()
         mock_policy.should_notify.return_value = True
+        mock_throttler = MagicMock()
+        mock_throttler.notify_if_changed.return_value = True
         with patch("app.notifications.policy.get_policy", return_value=mock_policy):
-            with patch("asyncio.run", side_effect=Exception("fail")):
-                assert notify("hello") is False
+            with patch("app.notifications.throttler.get_throttler", return_value=mock_throttler):
+                with patch("asyncio.run", side_effect=Exception("fail")):
+                    assert notify("hello") is False
 
 
 def test_request_approval_not_configured():

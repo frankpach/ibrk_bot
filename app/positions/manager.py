@@ -1,5 +1,6 @@
 # app/positions/manager.py
 import logging
+import threading
 import httpx
 from app.config.settings import MIN_PROFIT_PCT_MEDIUM
 from app.db.database import get_open_trades, close_trade, update_trade_status
@@ -15,6 +16,18 @@ from app.config.settings import API_BASE  # noqa: F401
 
 trailing_mgr = TrailingStopManager()
 partial_mgr = PartialExitManager()
+_positions_check_lock = threading.Lock()
+
+
+def _is_trade_open(trade_id: int) -> bool:
+    """Verifica si un trade sigue OPEN en la base de datos."""
+    from app.db.database import get_connection
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
+        return row is not None and row["status"] == "OPEN"
+    finally:
+        conn.close()
 
 
 def _get_current_price(symbol: str) -> float | None:
@@ -34,12 +47,24 @@ def _close_position(
     emoji = "✅" if pnl_usd >= 0 else "❌"
     logger.info(f"Closing trade {trade.id} {trade.symbol} reason={exit_reason} qty={qty} pnl={pnl_pct:.2%} ${pnl_usd:.2f}")
 
+    # Idempotencia: verificar que el trade siga abierto antes de actuar
+    if not _is_trade_open(trade.id):
+        logger.warning(f"Trade {trade.id} {trade.symbol} already closed or missing — skipping duplicate close")
+        return False
+
     # 1) Enviar orden de cierre REAL a IBKR
     close_action = "SELL" if trade.action == "BUY" else "BUY"
     try:
         from app.ibkr.client import get_client
         from app.ibkr.dedup import get_deduplicator, PreflightChecker
         ib = get_client()
+        dedup = get_deduplicator()
+
+        # Deduplicación de órdenes de cierre por trade + razón
+        dedup_action = f"{close_action}_{trade.id}_{exit_reason}"
+        if dedup.is_duplicate(trade.symbol, dedup_action):
+            logger.warning(f"Duplicate close order blocked for {trade.symbol} {dedup_action}")
+            return False
 
         # Pre-flight check
         preflight = PreflightChecker(ib).check(
@@ -55,6 +80,7 @@ def _close_position(
             quantity=qty,
             order_type="MKT",
         )
+        dedup.record(trade.symbol, dedup_action)
         logger.info(f"IBKR close order sent: {close_action} {qty} {trade.symbol}")
 
         # Confirm fill price
@@ -115,64 +141,65 @@ def _close_position(
 
 
 def check_positions():
-    trades = get_open_trades()
-    if not trades:
-        return
+    with _positions_check_lock:
+        trades = get_open_trades()
+        if not trades:
+            return
 
-    for trade in trades:
-        price = _get_current_price(trade.symbol)
-        if price is None:
-            continue
-
-        # Calculate P&L
-        entry = trade.entry_price
-        if trade.action == "BUY":
-            pnl_pct = (price - entry) / entry
-        else:
-            pnl_pct = (entry - price) / entry
-        qty = trade.remaining_quantity or trade.quantity
-        pnl_usd = pnl_pct * entry * qty
-
-        # 1) Check partial exit first (only if profitable)
-        partial = partial_mgr.check_exit(trade, price)
-        if partial.should_exit:
-            _close_position(
-                trade, partial.exit_reason, price, pnl_pct,
-                pnl_pct * entry * partial.exit_quantity,
-                quantity=partial.exit_quantity,
-            )
-            if partial.close_all:
+        for trade in trades:
+            price = _get_current_price(trade.symbol)
+            if price is None:
                 continue
-            # After partial, recalculate P&L for remaining
+
+            # Calculate P&L
+            entry = trade.entry_price
+            if trade.action == "BUY":
+                pnl_pct = (price - entry) / entry
+            else:
+                pnl_pct = (entry - price) / entry
             qty = trade.remaining_quantity or trade.quantity
             pnl_usd = pnl_pct * entry * qty
 
-        # 2) Check trailing stop
-        sl_result = trailing_mgr.update_stop_levels(trade, price)
-        if sl_result.new_stop_price is not None:
-            trade.stop_loss_price = sl_result.new_stop_price
-            # Persist to DB
-            update_trade_status(
-                trade_id=trade.id,
-                trade_status=trade.trade_status or "OPEN",
-                stop_loss_price=trade.stop_loss_price,
-            )
-            logger.info(f"Trailing stop updated for {trade.symbol}: ${trade.stop_loss_price:.2f} ({sl_result.reason})")
+            # 1) Check partial exit first (only if profitable)
+            partial = partial_mgr.check_exit(trade, price)
+            if partial.should_exit:
+                _close_position(
+                    trade, partial.exit_reason, price, pnl_pct,
+                    pnl_pct * entry * partial.exit_quantity,
+                    quantity=partial.exit_quantity,
+                )
+                if partial.close_all:
+                    continue
+                # After partial, recalculate P&L for remaining
+                qty = trade.remaining_quantity or trade.quantity
+                pnl_usd = pnl_pct * entry * qty
 
-        # 3) Check exit conditions
-        exit_reason = None
-        if trade.action == "BUY":
-            if price <= trade.stop_loss_price:
-                exit_reason = "STOP_LOSS"
-            elif price >= trade.take_profit_price:
-                exit_reason = "TAKE_PROFIT"
-            elif trade.signal_strength == "MEDIUM" and pnl_pct >= MIN_PROFIT_PCT_MEDIUM:
-                exit_reason = "MIN_PROFIT_MEDIUM"
-        elif trade.action == "SELL":
-            if price >= trade.stop_loss_price:
-                exit_reason = "STOP_LOSS"
-            elif price <= trade.take_profit_price:
-                exit_reason = "TAKE_PROFIT"
+            # 2) Check trailing stop
+            sl_result = trailing_mgr.update_stop_levels(trade, price)
+            if sl_result.new_stop_price is not None:
+                trade.stop_loss_price = sl_result.new_stop_price
+                # Persist to DB
+                update_trade_status(
+                    trade_id=trade.id,
+                    trade_status=trade.trade_status or "OPEN",
+                    stop_loss_price=trade.stop_loss_price,
+                )
+                logger.info(f"Trailing stop updated for {trade.symbol}: ${trade.stop_loss_price:.2f} ({sl_result.reason})")
 
-        if exit_reason:
-            _close_position(trade, exit_reason, price, pnl_pct, pnl_usd)
+            # 3) Check exit conditions
+            exit_reason = None
+            if trade.action == "BUY":
+                if price <= trade.stop_loss_price:
+                    exit_reason = "STOP_LOSS"
+                elif price >= trade.take_profit_price:
+                    exit_reason = "TAKE_PROFIT"
+                elif trade.signal_strength == "MEDIUM" and pnl_pct >= MIN_PROFIT_PCT_MEDIUM:
+                    exit_reason = "MIN_PROFIT_MEDIUM"
+            elif trade.action == "SELL":
+                if price >= trade.stop_loss_price:
+                    exit_reason = "STOP_LOSS"
+                elif price <= trade.take_profit_price:
+                    exit_reason = "TAKE_PROFIT"
+
+            if exit_reason:
+                _close_position(trade, exit_reason, price, pnl_pct, pnl_usd)

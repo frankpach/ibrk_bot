@@ -51,15 +51,17 @@ def test_extract_features_from_object():
     f.rs_vs_spy_30d = 0.03
     f.day_of_week = 2
     f.hour = 14
+    f.rsi_1h = 55.0
+    f.volume_ratio_1h = 1.3
     result = sf._extract_features(f)
-    assert result == [30, 1.5, 2.5, 1.2, 0.6, 0.03, 2, 14]
+    assert result == [30, 1.5, 2.5, 1.2, 0.6, 0.03, 2, 14, 55.0, 1.3]
 
 
 def test_extract_features_defaults():
     sf = SignalFilter(model_path="/nonexistent")
     f = MagicMock(spec=[])  # Missing attributes should use defaults
     result = sf._extract_features(f)
-    assert result == [50, 0, 2.0, 1.0, 0.5, 0, 0, 10]
+    assert result == [50, 0, 2.0, 1.0, 0.5, 0, 0, 10, 50, 1.0]
 
 
 # ---------- predict / should_ignore ----------

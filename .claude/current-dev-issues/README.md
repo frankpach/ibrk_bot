@@ -1,8 +1,79 @@
-# notification-system + risk-engine-v2 — Development Issues
+# mtf-learning-engine — Development Issues
 
-**Modules**: notification-system, risk-engine-v2
-**Started**: 2026-05-12
-**Status**: ✅ All issues complete
+**Module**: mtf-learning-engine
+**Started**: 2026-05-13
+**Status**: Phase 5 — Execution ready
+**PRD**: docs/dev/artifacts/mtf-learning-engine/08-prd.md
+
+---
+
+## Active Issues — Iteración 1 (deadline: 2026-05-20)
+
+| Issue | Título | Effort | Bloqueado por | Estado |
+|-------|--------|--------|---------------|--------|
+| MTE-001 | Fix _dim_volatility() — invertir escala ATR | S | — | pending |
+| MTE-002 | Fix _dim_price_change() — dirección sin abs() | S | — | pending |
+| MTE-003 | LMT Limit Price en _execute_order() | XS | — | pending |
+| MTE-004 | Telegram /notificaciones + /silencio + Digest Scheduler | S | — | pending |
+| MTE-005 | Fix SignalFilter.retrain() + Migración DB | M | — | pending |
+| MTE-006 | Activar df_hourly en compute_features() | S | MTE-005 | pending |
+| MTE-007 | Weekly Trend Filter + Fix Multi-Market Preprocessor | M | MTE-006 | pending |
+| MTE-008 | Learning Cycle Coordinator — app/ml/cycle.py | M | MTE-005, MTE-006 | pending |
+
+## Active Issues — Iteración 2
+
+| Issue | Título | Effort | Bloqueado por | Estado |
+|-------|--------|--------|---------------|--------|
+| MTE-011 | DB Helpers: get_closed_trades_by_symbol() | XS | MTE-005 | pending |
+| MTE-009 | Postmortem con Contexto Estadístico | S | MTE-008, MTE-011 | pending |
+| MTE-010 | Backtest Calibration — on_symbol_approved() | M | MTE-008 | pending |
+
+## Dependency Graph
+
+```
+Sin dependencias (Grupo A — paralelos entre sí):
+  MTE-001  Fix volatility scorer
+  MTE-002  Fix price_change scorer
+  MTE-003  LMT limit price
+  MTE-004  Telegram commands + digest
+  MTE-005  Retrain fix + DB migration  ◄── CRÍTICO
+
+Grupo B — después de MTE-005:
+  MTE-006  Activar hourly features
+  MTE-011  DB helpers
+
+Grupo C — después de MTE-005 + MTE-006:
+  MTE-007  Weekly trend filter + multi-market
+  MTE-008  Learning cycle coordinator
+
+Grupo D — después de MTE-008:
+  MTE-009  Postmortem stats (+ MTE-011)
+  MTE-010  Backtest calibration
+```
+
+## Orden de ejecución recomendado
+
+```
+1. MTE-001  mínimo riesgo, solo scorer.py
+2. MTE-002  mínimo riesgo, solo scorer.py
+3. MTE-003  XS, solo loop.py
+4. MTE-004  S, telegram + run.py scheduler
+5. MTE-005  M, DB migration + retrain fix (CRÍTICO)
+6. MTE-006  S, activar hourly en indicators.py
+7. MTE-007  M, weekly + multi-market preprocessor
+8. MTE-008  M, app/ml/cycle.py (nuevo)
+--- Iteración 2 ---
+9. MTE-011  XS, DB helpers
+10. MTE-009  S, app/ml/postmortem_stats.py (nuevo)
+11. MTE-010  M, app/ml/calibration.py (nuevo)
+```
+
+---
+
+## Issues de módulos anteriores (done/)
+
+| Issue | Módulo | Estado |
+|-------|--------|--------|
 
 ---
 

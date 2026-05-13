@@ -163,6 +163,7 @@ def test_close_position_preflight_fail(MockPreflight, mock_get_client, mock_upda
     assert result is False
 
 
+@patch("app.positions.manager._is_trade_open", return_value=True)
 @patch("app.positions.manager.get_policy")
 @patch("app.positions.manager.notify")
 @patch("app.positions.manager.update_trade_status")
@@ -171,7 +172,7 @@ def test_close_position_preflight_fail(MockPreflight, mock_get_client, mock_upda
 @patch("app.positions.manager.get_fill_price_fallback", return_value=105.0)
 @patch("app.ibkr.client.get_client")
 @patch("app.ibkr.dedup.PreflightChecker")
-def test_close_position_full_with_postmortem_error(MockPreflight, mock_get_client, mock_fill, mock_postmortem, mock_close_trade, mock_update, mock_notify, mock_get_policy):
+def test_close_position_full_with_postmortem_error(MockPreflight, mock_get_client, mock_fill, mock_postmortem, mock_close_trade, mock_update, mock_notify, mock_get_policy, mock_is_open):
     from app.positions.manager import _close_position
     trade = _open_trade()
     mock_preflight = MagicMock()
@@ -189,12 +190,13 @@ def test_close_position_full_with_postmortem_error(MockPreflight, mock_get_clien
     mock_postmortem.assert_called_once()
 
 
+@patch("app.positions.manager._is_trade_open", return_value=True)
 @patch("app.positions.manager.get_policy")
 @patch("app.positions.manager.notify")
 @patch("app.positions.manager.update_trade_status")
 @patch("app.ibkr.client.get_client")
 @patch("app.ibkr.dedup.PreflightChecker")
-def test_close_position_partial_exit(MockPreflight, mock_get_client, mock_update, mock_notify, mock_get_policy):
+def test_close_position_partial_exit(MockPreflight, mock_get_client, mock_update, mock_notify, mock_get_policy, mock_is_open):
     from app.positions.manager import _close_position
     trade = _open_trade(qty=10, remaining=10)
     mock_preflight = MagicMock()

@@ -34,6 +34,12 @@ def notify(message: str, message_type: str = "generic") -> bool:
         logger.debug(f"Notification suppressed by policy: {message_type}")
         return False
 
+    from app.notifications.throttler import get_throttler
+    throttler = get_throttler()
+    if not throttler.notify_if_changed(message_type, message):
+        logger.debug(f"Notification throttled by dedup: {message_type}")
+        return False
+
     bot = _get_bot()
     if not bot:
         return False
