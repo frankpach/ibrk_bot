@@ -306,17 +306,39 @@ class IBDataLayer:
         if cached is not None:
             return cached
         try:
-            results = self._client.ib.reqScannerData(None)
-            if isinstance(results, list):
-                # MockIBClient returns list of strings; real IB returns ScanData objects
-                if results and isinstance(results[0], str):
-                    symbols = results[:max_results]
-                else:
-                    symbols = [getattr(r, "contractDetails", {}).contract.symbol
-                               for r in results[:max_results]
-                               if hasattr(r, "contractDetails")]
-                self._set_cached(key, symbols, "scanner")
-                return symbols
+            from ib_insync import ScannerSubscription
+            sub = ScannerSubscription(
+                instrument="STK",
+                locationCode="STK.US.MAJOR",
+                scanCode=scan_code,
+                numberOfRows=max_results,
+            )
+            ib_loop = getattr(self._client, "_loop", None)
+            if isinstance(ib_loop, asyncio.AbstractEventLoop) and ib_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self._client.ib.reqScannerDataAsync(sub),
+                    ib_loop,
+                )
+                scan_data = future.result(timeout=20) or []
+            else:
+                scan_data = self._client.ib.reqScannerData(sub) or []
+
+            symbols = []
+            for item in scan_data[:max_results]:
+                try:
+                    sym = getattr(getattr(item, "contractDetails", None), "contract", None)
+                    if sym and hasattr(sym, "symbol"):
+                        symbols.append(sym.symbol)
+                    elif isinstance(item, str):
+                        symbols.append(item)
+                except Exception:
+                    pass
+
+            if isinstance(scan_data, list) and scan_data and isinstance(scan_data[0], str):
+                symbols = list(scan_data[:max_results])
+
+            self._set_cached(key, symbols, "scanner")
+            return symbols
         except Exception as e:
             logger.error(f"IBDataLayer.run_scanner({scan_code}): {e}")
         return []
