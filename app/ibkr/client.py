@@ -1,7 +1,10 @@
 import asyncio
+import logging
 import threading
 
 from ib_insync import IB, Stock
+
+logger = logging.getLogger(__name__)
 
 from app.config.settings import (
     IB_HOST,
