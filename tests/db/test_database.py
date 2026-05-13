@@ -5,7 +5,7 @@ from app.db.database import (
     get_connection, init_db,
     insert_signal, get_pending_signals, mark_signal_processed,
     insert_trade, get_open_trades, close_trade, update_trade_status, get_trades_by_status,
-    insert_pattern, get_patterns_for_symbol,
+    insert_pattern, get_patterns_for_symbol, get_closed_trades_by_symbol,
     insert_decision, get_approved_symbols, get_approved_symbols_with_meta,
     save_symbol_proposal, get_pending_proposals, approve_symbol,
     insert_feature_snapshot, get_feature_snapshot_by_id, get_closed_trades_with_snapshots,
@@ -167,3 +167,130 @@ def test_trades_table_has_feature_snapshot_id_column():
     conn.close()
     col_names = [row["name"] for row in info]
     assert "feature_snapshot_id" in col_names
+
+
+def test_get_closed_trades_by_symbol_empty():
+    """When no closed trades exist for symbol, returns empty list."""
+    result = get_closed_trades_by_symbol("NFLX", limit=10)
+    assert result == []
+
+
+def test_get_closed_trades_by_symbol_returns_trades():
+    """Insert a closed trade for a symbol, verify it's returned."""
+    # Create and insert a closed trade
+    trade = Trade(
+        id=None, symbol="GOOG", action="BUY", quantity=5,
+        entry_price=150.0, stop_loss_price=147.0,
+        take_profit_price=156.0, stop_loss_pct=0.02,
+        take_profit_pct=0.04, signal_strength="STRONG",
+        llm_justification="test", status="OPEN",
+        exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
+        opened_at=datetime.utcnow(), closed_at=None, order_id="goog1",
+    )
+    tid = insert_trade(trade)
+    close_trade(tid, 155.0, "TAKE_PROFIT", 25.0, 0.033, exit_fill_price=155.0)
+
+    # Query by symbol
+    result = get_closed_trades_by_symbol("GOOG", limit=10)
+    assert len(result) == 1
+    assert result[0].symbol == "GOOG"
+    assert result[0].status == "CLOSED"
+    assert result[0].exit_price == pytest.approx(155.0)
+
+
+def test_get_closed_trades_by_symbol_respects_limit():
+    """Insert multiple closed trades, verify limit is respected."""
+    # Insert 5 closed trades for the same symbol
+    for i in range(5):
+        trade = Trade(
+            id=None, symbol="AMZN", action="BUY", quantity=2,
+            entry_price=200.0 + i, stop_loss_price=198.0 + i,
+            take_profit_price=208.0 + i, stop_loss_pct=0.01,
+            take_profit_pct=0.04, signal_strength="MEDIUM",
+            llm_justification="test", status="OPEN",
+            exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
+            opened_at=datetime.utcnow(), closed_at=None, order_id=f"amzn{i}",
+        )
+        tid = insert_trade(trade)
+        close_trade(tid, 206.0 + i, "TAKE_PROFIT", 12.0, 0.03, exit_fill_price=206.0 + i)
+
+    # Get with limit=3
+    result = get_closed_trades_by_symbol("AMZN", limit=3)
+    assert len(result) == 3
+    assert all(t.symbol == "AMZN" for t in result)
+
+
+def test_get_closed_trades_by_symbol_case_insensitive():
+    """Symbol lookup should be case-insensitive."""
+    trade = Trade(
+        id=None, symbol="JPM", action="SELL", quantity=10,
+        entry_price=180.0, stop_loss_price=182.0,
+        take_profit_price=174.0, stop_loss_pct=0.01,
+        take_profit_pct=0.03, signal_strength="WEAK",
+        llm_justification="test", status="OPEN",
+        exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
+        opened_at=datetime.utcnow(), closed_at=None, order_id="jpm1",
+    )
+    tid = insert_trade(trade)
+    close_trade(tid, 175.0, "TAKE_PROFIT", 50.0, 0.028, exit_fill_price=175.0)
+
+    # Query with lowercase
+    result = get_closed_trades_by_symbol("jpm", limit=10)
+    assert len(result) == 1
+    assert result[0].symbol == "JPM"
+
+
+def test_get_patterns_for_symbol_empty():
+    """When no patterns exist for symbol, returns empty list."""
+    result = get_patterns_for_symbol("UNKNOWN_SYM", limit=3)
+    assert result == []
+
+
+def test_get_patterns_for_symbol_returns_patterns():
+    """Insert a pattern for a symbol, verify it's returned."""
+    pat = Pattern(
+        id=None, symbol="TSLA", pattern_text="bullish divergence",
+        win_count=3, loss_count=1,
+        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+    )
+    pid = insert_pattern(pat)
+
+    # Query by symbol with limit
+    result = get_patterns_for_symbol("TSLA", limit=3)
+    assert len(result) == 1
+    assert result[0].symbol == "TSLA"
+    assert result[0].pattern_text == "bullish divergence"
+
+
+def test_get_patterns_for_symbol_respects_limit():
+    """Insert multiple patterns, verify limit is respected."""
+    # Insert 5 patterns for the same symbol
+    for i in range(5):
+        pat = Pattern(
+            id=None, symbol="SPY", pattern_text=f"pattern_{i}",
+            win_count=i, loss_count=i // 2,
+            created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        )
+        insert_pattern(pat)
+
+    # Get with limit=2
+    result = get_patterns_for_symbol("SPY", limit=2)
+    assert len(result) == 2
+    assert all(p.symbol == "SPY" for p in result)
+
+
+def test_get_patterns_for_symbol_no_limit():
+    """When no limit is specified, returns all patterns."""
+    # Insert 3 patterns for a fresh symbol
+    for i in range(3):
+        pat = Pattern(
+            id=None, symbol="QQQ", pattern_text=f"pattern_{i}",
+            win_count=i, loss_count=0,
+            created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        )
+        insert_pattern(pat)
+
+    # Get without limit
+    result = get_patterns_for_symbol("QQQ")
+    assert len(result) == 3
+    assert all(p.symbol == "QQQ" for p in result)

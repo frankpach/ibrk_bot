@@ -469,9 +469,53 @@ def close_trade(trade_id: int, exit_price: float, exit_reason: str, pnl_usd: flo
     conn.close()
 
 
-def get_patterns_for_symbol(symbol: str) -> list:
+def get_closed_trades_by_symbol(symbol: str, limit: int = 10) -> list:
+    """Return most recent closed trades for a symbol, newest first."""
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM patterns WHERE symbol=? ORDER BY win_count DESC", (symbol,)).fetchall()
+    rows = conn.execute(
+        """SELECT * FROM trades
+           WHERE symbol=? AND status='CLOSED'
+           ORDER BY closed_at DESC
+           LIMIT ?""",
+        (symbol.upper(), limit)
+    ).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        keys = [col[0] for col in conn.description] if hasattr(conn, 'description') else list(r.keys())
+        result.append(Trade(
+            id=r["id"], symbol=r["symbol"], action=r["action"],
+            quantity=r["quantity"], entry_price=r["entry_price"],
+            stop_loss_price=r["stop_loss_price"],
+            take_profit_price=r["take_profit_price"],
+            stop_loss_pct=r["stop_loss_pct"],
+            take_profit_pct=r["take_profit_pct"],
+            signal_strength=r["signal_strength"],
+            llm_justification=r["llm_justification"],
+            status=r["status"],
+            exit_price=r["exit_price"],
+            exit_reason=r["exit_reason"],
+            pnl_usd=r["pnl_usd"],
+            pnl_pct=r["pnl_pct"],
+            opened_at=datetime.fromisoformat(r["opened_at"]),
+            closed_at=datetime.fromisoformat(r["closed_at"]) if r["closed_at"] else None,
+            order_id=r["order_id"] if "order_id" in r.keys() else None,
+            trade_status=r["trade_status"] if "trade_status" in r.keys() else "PENDING",
+            entry_fill_price=r["entry_fill_price"] if "entry_fill_price" in r.keys() else None,
+            exit_fill_price=r["exit_fill_price"] if "exit_fill_price" in r.keys() else None,
+            close_order_id=r["close_order_id"] if "close_order_id" in r.keys() else None,
+            partial_exit_done=bool(r["partial_exit_done"]) if "partial_exit_done" in r.keys() else False,
+            remaining_quantity=r["remaining_quantity"] if "remaining_quantity" in r.keys() else None,
+        ))
+    return result
+
+
+def get_patterns_for_symbol(symbol: str, limit: int = None) -> list:
+    conn = get_connection()
+    if limit is None:
+        rows = conn.execute("SELECT * FROM patterns WHERE symbol=? ORDER BY updated_at DESC", (symbol,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM patterns WHERE symbol=? ORDER BY updated_at DESC LIMIT ?", (symbol, limit)).fetchall()
     conn.close()
     return [Pattern(
         id=r["id"], symbol=r["symbol"], pattern_text=r["pattern_text"],
@@ -711,6 +755,11 @@ def init_analysis_tables():
     conn.commit()
     _add_column_if_missing(conn, "trades", "feature_snapshot_id", "INTEGER")
     conn.commit()
+    # Migrate feature_snapshots for hourly and weekly fields
+    _add_column_if_missing(conn, "feature_snapshots", "rsi_1h", "REAL")
+    _add_column_if_missing(conn, "feature_snapshots", "volume_ratio_1h", "REAL")
+    _add_column_if_missing(conn, "feature_snapshots", "weekly_trend", "TEXT")
+    conn.commit()
     conn.close()
 
 
@@ -753,8 +802,8 @@ def insert_feature_snapshot(fs_dict: dict) -> int:
            (symbol,timestamp,context,rsi_14,macd_line,macd_signal,macd_crossover,
             atr_pct,sma20,sma50,sma200,bollinger_upper,bollinger_lower,bollinger_position,
             vwap,volume_ratio_20d,hist_volatility_30d,impl_volatility,rs_vs_spy_30d,
-            rs_vs_qqq_30d,feature_relevance_json)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            rs_vs_qqq_30d,feature_relevance_json,rsi_1h,volume_ratio_1h,weekly_trend)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (fs_dict.get("symbol"), fs_dict.get("timestamp"), fs_dict.get("context", "unknown"),
          fs_dict.get("rsi_14"), fs_dict.get("macd_line"), fs_dict.get("macd_signal"),
          int(fs_dict["macd_crossover"]) if fs_dict.get("macd_crossover") is not None else None,
@@ -762,7 +811,8 @@ def insert_feature_snapshot(fs_dict: dict) -> int:
          fs_dict.get("bollinger_upper"), fs_dict.get("bollinger_lower"), fs_dict.get("bollinger_position"),
          fs_dict.get("vwap"), fs_dict.get("volume_ratio_20d"), fs_dict.get("hist_volatility_30d"),
          fs_dict.get("impl_volatility"), fs_dict.get("rs_vs_spy_30d"), fs_dict.get("rs_vs_qqq_30d"),
-         str(fs_dict.get("feature_relevance", "{}")))
+         str(fs_dict.get("feature_relevance", "{}")),
+         fs_dict.get("rsi_1h"), fs_dict.get("volume_ratio_1h"), fs_dict.get("weekly_trend"))
     )
     conn.commit()
     row_id = cur.lastrowid
