@@ -741,34 +741,50 @@ async def cmd_mercados(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 def start_bot(scheduler):
-    """Arranca el bot en un nuevo event loop en thread separado."""
+    """Arranca el bot en un nuevo event loop en thread separado.
+    Compatible con Python 3.13 y python-telegram-bot 21.x.
+    """
+    import asyncio
+
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("TELEGRAM_BOT_TOKEN not set - bot not started")
         return
 
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(None).build()
-    app.add_handler(CommandHandler("estado", cmd_estado))
-    app.add_handler(CommandHandler("posiciones", cmd_posiciones))
-    app.add_handler(CommandHandler("historial", cmd_historial))
-    app.add_handler(CommandHandler("senales", cmd_senales))
-    app.add_handler(CommandHandler("simbolos", cmd_simbolos))
-    app.add_handler(CommandHandler("pausar", cmd_pausar))
-    app.add_handler(CommandHandler("reanudar", cmd_reanudar))
-    app.add_handler(CommandHandler("stop", cmd_stop))
-    app.add_handler(CommandHandler("cerrar", cmd_cerrar))
-    app.add_handler(CommandHandler("modo", cmd_modo))
-    app.add_handler(CommandHandler("aprobar", cmd_aprobar))
-    app.add_handler(CommandHandler("ayuda", cmd_ayuda))
-    app.add_handler(CommandHandler("diagnostico", cmd_diagnostico))
-    app.add_handler(CommandHandler("analizar", cmd_analizar))
-    app.add_handler(CommandHandler("proponer", cmd_proponer))
-    app.add_handler(CommandHandler("mercados", cmd_mercados))
-    app.add_handler(CommandHandler("backtest", cmd_backtest))
-    app.add_handler(CommandHandler("notificaciones", cmd_notificaciones))
-    app.add_handler(CommandHandler("silencio", cmd_silencio))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(None).build()
+    application.add_handler(CommandHandler("estado", cmd_estado))
+    application.add_handler(CommandHandler("posiciones", cmd_posiciones))
+    application.add_handler(CommandHandler("historial", cmd_historial))
+    application.add_handler(CommandHandler("senales", cmd_senales))
+    application.add_handler(CommandHandler("simbolos", cmd_simbolos))
+    application.add_handler(CommandHandler("pausar", cmd_pausar))
+    application.add_handler(CommandHandler("reanudar", cmd_reanudar))
+    application.add_handler(CommandHandler("stop", cmd_stop))
+    application.add_handler(CommandHandler("cerrar", cmd_cerrar))
+    application.add_handler(CommandHandler("modo", cmd_modo))
+    application.add_handler(CommandHandler("aprobar", cmd_aprobar))
+    application.add_handler(CommandHandler("ayuda", cmd_ayuda))
+    application.add_handler(CommandHandler("diagnostico", cmd_diagnostico))
+    application.add_handler(CommandHandler("analizar", cmd_analizar))
+    application.add_handler(CommandHandler("proponer", cmd_proponer))
+    application.add_handler(CommandHandler("mercados", cmd_mercados))
+    application.add_handler(CommandHandler("backtest", cmd_backtest))
+    application.add_handler(CommandHandler("notificaciones", cmd_notificaciones))
+    application.add_handler(CommandHandler("silencio", cmd_silencio))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     logger.info("Telegram bot started with %d handlers", 20)
+
+    async def _run():
+        async with application:
+            await application.start()
+            await application.updater.start_polling(
+                drop_pending_updates=True,
+                allowed_updates=["message", "callback_query"],
+            )
+            logger.info("Telegram polling active")
+            # Keep coroutine alive until cancelled
+            await asyncio.Event().wait()
+
     try:
-        import asyncio; loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop); app.run_polling(drop_pending_updates=True, stop_signals=None, close_loop=True)
+        asyncio.run(_run())
     except Exception as e:
         logger.error(f"Telegram bot error: {e}")
