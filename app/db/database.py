@@ -579,12 +579,19 @@ def save_symbol_proposal(symbol: str, reason: str):
     conn.close()
 
 
-def approve_symbol(symbol: str):
+def approve_symbol(symbol: str, ib_client=None) -> None:
     """Aprueba un simbolo propuesto para que el scanner lo incluya."""
     conn = get_connection()
     conn.execute("UPDATE symbol_config SET approved=1 WHERE symbol=?", (symbol.upper(),))
     conn.commit()
     conn.close()
+    # Trigger background calibration if IB client available
+    if ib_client is not None:
+        try:
+            from app.ml.calibration import on_symbol_approved
+            on_symbol_approved(symbol.upper(), ib_client)
+        except Exception as e:
+            logger.warning(f"Calibration hook failed for {symbol}: {e}")
 
 
 def get_pending_proposals() -> list:
@@ -759,6 +766,9 @@ def init_analysis_tables():
     _add_column_if_missing(conn, "feature_snapshots", "rsi_1h", "REAL")
     _add_column_if_missing(conn, "feature_snapshots", "volume_ratio_1h", "REAL")
     _add_column_if_missing(conn, "feature_snapshots", "weekly_trend", "TEXT")
+    # MTE-010: backtest calibration columns
+    _add_column_if_missing(conn, "symbol_parameters", "backtest_calibrated", "INTEGER DEFAULT 0")
+    _add_column_if_missing(conn, "symbol_parameters", "backtest_calibrated_at", "TEXT")
     conn.commit()
     conn.close()
 
