@@ -356,7 +356,6 @@ def render_dashboard_html() -> str:
             <div className="sl">Net Liquidation</div>
             <div className="sv blue">{f.usd(netLiq)}</div>
             <div className="ss">{accountSubtitle}</div>
-            <div className="ss">IBKR real · cuenta</div>
           </div>
           <div className="sc fade-up">
             <div className="sl">P&amp;L Hoy</div>
@@ -1000,7 +999,11 @@ def render_dashboard_html() -> str:
               <div key={i} style={{padding:'9px 0',borderBottom:'1px solid var(--border)',display:'flex',gap:10}}>
                 <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1rem',minWidth:44,color:'var(--text)'}}>{n.symbol||'MKT'}</span>
                 <div>
-                  <p style={{fontSize:'.8rem',lineHeight:1.35,color:'var(--text)',marginBottom:3}}>{n.headline}</p>
+                  {n.url ? (
+                    <a href={n.url} target="_blank" rel="noopener noreferrer" style={{fontSize:'.8rem',lineHeight:1.35,color:'var(--text)',marginBottom:3,display:'block',textDecoration:'underline',textUnderlineOffset:2}}>{n.headline}</a>
+                  ) : (
+                    <p style={{fontSize:'.8rem',lineHeight:1.35,color:'var(--text)',marginBottom:3}}>{n.headline}</p>
+                  )}
                   <div style={{display:'flex',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.63rem',color:'var(--dim)'}}>
                     <span>{n.provider}</span>
                     <span>{n.fetched_at?.slice(11,16)||''}</span>

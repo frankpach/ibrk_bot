@@ -272,7 +272,7 @@ class IBDataLayer:
                     headline = getattr(item, "headline", "")
                     sentiment = _extract_sentiment(headline)
                     news_items.append({"title": headline, "sentiment": sentiment, "date": getattr(item, "time", ""),
-                                       "provider": getattr(item, "providerCode", ""), "article_id": getattr(item, "articleId", "")})
+                                       "provider": getattr(item, "providerCode", ""), "article_id": getattr(item, "articleId", ""), "url": ""})
             except Exception:
                 pass
 
@@ -284,7 +284,8 @@ class IBDataLayer:
                 for entry in feed.entries[:3]:
                     title = getattr(entry, "title", "")
                     sentiment = _extract_sentiment(title)
-                    news_items.append({"title": title, "sentiment": sentiment, "date": str(getattr(entry, "published", ""))})
+                    news_items.append({"title": title, "sentiment": sentiment, "date": str(getattr(entry, "published", "")),
+                                       "url": getattr(entry, "link", "")})
 
             self._set_cached(key, news_items, "scanner")
             return news_items

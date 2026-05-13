@@ -791,6 +791,7 @@ def init_analysis_tables():
             sentiment TEXT,
             article_id TEXT,
             published_at TEXT,
+            url TEXT,
             fetched_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS scanner_results (
@@ -816,6 +817,7 @@ def init_analysis_tables():
     _add_column_if_missing(conn, "symbol_parameters", "backtest_calibrated_at", "TEXT")
     # LD-001: backtest_profit_factor column
     _add_column_if_missing(conn, "symbol_parameters", "backtest_profit_factor", "REAL")
+    _add_column_if_missing(conn, "news_cache", "url", "TEXT")
     conn.commit()
     conn.close()
 
@@ -1080,13 +1082,13 @@ def get_account_history(days: int = 30) -> list:
 
 
 def insert_news_cache(symbol: str, headline: str, provider: str, sentiment: str,
-                      article_id: str, published_at: str) -> None:
+                      article_id: str, published_at: str, url: str = "") -> None:
     conn = get_connection()
     conn.execute(
         """INSERT INTO news_cache
-           (symbol, headline, provider, sentiment, article_id, published_at, fetched_at)
-           VALUES (?,?,?,?,?,?,?)""",
-        (symbol, headline, provider, sentiment, article_id, published_at,
+           (symbol, headline, provider, sentiment, article_id, published_at, url, fetched_at)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (symbol, headline, provider, sentiment, article_id, published_at, url,
          datetime.utcnow().isoformat())
     )
     conn.commit()

@@ -38,6 +38,7 @@ def fetch_and_cache_news(data_layer) -> int:
                     sentiment=item.get("sentiment", "neutral"),
                     article_id=str(item.get("article_id", "")),
                     published_at=str(item.get("date", "")),
+                    url=item.get("url", ""),
                 )
                 count += 1
             time.sleep(0.5)
