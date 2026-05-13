@@ -125,7 +125,13 @@ def main():
     from app.analysis.data import IBDataLayer
     data_layer = IBDataLayer(ib_client) if ib_client else None
 
-    scheduler = BackgroundScheduler()
+    scheduler = BackgroundScheduler(
+        job_defaults={
+            "max_instances": 1,
+            "coalesce": True,
+            "misfire_grace_time": 300,
+        }
+    )
     ctrl = init_controller(scheduler)
 
     def _check_circuit_breaker():
@@ -345,6 +351,33 @@ def main():
         minutes=10,
         id="reconciler",
     )
+    def _send_digest():
+        """Send periodic digest summary."""
+        try:
+            from app.db.database import get_open_trades
+            from app.notifications.policy import get_digest_generator
+            open_trades = get_open_trades() or []
+            try:
+                daily_pnl = get_daily_pnl()
+            except Exception:
+                daily_pnl = 0.0
+            gen = get_digest_generator()
+            msg = gen.generate_digest(
+                open_trades=open_trades,
+                daily_pnl=daily_pnl,
+                signals_processed=0,
+                system_status="OK",
+            )
+            notify(msg)
+        except Exception as e:
+            logger.error(f"Digest failed: {e}")
+
+    scheduler.add_job(
+        _send_digest, "cron",
+        hour="10,14", minute=0, timezone=MARKET_TZ,
+        id="digest_job", replace_existing=True,
+    )
+
     if data_layer:
         from app.analysis.admission import run_daily_discovery
         from app.analysis.evaluator import run_return_evaluator

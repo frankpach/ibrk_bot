@@ -10,7 +10,7 @@ from app.notifications.telegram_bot import (
     _api, _call_opencode, _only_owner,
     cmd_estado, cmd_posiciones, cmd_cerrar,
     cmd_analizar, cmd_ayuda, cmd_diagnostico,
-    cmd_modo,
+    cmd_modo, cmd_notificaciones, cmd_silencio,
 )
 
 
@@ -212,3 +212,126 @@ async def test_cmd_modo_invalid():
 class AsyncMock(MagicMock):
     async def __call__(self, *args, **kwargs):
         return super(AsyncMock, self).__call__(*args, **kwargs)
+
+
+# --- MTE-004: /notificaciones and /silencio command tests ---
+
+@pytest.mark.asyncio
+async def test_cmd_notificaciones_critico():
+    """AC-10.1: /notificaciones critico changes level to critical_only."""
+    from app.notifications.policy import NotificationPolicy, get_policy
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = ["critico"]
+    mock_policy = NotificationPolicy(level="normal")
+    with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"), \
+         patch("app.notifications.policy.get_policy", return_value=mock_policy), \
+         patch("app.notifications.telegram_bot.cmd_notificaciones.__wrapped__" if hasattr(cmd_notificaciones, "__wrapped__") else "app.notifications.policy.get_policy", return_value=mock_policy):
+        # Call without decorator bypass — patch get_policy inside the module
+        with patch("app.notifications.policy._policy_instance", mock_policy):
+            from app.notifications import policy as pol_mod
+            pol_mod._policy_instance = mock_policy
+            await cmd_notificaciones(update, ctx)
+    update.message.reply_text.assert_called_once()
+    assert mock_policy.level == "critical_only"
+
+
+@pytest.mark.asyncio
+async def test_cmd_notificaciones_verbose():
+    """AC-10.2: /notificaciones verbose sets verbose level."""
+    from app.notifications.policy import NotificationPolicy
+    from app.notifications import policy as pol_mod
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = ["verbose"]
+    mock_policy = NotificationPolicy(level="normal")
+    original = pol_mod._policy_instance
+    pol_mod._policy_instance = mock_policy
+    try:
+        with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"):
+            await cmd_notificaciones(update, ctx)
+        update.message.reply_text.assert_called_once()
+        assert mock_policy.level == "verbose"
+    finally:
+        pol_mod._policy_instance = original
+
+
+@pytest.mark.asyncio
+async def test_cmd_notificaciones_no_args():
+    """Returns usage message when no args given."""
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = []
+    with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"):
+        await cmd_notificaciones(update, ctx)
+    update.message.reply_text.assert_called_once()
+    assert "uso" in update.message.reply_text.call_args[0][0].lower()
+
+
+@pytest.mark.asyncio
+async def test_cmd_notificaciones_invalid_level():
+    """Returns error message for unknown level."""
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = ["alto"]
+    with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"):
+        await cmd_notificaciones(update, ctx)
+    update.message.reply_text.assert_called_once()
+    assert "inválido" in update.message.reply_text.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_cmd_silencio_starts_suppression():
+    """AC-10.3: /silencio 2 starts suppression on DigestGenerator."""
+    from app.notifications.policy import DigestGenerator
+    from app.notifications import policy as pol_mod
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = ["2"]
+    mock_gen = DigestGenerator()
+    original = pol_mod._digest_instance
+    pol_mod._digest_instance = mock_gen
+    try:
+        with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"), \
+             patch("threading.Timer") as mock_timer:
+            mock_timer.return_value = MagicMock()
+            await cmd_silencio(update, ctx)
+        update.message.reply_text.assert_called_once()
+        assert "2h" in update.message.reply_text.call_args[0][0]
+        assert mock_gen._suppressing is True
+    finally:
+        pol_mod._digest_instance = original
+
+
+@pytest.mark.asyncio
+async def test_cmd_silencio_default_1h():
+    """No args defaults to 1 hour suppression."""
+    from app.notifications.policy import DigestGenerator
+    from app.notifications import policy as pol_mod
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = []
+    mock_gen = DigestGenerator()
+    original = pol_mod._digest_instance
+    pol_mod._digest_instance = mock_gen
+    try:
+        with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"), \
+             patch("threading.Timer") as mock_timer:
+            mock_timer.return_value = MagicMock()
+            await cmd_silencio(update, ctx)
+        assert "1h" in update.message.reply_text.call_args[0][0]
+        assert mock_gen._suppressing is True
+    finally:
+        pol_mod._digest_instance = original

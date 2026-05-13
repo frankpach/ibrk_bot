@@ -672,6 +672,41 @@ async def cmd_backtest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 @_only_owner
+async def cmd_notificaciones(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Change notification level: /notificaciones critico|normal|verbose"""
+    from app.notifications.policy import get_policy
+    args = ctx.args
+    if not args:
+        await update.message.reply_text("Uso: /notificaciones critico|normal|verbose")
+        return
+    nivel = args[0].lower()
+    level_map = {"critico": "critical_only", "normal": "normal", "verbose": "verbose"}
+    if nivel not in level_map:
+        await update.message.reply_text(f"Nivel inválido: {nivel}. Usar: critico|normal|verbose")
+        return
+    get_policy().set_level(level_map[nivel])
+    await update.message.reply_text(f"✅ Nivel de notificaciones: {level_map[nivel]}")
+
+
+@_only_owner
+async def cmd_silencio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Suppress non-critical notifications for N hours: /silencio 2"""
+    import threading
+    from app.notifications.policy import get_digest_generator
+    args = ctx.args
+    try:
+        horas = int(args[0]) if args else 1
+    except (ValueError, IndexError):
+        horas = 1
+    gen = get_digest_generator()
+    gen.start_suppression()
+    def restore():
+        gen.end_suppression()
+    threading.Timer(horas * 3600, restore).start()
+    await update.message.reply_text(f"🔕 Silencio activado por {horas}h (solo críticos)")
+
+
+@_only_owner
 async def cmd_mercados(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     force = bool(ctx.args and ctx.args[0].lower() in ("refresh", "actualizar"))
     await update.message.reply_text("Consultando IB Gateway..." if force else "Cargando permisos de mercado...")
@@ -724,8 +759,10 @@ def start_bot(scheduler):
     app.add_handler(CommandHandler("proponer", cmd_proponer))
     app.add_handler(CommandHandler("mercados", cmd_mercados))
     app.add_handler(CommandHandler("backtest", cmd_backtest))
+    app.add_handler(CommandHandler("notificaciones", cmd_notificaciones))
+    app.add_handler(CommandHandler("silencio", cmd_silencio))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("Telegram bot started with %d handlers", 18)
+    logger.info("Telegram bot started with %d handlers", 20)
     try:
         import asyncio; loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop); app.run_polling(drop_pending_updates=True, stop_signals=None, close_loop=True)
     except Exception as e:
