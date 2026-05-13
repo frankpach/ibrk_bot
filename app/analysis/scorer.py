@@ -132,20 +132,14 @@ def _dim_sentiment(news_items: list) -> float:
 
 
 def _dim_price_change(features) -> float:
-    if features.price_change_pct is None:
-        return 0.0
-    pc = abs(features.price_change_pct)
-    if pc >= 5.0:
-        return 1.0
-    if pc >= 3.0:
-        return 0.85
-    if pc >= 2.0:
-        return 0.7
-    if pc >= 1.0:
-        return 0.5
-    if pc >= 0.5:
-        return 0.3
-    return 0.1
+    pc = features.price_change_pct
+    if pc is None: return 0.0
+    if 1.0 <= pc <= 4.0:   return 0.9   # Positive moderate momentum — ideal BUY
+    if 0.0 <= pc < 1.0:    return 0.6   # Neutral-positive
+    if 4.0 < pc:            return 0.7   # Strong momentum — watch overbought
+    if -1.0 <= pc < 0.0:   return 0.4   # Slight pullback — possible entry
+    if -3.0 <= pc < -1.0:  return 0.2   # Moderate drop — caution
+    return 0.1                           # Collapse (< -3%) — possible bear trap
 
 
 def _get_multipliers(symbol: str) -> dict:

@@ -182,23 +182,44 @@ def test_dim_sentiment_empty():
 
 # ---------- _dim_price_change ----------
 def test_dim_price_change_high():
+    # pc=6.0 → strong momentum, watch overbought
     f = _make_features(price_change_pct=6.0)
-    assert _dim_price_change(f) == 1.0
+    assert _dim_price_change(f) == 0.7
 
 
 def test_dim_price_change_med():
+    # pc=1.5 → positive moderate momentum — ideal BUY
     f = _make_features(price_change_pct=1.5)
-    assert _dim_price_change(f) == 0.5
+    assert _dim_price_change(f) == 0.9
 
 
 def test_dim_price_change_low():
+    # pc=0.3 → neutral-positive
     f = _make_features(price_change_pct=0.3)
-    assert _dim_price_change(f) == 0.1
+    assert _dim_price_change(f) == 0.6
 
 
 def test_dim_price_change_none():
     f = _make_features()
     assert _dim_price_change(f) == 0.0
+
+
+def test_dim_price_change_moderate_drop():
+    # pc=-2.0 → moderate drop, caution
+    f = _make_features(price_change_pct=-2.0)
+    assert _dim_price_change(f) == 0.2
+
+
+def test_dim_price_change_collapse():
+    # pc=-5.0 → collapse / bear trap
+    f = _make_features(price_change_pct=-5.0)
+    assert _dim_price_change(f) == 0.1
+
+
+def test_dim_price_change_ideal_buy():
+    # AC-03.1: pc=2.0 → ideal BUY momentum
+    f = _make_features(price_change_pct=2.0)
+    assert _dim_price_change(f) == 0.9
 
 
 # ---------- _get_multipliers ----------
@@ -234,8 +255,9 @@ def test_compute_score_rejected(mock_mult):
 @patch("app.analysis.scorer._get_multipliers")
 def test_compute_score_priority(mock_mult):
     mock_mult.return_value = {k: 1.0 for k in GLOBAL_WEIGHTS}
+    # atr_pct=2.0 (optimal zone) + price_change_pct=3.0 (ideal BUY) → PRIORITY
     f = _make_features(rsi_14=20, macd_crossover=True, sma50=110, sma200=100,
-                       volume_ratio_20d=4.0, atr_pct=5.0, price_change_pct=6.0,
+                       volume_ratio_20d=4.0, atr_pct=2.0, price_change_pct=3.0,
                        rs_vs_spy_30d=0.08, bollinger_position=0.8)
     qs = compute_score(f, "AAPL", [])
     assert qs.total >= THRESHOLDS["propose"]
