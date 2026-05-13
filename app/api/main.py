@@ -789,6 +789,15 @@ def dashboard_data():
         pos_snaps = {}
 
     position_snapshots_out = list(pos_snaps.values()) if pos_snaps else []
+    if status["mode"] == "live":
+        live_trade_ids = {t["trade_id"] for t in trades_out}
+        floating_live_pnl = sum(
+            float(snap.get("pnl_usd") or 0.0)
+            for snap in position_snapshots_out
+            if snap.get("trade_id") in live_trade_ids
+        )
+        status["daily_pnl_usd"] = round(floating_live_pnl, 2)
+        status["daily_pnl_pct"] = round(floating_live_pnl / _capital * 100, 4) if _capital else 0.0
 
     # --- 3. News (filtered by approved symbols) ---
     news = []
@@ -813,7 +822,8 @@ def dashboard_data():
     try:
         from app.db.database import get_or_create_symbol_parameters
         open_symbols = {t.symbol for t in open_trades}
-        for sym in get_approved_symbols():
+        universe_symbols = list(dict.fromkeys(list(open_symbols) + get_approved_symbols()))
+        for sym in universe_symbols:
             try:
                 params = get_or_create_symbol_parameters(sym)
                 trades_sym = get_closed_trades_by_symbol(sym, limit=20)

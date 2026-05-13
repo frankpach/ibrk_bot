@@ -5,7 +5,13 @@ Se ejecuta al arrancar el sistema para detectar desincronizaciones.
 """
 import logging
 from datetime import datetime
-from app.db.database import get_open_trades, close_trade, insert_trade
+from app.db.database import (
+    approve_symbol,
+    close_trade,
+    get_open_trades,
+    insert_trade,
+    upsert_position_snapshot,
+)
 from app.db.models import Trade
 from app.notifications.telegram import notify
 
@@ -30,7 +36,8 @@ def reconcile_positions(ib_client) -> dict:
         logger.error(f"Could not fetch IB portfolio for reconciliation: {e}")
         return {"closed": 0, "created": 0}
 
-    db_symbols = {t.symbol for t in db_trades}
+    db_trades_by_symbol = {t.symbol: t for t in db_trades}
+    db_symbols = set(db_trades_by_symbol.keys())
     ib_symbols = set(ib_positions.keys())
 
     # 1) DB -> IB: cerrar trades locales que ya no existen en IB
@@ -49,12 +56,34 @@ def reconcile_positions(ib_client) -> dict:
             )
             closed_count += 1
 
+    for symbol, pos in ib_positions.items():
+        trade = db_trades_by_symbol.get(symbol)
+        if not trade:
+            continue
+        quantity = abs(pos.get("quantity", 0) or 0)
+        market_price = float(pos.get("market_price") or trade.entry_price or 0.0)
+        unrealized_pnl = float(pos.get("unrealized_pnl") or 0.0)
+        cost_basis = float((trade.entry_fill_price or trade.entry_price or 0.0) * quantity)
+        pnl_pct = (unrealized_pnl / cost_basis) if cost_basis > 0 else 0.0
+        try:
+            upsert_position_snapshot(
+                trade_id=trade.id,
+                symbol=symbol,
+                current_price=market_price,
+                pnl_usd=round(unrealized_pnl, 2),
+                pnl_pct=round(pnl_pct, 4),
+            )
+        except Exception as exc:
+            logger.debug(f"Could not refresh snapshot for {symbol}: {exc}")
+
     # 2) IB -> DB: crear trades locales para posiciones nuevas en IB
     created_count = 0
     for symbol, pos in ib_positions.items():
         if symbol not in db_symbols:
             quantity = abs(pos.get("quantity", 0))
             avg_cost = pos.get("avg_cost", 0)
+            market_price = float(pos.get("market_price") or avg_cost or 0.0)
+            unrealized_pnl = float(pos.get("unrealized_pnl") or 0.0)
             action = "BUY" if pos.get("quantity", 0) > 0 else "SELL"
             logger.warning(
                 f"Position {symbol} found in IB but not in DB — creating local trade"
@@ -81,7 +110,17 @@ def reconcile_positions(ib_client) -> dict:
                 closed_at=None,
                 order_id=None,
             )
-            insert_trade(new_trade)
+            trade_id = insert_trade(new_trade)
+            approve_symbol(symbol)
+            cost_basis = float(avg_cost * quantity)
+            pnl_pct = (unrealized_pnl / cost_basis) if cost_basis > 0 else 0.0
+            upsert_position_snapshot(
+                trade_id=trade_id,
+                symbol=symbol,
+                current_price=market_price,
+                pnl_usd=round(unrealized_pnl, 2),
+                pnl_pct=round(pnl_pct, 4),
+            )
             created_count += 1
 
     if closed_count or created_count:

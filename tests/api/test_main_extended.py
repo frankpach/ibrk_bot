@@ -800,3 +800,65 @@ def test_dashboard_data_prefers_controller_mode_over_settings():
         data = resp.json()
         assert data["status"]["mode"] == "live"
         assert data["status"]["paused"] is True
+
+
+def test_dashboard_data_live_uses_open_snapshot_pnl_and_includes_open_symbol_in_universe():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+
+        trade = SimpleNamespace(
+            id=280,
+            symbol="AAOI",
+            action="BUY",
+            quantity=0.08,
+            entry_price=149.7725,
+            entry_fill_price=None,
+            stop_loss_price=145.28,
+            take_profit_price=158.76,
+            signal_strength="MANUAL_RECONCILED",
+            opened_at=SimpleNamespace(isoformat=lambda: "2026-05-13T14:00:00"),
+        )
+        symbol_params = SimpleNamespace(
+            stop_loss_pct=0.025,
+            take_profit_pct=0.06,
+            trade_count=0,
+            backtest_calibrated=0,
+            backtest_calibrated_at=None,
+            backtest_profit_factor=None,
+            momentum_mult=1.0,
+            trend_mult=1.0,
+            volume_mult=1.0,
+            volatility_mult=1.0,
+        )
+
+        with patch("app.system.controller.get_controller", return_value=SimpleNamespace(mode="live", is_paused=False)), \
+             patch("app.db.database.get_open_trades", return_value=[trade]), \
+             patch("app.db.database.get_position_snapshots", return_value={
+                 280: {
+                     "trade_id": 280,
+                     "symbol": "AAOI",
+                     "current_price": 221.60,
+                     "pnl_usd": 5.75,
+                     "pnl_pct": 0.48,
+                     "updated_at": "2026-05-13T20:10:14",
+                 }
+             }), \
+             patch("app.db.database.get_approved_symbols", return_value=["AAPL", "MSFT"]), \
+             patch("app.db.database.get_or_create_symbol_parameters", return_value=symbol_params), \
+             patch("app.db.database.get_account_history", return_value=[{
+                 "date": "2026-05-13",
+                 "net_liquidation": 26.62,
+                 "buying_power": 7.95,
+                 "daily_pnl_usd": 1570.38,
+                 "daily_pnl_pct": 5899.2487,
+             }]):
+            resp = client.get("/dashboard/data")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"]["daily_pnl_usd"] == 5.75
+        assert data["symbols_universe"][0]["symbol"] == "AAOI"
+        assert data["symbols_universe"][0]["is_open"] is True

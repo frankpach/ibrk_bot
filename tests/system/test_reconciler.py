@@ -30,15 +30,45 @@ def test_reconcile_closes_orphan_db_trades():
 def test_reconcile_creates_missing_ib_positions():
     with patch("app.system.reconciler.get_open_trades", return_value=[]), \
          patch("app.system.reconciler.close_trade") as mock_close, \
-         patch("app.system.reconciler.insert_trade") as mock_insert, \
+         patch("app.system.reconciler.insert_trade", return_value=42) as mock_insert, \
+         patch("app.system.reconciler.approve_symbol") as mock_approve, \
+         patch("app.system.reconciler.upsert_position_snapshot") as mock_snapshot, \
          patch("app.system.reconciler.notify"):
         ib_client = MagicMock()
         ib_client.get_portfolio.return_value = [
-            {"symbol": "TSLA", "quantity": 5.0, "avg_cost": 200.0}
+            {"symbol": "TSLA", "quantity": 5.0, "avg_cost": 200.0, "market_price": 210.0, "unrealized_pnl": 50.0}
         ]
         result = reconcile_positions(ib_client)
         assert result["created"] == 1
         mock_insert.assert_called_once()
+        mock_approve.assert_called_once_with("TSLA")
+        mock_snapshot.assert_called_once()
+        mock_close.assert_not_called()
+
+
+def test_reconcile_refreshes_snapshot_for_existing_trade():
+    trade = Trade(
+        id=7, symbol="AAOI", action="BUY", quantity=0.08,
+        entry_price=149.7725, stop_loss_price=145.0,
+        take_profit_price=158.0, stop_loss_pct=0.03,
+        take_profit_pct=0.06, signal_strength="MANUAL_RECONCILED",
+        llm_justification="test", status="OPEN",
+        exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
+        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+    )
+    with patch("app.system.reconciler.get_open_trades", return_value=[trade]), \
+         patch("app.system.reconciler.close_trade") as mock_close, \
+         patch("app.system.reconciler.insert_trade") as mock_insert, \
+         patch("app.system.reconciler.upsert_position_snapshot") as mock_snapshot, \
+         patch("app.system.reconciler.notify"):
+        ib_client = MagicMock()
+        ib_client.get_portfolio.return_value = [
+            {"symbol": "AAOI", "quantity": 0.08, "avg_cost": 149.7725, "market_price": 221.60, "unrealized_pnl": 5.75}
+        ]
+        result = reconcile_positions(ib_client)
+        assert result == {"closed": 0, "created": 0}
+        mock_snapshot.assert_called_once()
+        mock_insert.assert_not_called()
         mock_close.assert_not_called()
 
 
