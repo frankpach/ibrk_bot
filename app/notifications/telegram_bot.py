@@ -85,6 +85,7 @@ async def cmd_estado(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ib_status = "✅ Conectado" if data.get('ib_connected') else "❌ Desconectado"
     real_cap = acc.get("net_liquidation", 0)
     op_cap = data.get("operating_capital", real_cap)
+    pnl_label = "P&L abierto live" if data.get("mode") == "live" else "P&L hoy"
 
     msg = (
         f"Estado del sistema\n\n"
@@ -93,7 +94,7 @@ async def cmd_estado(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Pausado: {'Si' if data.get('paused') else 'No'}\n"
         f"Capital real IB: ${real_cap:,.2f}\n"
         f"Capital operativo: ${op_cap:,.2f}\n"
-        f"P&L hoy (DB local): ${data.get('daily_pnl_usd', 0):.2f} ({data.get('daily_pnl_pct', 0):.2f}%)\n"
+        f"{pnl_label}: ${data.get('daily_pnl_usd', 0):.2f} ({data.get('daily_pnl_pct', 0):.2f}%)\n"
         f"Posiciones abiertas (IBKR): {len(portfolio) if isinstance(portfolio, list) else '?'}/3\n\n"
         f"Posiciones abiertas:\n{pos_text}"
     )
@@ -316,16 +317,28 @@ async def cmd_cerrar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_modo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     args = ctx.args
     if not args or args[0].lower() not in ("paper", "live"):
-        await update.message.reply_text("Uso: /modo paper o /modo live")
+        await update.message.reply_text("Uso: /modo paper o /modo live confirmar")
         return
     mode = args[0].lower()
     if mode == "live":
-        await update.message.reply_text(
-            "ADVERTENCIA: Cambiar a modo LIVE ejecutara ordenes REALES.\n"
-            "Confirma escribiendo: /modo live confirmar"
-        )
+        if len(args) < 2 or args[1].lower() != "confirmar":
+            await update.message.reply_text(
+                "ADVERTENCIA: Cambiar a modo LIVE ejecutara ordenes REALES.\n"
+                "Confirma escribiendo: /modo live confirmar"
+            )
+            return
+        data = _api("post", "/system/mode/live")
+        if "error" in data or "detail" in data:
+            detail = data.get("detail", data.get("error", "Error desconocido"))
+            await update.message.reply_text(f"Error: {detail}")
+            return
+        await update.message.reply_text("Modo cambiado a LIVE.\nVerifica /estado antes de operar.")
         return
-    _api("post", f"/system/mode/{mode}")
+    data = _api("post", f"/system/mode/{mode}")
+    if "error" in data or "detail" in data:
+        detail = data.get("detail", data.get("error", "Error desconocido"))
+        await update.message.reply_text(f"Error: {detail}")
+        return
     await update.message.reply_text(f"Modo cambiado a {mode.upper()}.")
 
 
@@ -649,11 +662,10 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Consultando al LLM...")
     prompt = (
         f"Eres el asistente del sistema IBKR AI Trader. El usuario dice: '{text}'\n\n"
-        f"Tienes acceso a herramientas para ver precios, portafolio, cuenta, senales, "
-        f"patrones aprendidos, simular y ejecutar ordenes. "
-        f"Usa las que necesites segun la solicitud. "
+        f"No tienes acceso directo a herramientas en esta conversacion; responde solo con "
+        f"razonamiento y orientacion sobre trading, riesgo y el sistema. "
         f"Responde en espanol de forma clara y concisa. "
-        f"Si el usuario pide ejecutar una operacion, primero muestra preview_order y confirma."
+        f"Si el usuario pide ejecutar una operacion, indicale que use comandos explicitos del bot."
     )
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(None, _call_opencode, prompt)
@@ -793,8 +805,12 @@ def start_bot(scheduler):
     application.add_handler(CommandHandler("backtest", cmd_backtest))
     application.add_handler(CommandHandler("notificaciones", cmd_notificaciones))
     application.add_handler(CommandHandler("silencio", cmd_silencio))
+    application.add_handler(CommandHandler("costos", cmd_costos))
+    application.add_handler(CommandHandler("alerta", cmd_alerta))
+    application.add_handler(CommandHandler("alertas", cmd_alertas))
+    application.add_handler(CommandHandler("eliminar_alerta", cmd_eliminar_alerta))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("Telegram bot started with %d handlers", 20)
+    logger.info("Telegram bot started with %d handlers", 24)
 
     async def _run():
         async with application:

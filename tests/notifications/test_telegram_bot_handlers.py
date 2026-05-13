@@ -209,6 +209,33 @@ async def test_cmd_modo_invalid():
         assert "uso" in update.message.reply_text.call_args[0][0].lower()
 
 
+@pytest.mark.asyncio
+async def test_cmd_modo_live_requires_confirmation():
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = ["live"]
+    with patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"):
+        await cmd_modo(update, ctx)
+    update.message.reply_text.assert_called_once()
+    assert "confirmar" in update.message.reply_text.call_args[0][0].lower()
+
+
+@pytest.mark.asyncio
+async def test_cmd_modo_live_confirmed_calls_api():
+    update = MagicMock()
+    update.effective_chat.id = 123
+    update.message.reply_text = AsyncMock()
+    ctx = MagicMock()
+    ctx.args = ["live", "confirmar"]
+    with patch("app.notifications.telegram_bot._api", return_value={"status": "ok", "mode": "live"}) as mock_api, \
+         patch("app.notifications.telegram_bot.TELEGRAM_CHAT_ID", "123"):
+        await cmd_modo(update, ctx)
+    mock_api.assert_called_once_with("post", "/system/mode/live")
+    update.message.reply_text.assert_called_once()
+
+
 class AsyncMock(MagicMock):
     async def __call__(self, *args, **kwargs):
         return super(AsyncMock, self).__call__(*args, **kwargs)

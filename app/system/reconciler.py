@@ -60,6 +60,10 @@ def reconcile_positions(ib_client) -> dict:
         trade = db_trades_by_symbol.get(symbol)
         if not trade:
             continue
+        try:
+            approve_symbol(symbol)
+        except Exception as exc:
+            logger.debug(f"Could not ensure symbol approval for {symbol}: {exc}")
         quantity = abs(pos.get("quantity", 0) or 0)
         market_price = float(pos.get("market_price") or trade.entry_price or 0.0)
         unrealized_pnl = float(pos.get("unrealized_pnl") or 0.0)

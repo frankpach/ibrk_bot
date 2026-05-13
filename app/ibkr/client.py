@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import threading
 
 from ib_insync import IB, Stock
@@ -18,6 +19,17 @@ from app.ibkr.contract_factory import build_contract
 
 _client_instance = None
 _client_lock = threading.Lock()
+
+
+def _safe_number(value, default: float = 0.0) -> float:
+    """Return a JSON-safe float, replacing NaN/inf/None with a default."""
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(num) or math.isinf(num):
+        return default
+    return num
 
 
 class IBKRClient:
@@ -99,12 +111,18 @@ class IBKRClient:
         ticker = self.ib.reqMktData(contract)
         await asyncio.sleep(5)
         self.ib.cancelMktData(contract)
+        market_price = _safe_number(ticker.marketPrice())
+        last = _safe_number(ticker.last)
+        bid = _safe_number(ticker.bid)
+        ask = _safe_number(ticker.ask)
+        if market_price <= 0:
+            market_price = last or bid or ask or 0.0
         return {
             "symbol": symbol.upper(),
-            "market_price": ticker.marketPrice(),
-            "last": ticker.last,
-            "bid": ticker.bid,
-            "ask": ticker.ask,
+            "market_price": market_price,
+            "last": last,
+            "bid": bid,
+            "ask": ask,
         }
 
     def get_stock_price(
@@ -143,11 +161,11 @@ class IBKRClient:
         return [
             {
                 "symbol": item.contract.symbol,
-                "quantity": item.position,
-                "avg_cost": item.averageCost,
-                "market_price": item.marketPrice,
-                "market_value": item.marketValue,
-                "unrealized_pnl": item.unrealizedPNL,
+                "quantity": _safe_number(item.position),
+                "avg_cost": _safe_number(item.averageCost),
+                "market_price": _safe_number(item.marketPrice),
+                "market_value": _safe_number(item.marketValue),
+                "unrealized_pnl": _safe_number(item.unrealizedPNL),
             }
             for item in items
         ]

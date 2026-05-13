@@ -1,7 +1,8 @@
 # tests/ibkr/test_client.py
+import math
 from unittest.mock import MagicMock, patch
 import pytest
-from app.ibkr.client import IBKRClient, get_client
+from app.ibkr.client import IBKRClient, get_client, _safe_number
 
 
 def test_get_client_singleton():
@@ -121,3 +122,10 @@ def test_disconnect_not_connected():
     with patch("app.ibkr.client._client_instance", client):
         client.disconnect()
     client._run_sync.assert_called_once()
+
+
+def test_safe_number_sanitizes_nan_and_inf():
+    assert _safe_number(math.nan) == 0.0
+    assert _safe_number(math.inf) == 0.0
+    assert _safe_number("-inf") == 0.0
+    assert _safe_number(12.5) == 12.5

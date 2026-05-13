@@ -21,6 +21,23 @@ app = FastAPI(title="IBKR AI Trader API")
 client = get_client()
 
 
+def _get_universe_symbols(auto_approve_open: bool = False) -> list[str]:
+    approved = list(get_approved_symbols())
+    open_symbols = [t.symbol.upper() for t in get_open_trades()]
+    if auto_approve_open:
+        from app.db.database import approve_symbol
+        approved_set = set(approved)
+        for sym in open_symbols:
+            if sym not in approved_set:
+                try:
+                    approve_symbol(sym)
+                    approved.append(sym)
+                    approved_set.add(sym)
+                except Exception as exc:
+                    logger.warning(f"Could not auto-approve open symbol {sym}: {exc}")
+    return list(dict.fromkeys(open_symbols + approved))
+
+
 class OrderPreviewRequest(BaseModel):
     symbol: str
     action: str
@@ -87,7 +104,18 @@ def get_portfolio():
 @app.get("/allowed-symbols")
 def get_allowed_symbols():
     from app.db.database import get_approved_symbols_with_meta
-    symbols = get_approved_symbols_with_meta()
+    approved_meta = get_approved_symbols_with_meta()
+    meta_by_symbol = {row["symbol"]: row for row in approved_meta}
+    symbols = []
+    for sym in _get_universe_symbols(auto_approve_open=True):
+        symbols.append(meta_by_symbol.get(sym, {
+            "symbol": sym,
+            "sec_type": "STK",
+            "exchange": "SMART",
+            "currency": "USD",
+            "liquid_hours": None,
+            "market_key": "STK_US",
+        }))
     return {"symbols": [s["symbol"] for s in symbols], "meta": symbols}
 
 
@@ -406,7 +434,7 @@ def system_status():
     except Exception:
         pass
     
-    return {
+    payload = {
         **status,
         "ib_connected": ib_connected,
         "open_positions": len(open_trades),
@@ -414,6 +442,15 @@ def system_status():
         "daily_pnl_pct": round(daily_pnl / _capital * 100, 2) if _capital else 0.0,
         "operating_capital": _capital,
     }
+    if payload["mode"] == "live":
+        try:
+            portfolio = client.get_portfolio()
+            floating_live_pnl = sum(float(p.get("unrealized_pnl") or 0.0) for p in portfolio)
+            payload["daily_pnl_usd"] = round(floating_live_pnl, 2)
+            payload["daily_pnl_pct"] = round(floating_live_pnl / _capital * 100, 2) if _capital else 0.0
+        except Exception as exc:
+            logger.warning(f"system_status live pnl fallback failed: {exc}")
+    return payload
 
 
 @app.post("/system/pause")
@@ -803,7 +840,7 @@ def dashboard_data():
     news = []
     try:
         from app.db.database import get_news_cache
-        all_syms = get_approved_symbols()
+        all_syms = _get_universe_symbols(auto_approve_open=True)
         news = get_news_cache(symbols=all_syms, limit=20)
     except Exception as e:
         logger.warning(f"News cache failed: {e}")
@@ -822,7 +859,7 @@ def dashboard_data():
     try:
         from app.db.database import get_or_create_symbol_parameters
         open_symbols = {t.symbol for t in open_trades}
-        universe_symbols = list(dict.fromkeys(list(open_symbols) + get_approved_symbols()))
+        universe_symbols = _get_universe_symbols(auto_approve_open=True)
         for sym in universe_symbols:
             try:
                 params = get_or_create_symbol_parameters(sym)
@@ -930,7 +967,7 @@ def run_backtest_endpoint(symbol: str, days: int = 180):
     from app.backtest.engine import run_backtest
     from app.backtest.reporter import format_api
     symbol = symbol.upper()
-    if symbol not in set(get_approved_symbols()):
+    if symbol not in set(_get_universe_symbols(auto_approve_open=True)):
         raise HTTPException(status_code=403, detail=f"Symbol {symbol} not in approved DB list")
     try:
         _acct = client.get_account()

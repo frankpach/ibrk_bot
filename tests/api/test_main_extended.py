@@ -528,6 +528,26 @@ def test_allowed_symbols_endpoint_uses_db_approved_symbols():
             assert resp.json()["symbols"] == ["AAOI", "MSFT"]
 
 
+def test_allowed_symbols_endpoint_includes_open_trades_and_autorepairs_universe():
+    trade = SimpleNamespace(symbol="AAOI")
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+        with patch("app.db.database.get_approved_symbols_with_meta", return_value=[
+            {"symbol": "MSFT", "sec_type": "STK", "exchange": "SMART", "currency": "USD", "liquid_hours": None, "market_key": "STK_US"},
+        ]), \
+             patch("app.api.main.get_approved_symbols", return_value=["MSFT"]), \
+             patch("app.api.main.get_open_trades", return_value=[trade]), \
+             patch("app.db.database.approve_symbol") as mock_approve:
+            resp = client.get("/allowed-symbols")
+        assert resp.status_code == 200
+        assert resp.json()["symbols"] == ["AAOI", "MSFT"]
+        assert resp.json()["meta"][0]["symbol"] == "AAOI"
+        mock_approve.assert_called_once_with("AAOI")
+
+
 # ---- System status with no controller ----
 
 def test_system_status_no_controller():
@@ -555,6 +575,21 @@ def test_system_status_no_controller_uses_live_env_default():
             resp = client.get("/system/status")
             assert resp.status_code == 200
             assert resp.json()["mode"] == "live"
+
+
+def test_system_status_live_uses_portfolio_unrealized_pnl():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        mock.get_account.return_value = {"net_liquidation": 100.0}
+        mock.get_portfolio.return_value = [{"symbol": "AAOI", "unrealized_pnl": 5.25}]
+        MockClient.return_value = mock
+        client = _fresh_client()
+        with patch("app.system.controller.get_controller", return_value=SimpleNamespace(mode="live", is_paused=False)), \
+             patch("app.api.main.get_daily_pnl", return_value=1570.38):
+            resp = client.get("/system/status")
+        assert resp.status_code == 200
+        assert resp.json()["daily_pnl_usd"] == 5.25
 
 
 # ---- Orders place human approval timeout ----
