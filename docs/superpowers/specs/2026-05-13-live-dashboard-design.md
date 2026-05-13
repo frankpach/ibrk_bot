@@ -106,7 +106,24 @@ Small status card showing:
 - Trades trained, last retrain timestamp, global win rate
 - Shows the system is actually learning
 
-### 9. System Control Bar
+### 9. Mi Universo — Símbolos con Entrenamiento y Backtest
+
+Table showing all approved symbols with their learning and calibration status. Accessible as a full section below the main grid.
+
+Columns:
+- **Symbol** — ticker
+- **Calibrado** — ✓ badge (green, from backtest) or "defaults" (gray, generic params)
+- **SL% / TP%** — current calibrated or default values from `symbol_parameters`
+- **Profit Factor** — from backtest result (store in `symbol_parameters.backtest_profit_factor`)
+- **Win Rate** — calculated from closed `trades` for this symbol (last 20 trades)
+- **Trades** — `symbol_parameters.trade_count`
+- **Aprendizaje** — compact badges showing which multipliers have drifted from 1.0 (e.g., `momentum ▲1.23`, `trend ▼0.87`)
+- **Última calibración** — `symbol_parameters.backtest_calibrated_at` or "nunca"
+- **Acciones** — "Recalibrar" button to trigger `on_symbol_approved()` again; "Ver detalle" to open symbol lazy chart
+
+Requires adding `backtest_profit_factor REAL` column to `symbol_parameters` (via `_add_column_if_missing`).
+
+### 10. System Control Bar
 - Scanner toggle (▶ ACTIVE / ⏸ PAUSED) — with Telegram confirmation
 - Notification level selector (critico / normal / verbose) — no confirmation needed
 - Mode badge (PAPER / LIVE)
@@ -245,4 +262,7 @@ User clicks "Cerrar" on AAPL position
 - [ ] Drawdown gauge reflects current drawdown from `drawdown.py`
 - [ ] Close position button disabled when IB offline; Telegram confirmation works when online
 - [ ] Dark/light toggle persists across page refreshes
+- [ ] "Mi Universo" table shows all approved symbols with calibration status, win rate, profit factor
+- [ ] Symbols with `backtest_calibrated=0` show "defaults" badge in gray
+- [ ] "Recalibrar" button triggers background calibration job and shows "calibrando..." state
 - [ ] 15s refresh when positions open, 60s when none
