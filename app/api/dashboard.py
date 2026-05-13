@@ -345,7 +345,7 @@ def render_dashboard_html() -> str:
       const pnl = parseFloat(st.daily_pnl_usd || 0);
       const pct = parseFloat(st.daily_pnl_pct || 0);
       const netLiq = acct.net_liquidation || st.operating_capital || st.simulated_capital || 0;
-      const buyPow = acct.buying_power || 0;
+      const buyPow = acct.buying_power || st.operating_capital || 0;
       const openCount = data?.open_trades?.length || 0;
 
       return (
@@ -653,7 +653,8 @@ def render_dashboard_html() -> str:
         hourMap[h].count++;
       });
       const hours = Object.entries(hourMap)
-        .map(([h, {sum, count}]) => [parseInt(h), sum / count])
+        .map(([h, {sum, count}]) => [parseInt(h), count > 0 ? sum / count : null])
+        .filter(([, avg]) => avg !== null && !isNaN(avg))
         .sort((a,b) => a[0]-b[0]);
 
       if (hours.length === 0) return <div className="empty">// sin datos por hora</div>;
@@ -1317,6 +1318,8 @@ def render_dashboard_html() -> str:
               </div>
             )}
 
+            <LogViewer />
+
           </div>
 
           <div className="footer">
@@ -1328,6 +1331,54 @@ def render_dashboard_html() -> str:
             &nbsp;·&nbsp;:8088/dashboard
           </div>
 
+        </div>
+      );
+    }
+
+    function LogViewer() {
+      const [logs, setLogs] = React.useState('');
+      const [open, setOpen] = React.useState(false);
+      const [lines, setLines] = React.useState(100);
+
+      async function loadLogs() {
+        const res = await fetch(`/logs?lines=${lines}`);
+        const d = await res.json();
+        setLogs(d.log || '');
+        setOpen(true);
+      }
+
+      return (
+        <div>
+          <div style={{display:'flex', gap:8, alignItems:'center', marginBottom: open ? 8 : 0}}>
+            <button onClick={loadLogs} style={{
+              background:'var(--surface2)', border:'1px solid var(--border)',
+              color:'var(--muted)', padding:'4px 10px', borderRadius:4,
+              fontFamily:'"Fira Code",monospace', fontSize:'.72rem', cursor:'pointer'
+            }}>📋 Logs recientes</button>
+            {[50,100,500].map(n => (
+              <button key={n} onClick={() => { setLines(n); }} style={{
+                background: lines===n ? 'var(--blue-bg)' : 'var(--surface2)',
+                border:`1px solid ${lines===n ? 'rgba(56,189,248,.3)' : 'var(--border)'}`,
+                color: lines===n ? 'var(--blue)' : 'var(--dim)',
+                padding:'3px 8px', borderRadius:3,
+                fontFamily:'"Fira Code",monospace', fontSize:'.68rem', cursor:'pointer'
+              }}>{n} líneas</button>
+            ))}
+            {open && <button onClick={() => setOpen(false)} style={{
+              background:'transparent', border:'none', color:'var(--dim)', cursor:'pointer', fontSize:'.8rem'
+            }}>✕</button>}
+          </div>
+          {open && (
+            <div style={{
+              background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:6,
+              padding:12, maxHeight:400, overflowY:'auto',
+              fontFamily:'"Fira Code",monospace', fontSize:'.68rem', lineHeight:1.5
+            }}>
+              <pre style={{color:'var(--muted)', whiteSpace:'pre-wrap', wordBreak:'break-all', margin:0}}>
+                {logs || '// sin logs'}
+              </pre>
+            </div>
+          )}
         </div>
       );
     }

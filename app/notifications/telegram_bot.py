@@ -39,7 +39,7 @@ def _call_opencode(prompt: str) -> str:
     try:
         result = subprocess.run(
             [OPENCODE_BIN, "run", "--model", OPENCODE_MODEL, "--format", "json", prompt],
-            capture_output=True, text=True, timeout=90,
+            capture_output=True, text=True, timeout=150,
             cwd="/home/frankpach/ibkr-bot",
         )
         text_parts = []
@@ -529,23 +529,46 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Uso: /analizar SYMBOL (ej: /analizar NFLX)")
         return
     symbol = ctx.args[0].upper()
-
-    # Run in executor to avoid blocking event loop
     loop = asyncio.get_event_loop()
+
+    # Progress steps to show
+    progress_steps = [
+        f"🔍 <b>{symbol}</b> — Obteniendo datos de mercado...",
+        f"📊 <b>{symbol}</b> — Calculando indicadores técnicos...",
+        f"🤖 <b>{symbol}</b> — Consultando LLM (puede tardar 1-2 min)...",
+    ]
+
+    msg = await update.message.reply_text(progress_steps[0], parse_mode="HTML")
+
+    import threading
+    step = [0]
+    stop_event = threading.Event()
+
+    async def _update_progress():
+        for text in progress_steps[1:]:
+            await asyncio.sleep(8)
+            if stop_event.is_set():
+                return
+            try:
+                await msg.edit_text(text, parse_mode="HTML")
+            except Exception:
+                pass
+
+    # Start progress updates in background
+    progress_task = asyncio.ensure_future(_update_progress())
 
     def run_pipeline():
         from app.analysis.pipeline import AnalysisPipeline, AnalysisContext
         from app.llm.agent import get_data_layer
-        from app.notifications.telegram import notify as sync_notify
 
         data_layer = get_data_layer()
         context = AnalysisContext(mode="on_demand")
-        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=sync_notify)
+        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=None)  # use None to avoid duplicate notifications
         return pipeline.run()
 
-    await update.message.reply_text(f"Analyzing <b>{symbol}</b>...", parse_mode="HTML")
-
     result = await loop.run_in_executor(None, run_pipeline)
+    stop_event.set()
+    progress_task.cancel()
 
     # Build response message
     score_str = f"{result.score.total:.0f}/100" if result.score else "N/A"
@@ -605,8 +628,8 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         msg_parts.append("\U0001f4c8 Execute? Use:")
         msg_parts.append("<code>/si</code> to place order")
 
-    msg = "\n".join(msg_parts)
-    await update.message.reply_text(msg, parse_mode="HTML")
+    final_text = "\n".join(msg_parts)
+    await update.message.reply_text(final_text, parse_mode="HTML")
 
 @_only_owner
 async def cmd_proponer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

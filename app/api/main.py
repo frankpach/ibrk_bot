@@ -602,6 +602,20 @@ def close_all_positions():
 from fastapi.responses import HTMLResponse
 
 
+@app.get("/logs")
+def get_logs(lines: int = 100):
+    """Return last N lines of bot.log for dashboard log viewer."""
+    import os
+    log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bot.log")
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        last_lines = all_lines[-lines:]
+        return {"lines": lines, "count": len(last_lines), "log": "".join(last_lines)}
+    except Exception as e:
+        return {"lines": lines, "count": 0, "log": f"Error reading log: {e}"}
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     from app.api.dashboard import render_dashboard_html
