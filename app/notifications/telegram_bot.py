@@ -746,7 +746,7 @@ def start_bot(scheduler):
         logger.warning("TELEGRAM_BOT_TOKEN not set - bot not started")
         return
 
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(None).build()
     app.add_handler(CommandHandler("estado", cmd_estado))
     app.add_handler(CommandHandler("posiciones", cmd_posiciones))
     app.add_handler(CommandHandler("historial", cmd_historial))
