@@ -45,7 +45,20 @@ class IBKRClient:
         self.ib = IB()
         self._lock = threading.Lock()
         self._client_id = client_id if client_id is not None else IB_CLIENT_ID
-        self._run_sync(self._connect_async())
+        # Retry connection up to 3 times — clientId may be briefly held by previous instance
+        _connected = False
+        for attempt in range(3):
+            try:
+                self._run_sync(self._connect_async())
+                _connected = True
+                break
+            except Exception as e:
+                import time
+                logger.warning(f"IB Gateway connect attempt {attempt+1}/3 failed: {e}")
+                if attempt < 2:
+                    time.sleep(5)
+        if not _connected:
+            logger.error("Could not connect to IB Gateway after 3 attempts — starting in offline mode")
         self._initialized = True
 
     def _run_loop(self):
