@@ -560,3 +560,48 @@ def test_orders_place_dedup_block():
                 "order_type": "MKT", "stop_loss_pct": 0.02, "take_profit_pct": 0.04,
             })
             assert resp.status_code == 429
+
+
+def test_dashboard_data_returns_all_fields():
+    """GET /dashboard/data returns all required top-level fields."""
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        mock.get_account.return_value = {"net_liquidation": 1000.0}
+        MockClient.return_value = mock
+        client = _fresh_client()
+        resp = client.get("/dashboard/data")
+        assert resp.status_code == 200
+        data = resp.json()
+        required = ["status", "open_trades", "closed_trades", "signals",
+                    "patterns", "learning", "account_history", "latest_account",
+                    "news", "scanner", "symbols_universe", "ib_connected",
+                    "earnings_warnings"]
+        for field in required:
+            assert field in data, f"Missing field: {field}"
+
+
+def test_dashboard_data_scanner_has_six_types():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+        resp = client.get("/dashboard/data")
+        assert resp.status_code == 200
+        scanner = resp.json()["scanner"]
+        for key in ("most_active", "top_movers", "gainers", "losers", "sector", "implied_move"):
+            assert key in scanner
+
+
+def test_dashboard_symbol_endpoint():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+        resp = client.get("/dashboard/symbol/AAPL?period=intraday")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["symbol"] == "AAPL"
+        assert "bars" in data

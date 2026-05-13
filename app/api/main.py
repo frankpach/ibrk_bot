@@ -608,10 +608,12 @@ def dashboard_data():
         status["paused"] = ctrl.is_paused
     except RuntimeError:
         pass
+    status["drawdown_pct"] = 0.0
 
     # ── Open trades ──
     trades_out = [
         {
+            "trade_id": t.id,
             "symbol": t.symbol, "action": t.action,
             "quantity": t.quantity,
             "entry_price": t.entry_fill_price or t.entry_price,
@@ -684,6 +686,107 @@ def dashboard_data():
     except Exception:
         pass
 
+    # --- 1. Position snapshots (live P&L per open trade) ---
+    try:
+        from app.db.database import get_position_snapshots
+        pos_snaps = get_position_snapshots()  # {trade_id: {current_price, pnl_usd, pnl_pct, updated_at}}
+        for t in trades_out:
+            snap = pos_snaps.get(t.get("trade_id"))
+            if snap:
+                t["current_price"] = snap.get("current_price")
+                t["pnl_usd"] = snap.get("pnl_usd", 0.0)
+                t["pnl_pct"] = snap.get("pnl_pct", 0.0)
+                t["snapshot_at"] = snap.get("updated_at")
+            else:
+                t["current_price"] = t.get("entry_price")
+                t["pnl_usd"] = 0.0
+                t["pnl_pct"] = 0.0
+                t["snapshot_at"] = None
+    except Exception as e:
+        logger.warning(f"Position snapshots failed: {e}")
+
+    # --- 2. Account history for equity curve ---
+    account_history = []
+    latest_account = {}
+    try:
+        from app.db.database import get_account_history
+        account_history = get_account_history(days=30)
+        if account_history:
+            latest_account = account_history[-1]
+    except Exception as e:
+        logger.warning(f"Account history failed: {e}")
+
+    # --- 3. News (filtered by approved symbols) ---
+    news = []
+    try:
+        from app.db.database import get_news_cache
+        all_syms = get_approved_symbols()
+        news = get_news_cache(symbols=all_syms[:40], limit=20)
+    except Exception as e:
+        logger.warning(f"News cache failed: {e}")
+
+    # --- 4. Scanner results (all scan types) ---
+    scanner = {}
+    try:
+        from app.db.database import get_scanner_results
+        for scan_type in ("most_active", "top_movers", "gainers", "losers", "sector", "implied_move"):
+            scanner[scan_type] = get_scanner_results(scan_type)
+    except Exception as e:
+        logger.warning(f"Scanner results failed: {e}")
+
+    # --- 5. Symbol universe with calibration data ---
+    symbols_universe = []
+    try:
+        from app.db.database import get_or_create_symbol_parameters
+        for sym in get_approved_symbols()[:40]:
+            try:
+                params = get_or_create_symbol_parameters(sym)
+                trades_sym = get_closed_trades_by_symbol(sym, limit=20)
+                wins = sum(1 for t in trades_sym if (t.pnl_pct or 0) > 0)
+                win_rate = round(wins / len(trades_sym), 3) if trades_sym else None
+                multipliers_drifted = {
+                    k: round(getattr(params, f"{k}_mult", 1.0), 3)
+                    for k in ("momentum", "trend", "volume", "volatility")
+                    if abs(getattr(params, f"{k}_mult", 1.0) - 1.0) > 0.05
+                }
+                symbols_universe.append({
+                    "symbol": sym,
+                    "backtest_calibrated": bool(getattr(params, "backtest_calibrated", 0)),
+                    "backtest_calibrated_at": getattr(params, "backtest_calibrated_at", None),
+                    "backtest_profit_factor": getattr(params, "backtest_profit_factor", None),
+                    "stop_loss_pct": params.stop_loss_pct,
+                    "take_profit_pct": params.take_profit_pct,
+                    "trade_count": params.trade_count,
+                    "win_rate": win_rate,
+                    "multipliers_drifted": multipliers_drifted,
+                })
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"Symbols universe failed: {e}")
+
+    # --- 6. IB connection status ---
+    ib_connected = False
+    try:
+        ib_connected = bool(client.ib.isConnected())
+    except Exception:
+        pass
+
+    # --- 7. Earnings warnings for open positions ---
+    earnings_warnings = {}
+    try:
+        from datetime import datetime as _dt
+        from app.llm.agent import get_data_layer
+        data_layer_inst = get_data_layer()
+        for trade in open_trades:
+            ed = data_layer_inst.get_earnings_date(trade.symbol)
+            if ed:
+                days_until = (ed - _dt.now()).days
+                if 0 <= days_until <= 3:
+                    earnings_warnings[trade.symbol] = days_until
+    except Exception as e:
+        logger.debug(f"Earnings warnings: {e}")
+
     return {
         "status": status,
         "open_trades": trades_out,
@@ -691,7 +794,47 @@ def dashboard_data():
         "signals": signals_out,
         "patterns": patterns_out,
         "learning": learning,
+        "account_history": account_history,
+        "latest_account": latest_account,
+        "news": news,
+        "scanner": scanner,
+        "symbols_universe": symbols_universe,
+        "ib_connected": ib_connected,
+        "earnings_warnings": earnings_warnings,
     }
+
+
+@app.get("/dashboard/symbol/{symbol}")
+def dashboard_symbol_data(symbol: str, period: str = "intraday"):
+    """Lazy-loaded symbol data for dashboard chart. Uses IBDataLayer cache."""
+    try:
+        from app.llm.agent import get_data_layer
+        data_layer = get_data_layer()
+        result: dict = {"symbol": symbol.upper(), "period": period, "bars": []}
+        if period == "intraday":
+            df = data_layer.get_ohlcv(symbol, "1 D", "5 mins", "scanner")
+        else:
+            df = data_layer.get_ohlcv(symbol, "30 D", "1 day", "scanner")
+        if df is not None and len(df) > 0:
+            result["bars"] = [
+                {"close": round(float(r["close"]), 4),
+                 "volume": int(r.get("volume", 0))}
+                for _, r in df.iterrows()
+            ]
+        if period == "indicators":
+            from app.analysis.indicators import compute_features
+            if df is not None and len(df) >= 15:
+                fs = compute_features(symbol, df)
+                result.update({
+                    "rsi_14": fs.rsi_14,
+                    "macd_line": fs.macd_line,
+                    "bollinger_position": fs.bollinger_position,
+                    "volume_ratio_20d": fs.volume_ratio_20d,
+                })
+        return result
+    except Exception as e:
+        logger.error(f"dashboard_symbol_data({symbol}): {e}")
+        return {"symbol": symbol, "bars": [], "error": str(e)}
 
 
 @app.get("/backtest/{symbol}")
