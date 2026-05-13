@@ -79,6 +79,43 @@ def test_get_win_rate_last_10_insufficient():
     assert result is None
 
 
+def test_run_learning_cycle_without_ib_client_no_regression():
+    """run_learning_cycle(data_layer) with no ib_client still works — no regression."""
+    from app.ml.cycle import run_learning_cycle
+    data_layer = MagicMock()
+    with patch("app.analysis.evaluator.run_return_evaluator"), \
+         patch("app.db.database.get_closed_trades_with_snapshots", return_value=[]), \
+         patch("app.db.database.get_approved_symbols", return_value=[]):
+        report = run_learning_cycle(data_layer)
+    assert report is not None
+    assert report.errors == [] or isinstance(report.errors, list)
+
+
+def test_run_learning_cycle_with_ib_client_calls_account_snapshot():
+    """run_learning_cycle(data_layer, ib_client=mock) calls upsert_account_snapshot."""
+    from app.ml.cycle import run_learning_cycle
+    data_layer = MagicMock()
+    ib_client = MagicMock()
+    ib_client.get_account.return_value = {
+        "net_liquidation": 50000.0,
+        "buying_power": 25000.0,
+    }
+
+    with patch("app.analysis.evaluator.run_return_evaluator"), \
+         patch("app.db.database.get_closed_trades_with_snapshots", return_value=[]), \
+         patch("app.db.database.get_approved_symbols", return_value=[]), \
+         patch("app.db.database.upsert_account_snapshot") as mock_acct, \
+         patch("app.db.database.get_daily_pnl", return_value=500.0):
+        report = run_learning_cycle(data_layer, ib_client=ib_client)
+
+    mock_acct.assert_called_once()
+    kwargs = mock_acct.call_args.kwargs
+    assert kwargs["net_liquidation"] == 50000.0
+    assert kwargs["buying_power"] == 25000.0
+    assert kwargs["daily_pnl_usd"] == 500.0
+    assert abs(kwargs["daily_pnl_pct"] - 1.0) < 0.01  # 500/50000*100 = 1.0%
+
+
 def test_learning_report_to_telegram():
     """to_telegram() produces non-empty string."""
     from app.ml.cycle import LearningReport

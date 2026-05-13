@@ -351,6 +351,30 @@ def main():
         minutes=10,
         id="reconciler",
     )
+    def _run_news_fetch():
+        try:
+            dl = _ib_client_ref.get("data_layer")
+            if dl:
+                from app.scanner.news_fetcher import fetch_and_cache_news
+                fetch_and_cache_news(dl)
+        except Exception as e:
+            logger.error(f"News fetch error: {e}")
+
+    def _run_scanner_fetch():
+        try:
+            dl = _ib_client_ref.get("data_layer")
+            if dl:
+                from app.scanner.market_scanner import (
+                    fetch_and_cache_scanner, fetch_and_cache_sectors, fetch_implied_move,
+                )
+                from app.db.database import get_approved_symbols
+                fetch_and_cache_scanner(dl)
+                fetch_and_cache_sectors(dl)
+                syms = get_approved_symbols()[:10]
+                fetch_implied_move(dl, syms)
+        except Exception as e:
+            logger.error(f"Scanner fetch error: {e}")
+
     def _send_digest():
         """Send periodic digest summary."""
         try:
@@ -377,6 +401,14 @@ def main():
         hour="10,14", minute=0, timezone=MARKET_TZ,
         id="digest_job", replace_existing=True,
     )
+    scheduler.add_job(
+        _run_news_fetch, "interval", minutes=10,
+        id="news_fetch", replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_scanner_fetch, "interval", minutes=5,
+        id="scanner_fetch", replace_existing=True,
+    )
 
     if data_layer:
         from app.analysis.admission import run_daily_discovery
@@ -395,7 +427,10 @@ def main():
 
         def _run_learning_cycle():
             try:
-                run_learning_cycle(_ib_client_ref["data_layer"])
+                data_layer = _ib_client_ref.get("data_layer")
+                ib_client = _ib_client_ref.get("client")
+                if data_layer:
+                    run_learning_cycle(data_layer, ib_client=ib_client)
             except Exception as e:
                 logger.error(f"Learning cycle error: {e}")
 

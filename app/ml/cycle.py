@@ -34,7 +34,7 @@ class LearningReport:
         return "\n".join(lines)
 
 
-def run_learning_cycle(data_layer) -> LearningReport:
+def run_learning_cycle(data_layer, ib_client=None) -> LearningReport:
     """
     Daily learning cycle: evaluate returns → retrain → rollback check → report.
     Each step is independent; failures are captured in LearningReport.errors.
@@ -83,7 +83,25 @@ def run_learning_cycle(data_layer) -> LearningReport:
         report.errors.append(f"Symbol loop: {e}")
         logger.error(f"Symbol loop failed: {e}")
 
-    # Step 4: notify only when there's something worth reporting
+    # Step 4: save daily account snapshot when IB client is available
+    if ib_client is not None:
+        try:
+            from app.db.database import upsert_account_snapshot, get_daily_pnl
+            account = ib_client.get_account()
+            daily_pnl = get_daily_pnl()
+            capital = float(account.get("net_liquidation") or 0.0)
+            upsert_account_snapshot(
+                date=datetime.utcnow().strftime("%Y-%m-%d"),
+                net_liquidation=round(capital, 2),
+                buying_power=round(float(account.get("buying_power") or 0.0), 2),
+                daily_pnl_usd=round(daily_pnl, 2),
+                daily_pnl_pct=round(daily_pnl / capital * 100, 4) if capital else 0.0,
+            )
+        except Exception as _snap_err:
+            report.errors.append(f"Account snapshot: {_snap_err}")
+            logger.error(f"Account snapshot failed: {_snap_err}")
+
+    # Step 5: notify only when there's something worth reporting
     has_news = (
         report.signal_filter_auc is not None
         or report.symbols_rolled_back

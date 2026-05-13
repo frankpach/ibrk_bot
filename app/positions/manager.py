@@ -160,6 +160,18 @@ def check_positions():
             qty = trade.remaining_quantity or trade.quantity
             pnl_usd = pnl_pct * entry * qty
 
+            try:
+                from app.db.database import upsert_position_snapshot
+                upsert_position_snapshot(
+                    trade_id=trade.id,
+                    symbol=trade.symbol,
+                    current_price=price,
+                    pnl_usd=round(pnl_usd, 2),
+                    pnl_pct=round(pnl_pct, 4),
+                )
+            except Exception as _snap_err:
+                logger.debug(f"Position snapshot write skipped: {_snap_err}")
+
             # 1) Check partial exit first (only if profitable)
             partial = partial_mgr.check_exit(trade, price)
             if partial.should_exit:
