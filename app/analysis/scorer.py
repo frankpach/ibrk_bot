@@ -97,17 +97,11 @@ def _dim_volatility(features) -> float:
     if features.atr_pct is None:
         return 0.0
     atr = features.atr_pct
-    if atr >= 4.0:
-        return 1.0
-    if atr >= 2.5:
-        return 0.85
-    if atr >= 1.5:
-        return 0.7
-    if atr >= 1.0:
-        return 0.5
-    if atr >= 0.5:
-        return 0.3
-    return 0.1
+    if 1.0 <= atr <= 2.5: return 1.0   # Optimal zone for fixed SL
+    if 0.5 <= atr < 1.0:  return 0.6   # Too low: little expected movement
+    if 2.5 < atr <= 4.0:  return 0.5   # High: SL noise risk
+    if atr > 4.0:          return 0.2   # Very high: weak signal
+    return 0.3
 
 
 def _dim_portfolio_fit(portfolio: list, capital: float = 500.0) -> float:

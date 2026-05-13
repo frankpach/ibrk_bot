@@ -109,23 +109,38 @@ def test_dim_volume_none():
 
 # ---------- _dim_volatility ----------
 def test_dim_volatility_high():
+    # ATR=5.0 is very high — SL noise risk is severe → 0.2
     f = _make_features(atr_pct=5.0)
-    assert _dim_volatility(f) == 1.0
+    assert _dim_volatility(f) == 0.2
 
 
 def test_dim_volatility_med():
+    # ATR=1.2 is in optimal zone [1.0, 2.5] → 1.0
     f = _make_features(atr_pct=1.2)
-    assert _dim_volatility(f) == 0.5
+    assert _dim_volatility(f) == 1.0
 
 
 def test_dim_volatility_low():
+    # ATR=0.3 is below 0.5 (very low movement expected) → 0.3
     f = _make_features(atr_pct=0.3)
-    assert _dim_volatility(f) == 0.1
+    assert _dim_volatility(f) == 0.3
 
 
 def test_dim_volatility_none():
     f = _make_features()
     assert _dim_volatility(f) == 0.0
+
+
+def test_dim_volatility_optimal():
+    # ATR=2.0 is in optimal zone [1.0, 2.5] → 1.0
+    f = _make_features(atr_pct=2.0)
+    assert _dim_volatility(f) == 1.0
+
+
+def test_dim_volatility_high_zone():
+    # ATR=3.0 is in high zone (2.5, 4.0] → 0.5
+    f = _make_features(atr_pct=3.0)
+    assert _dim_volatility(f) == 0.5
 
 
 # ---------- _dim_portfolio_fit ----------
