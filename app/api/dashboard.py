@@ -857,6 +857,372 @@ def render_dashboard_html() -> str:
       );
     }
 
+    /* ──────────────────── PART B COMPONENTS ──────────────────── */
+
+    /* Symbol Chart (lazy, 3 tabs) */
+    function SymbolChart({ data }) {
+      const [selected, setSelected] = React.useState(null);
+      const [chartData, setChartData] = React.useState(null);
+      const [tab, setTab] = React.useState('intraday');
+      const [loading, setLoading] = React.useState(false);
+
+      const chips = React.useMemo(() => {
+        const syms = [
+          ...(data?.open_trades || []).map(t => t.symbol),
+          ...(data?.signals || []).slice(0,4).map(s => s.symbol),
+        ];
+        return [...new Set(syms)].slice(0,8);
+      }, [data]);
+
+      async function loadChart(sym, period) {
+        setLoading(true);
+        try {
+          const res = await fetch(`/dashboard/symbol/${sym}?period=${period}`);
+          setChartData(await res.json());
+        } catch(e) { setChartData(null); }
+        setLoading(false);
+      }
+
+      function selectSym(sym) {
+        setSelected(sym);
+        loadChart(sym, tab);
+      }
+
+      function switchTab(t) {
+        setTab(t);
+        if (selected) loadChart(selected, t);
+      }
+
+      const trade = data?.open_trades?.find(t => t.symbol === selected);
+
+      function LineChart({ bars, sl, tp, entryPrice, action }) {
+        if (!bars?.length) return <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>// sin datos disponibles</span>;
+        const closes = bars.map(b => b.close);
+        const min = Math.min(...closes), max = Math.max(...closes);
+        const range = max - min || 1;
+        const W = 420, H = 120;
+        const pts = closes.map((c,i) => `${(i/(closes.length-1))*W},${H - ((c-min)/range)*(H-10) - 5}`).join(' ');
+        const first = parseFloat(closes[0]), last = parseFloat(closes[closes.length-1]);
+        const color = last >= first ? 'var(--green)' : 'var(--red)';
+        const slY = sl ? H - ((sl - min)/range)*(H-10) - 5 : null;
+        const tpY = tp ? H - ((tp - min)/range)*(H-10) - 5 : null;
+        const entY = entryPrice ? H - ((entryPrice - min)/range)*(H-10) - 5 : null;
+        return (
+          <svg width="100%" height={H+20} viewBox={`0 0 ${W} ${H+20}`} preserveAspectRatio="none" style={{overflow:'visible'}}>
+            {slY !== null && <line x1="0" y1={slY} x2={W} y2={slY} stroke="var(--red)" strokeWidth="1" strokeDasharray="4,3" opacity=".7"/>}
+            {tpY !== null && <line x1="0" y1={tpY} x2={W} y2={tpY} stroke="var(--green)" strokeWidth="1" strokeDasharray="4,3" opacity=".6"/>}
+            {entY !== null && <line x1="0" y1={entY} x2={W} y2={entY} stroke="var(--amber)" strokeWidth="1" strokeDasharray="3,3" opacity=".8"/>}
+            <polyline points={pts} fill="none" stroke={color} strokeWidth="2"/>
+            {slY !== null && <text x="3" y={slY-3} fill="var(--red)" fontSize="8" fontFamily="monospace">SL</text>}
+            {tpY !== null && <text x="3" y={tpY-3} fill="var(--green)" fontSize="8" fontFamily="monospace">TP</text>}
+          </svg>
+        );
+      }
+
+      if (!chips.length) return null;
+
+      return (
+        <div className="card fade-up">
+          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',padding:'8px 12px',background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}>
+            <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.67rem',color:'var(--dim)'}}>SYM:</span>
+            {chips.map(sym => (
+              <button key={sym} onClick={() => selectSym(sym)}
+                style={{padding:'3px 10px',borderRadius:12,fontFamily:'"Fira Code",monospace',fontSize:'.68rem',cursor:'pointer',
+                  border:'1px solid '+(selected===sym ? 'rgba(56,189,248,.35)':'var(--border)'),
+                  background:selected===sym ? 'var(--blue-bg)':'transparent',
+                  color:selected===sym ? 'var(--blue)':'var(--muted)'}}>
+                {sym}
+              </button>
+            ))}
+            {!selected && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.64rem',color:'var(--dimmer)',marginLeft:4}}>selecciona un símbolo</span>}
+          </div>
+          <div className="ch">
+            <span className="ct">{selected || 'Símbolo'} {chartData?.bars?.length ? `· ${chartData.bars.length} barras` : ''}</span>
+            <div className="tabs">
+              {['intraday','daily','indicators'].map(t => (
+                <button key={t} className={`tab${tab===t?' on':''}`} onClick={() => switchTab(t)}>
+                  {t==='intraday' ? 'Hoy 5min' : t==='daily' ? '30D diario' : 'Indicadores'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="cb" style={{padding:'8px 12px',minHeight:140}}>
+            {loading && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>cargando...</span>}
+            {!loading && tab !== 'indicators' && (
+              <LineChart bars={chartData?.bars} sl={trade?.stop_loss_price} tp={trade?.take_profit_price} entryPrice={trade?.entry_price} action={trade?.action}/>
+            )}
+            {!loading && tab === 'indicators' && chartData && (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
+                {chartData.rsi_14 != null && <div><span style={{color:'var(--dim)'}}>RSI </span><span style={{color:chartData.rsi_14<30||chartData.rsi_14>70?'var(--amber)':'var(--text)'}}>{f.n(chartData.rsi_14)}</span></div>}
+                {chartData.bollinger_position != null && <div><span style={{color:'var(--dim)'}}>BOLL </span><span style={{color:'var(--text)'}}>{f.n(chartData.bollinger_position,3)}</span></div>}
+                {chartData.volume_ratio_20d != null && <div><span style={{color:'var(--dim)'}}>VOL </span><span style={{color:chartData.volume_ratio_20d>1.5?'var(--green)':'var(--text)'}}>{f.n(chartData.volume_ratio_20d,1)}×</span></div>}
+                {chartData.macd_line != null && <div><span style={{color:'var(--dim)'}}>MACD </span><span style={{color:'var(--text)'}}>{f.n(chartData.macd_line,4)}</span></div>}
+              </div>
+            )}
+            {!loading && !chartData && selected && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>// sin datos para {selected}</span>}
+          </div>
+        </div>
+      );
+    }
+
+    /* Noticias (3 tabs, default "universe") */
+    function NewsCard({ data }) {
+      const [tab, setTab] = React.useState('universe');
+      const allNews = data?.news || [];
+      const openSyms = new Set((data?.open_trades||[]).map(t=>t.symbol));
+      const univSyms = new Set((data?.symbols_universe||[]).map(s=>s.symbol));
+
+      const filtered = {
+        universe: allNews.filter(n => univSyms.has(n.symbol)),
+        all: allNews,
+        positions: allNews.filter(n => openSyms.has(n.symbol)),
+      };
+      const items = filtered[tab] || [];
+      const sentColor = s => s==='positive'?'var(--green)':s==='negative'?'var(--red)':'var(--dim)';
+
+      return (
+        <div className="card fade-up">
+          <div className="ch">
+            <span className="ct">Noticias IBKR</span>
+            <div className="tabs">
+              {[['universe','Mi universo'],['all','Todas'],['positions','Posiciones']].map(([k,l])=>(
+                <button key={k} className={`tab${tab===k?' on':''}`} onClick={()=>setTab(k)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{padding:'0 12px'}}>
+            {!items.length && <div style={{padding:'16px 0',textAlign:'center',fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dimmer)'}}>// sin noticias en caché aún</div>}
+            {items.slice(0,5).map((n,i)=>(
+              <div key={i} style={{padding:'9px 0',borderBottom:'1px solid var(--border)',display:'flex',gap:10}}>
+                <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1rem',minWidth:44,color:'var(--text)'}}>{n.symbol||'MKT'}</span>
+                <div>
+                  <p style={{fontSize:'.8rem',lineHeight:1.35,color:'var(--text)',marginBottom:3}}>{n.headline}</p>
+                  <div style={{display:'flex',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.63rem',color:'var(--dim)'}}>
+                    <span>{n.provider}</span>
+                    <span>{n.fetched_at?.slice(11,16)||''}</span>
+                    <span style={{padding:'1px 5px',borderRadius:3,border:'1px solid',fontSize:'.62rem',
+                      color:sentColor(n.sentiment),borderColor:sentColor(n.sentiment)+'44',
+                      background:sentColor(n.sentiment)+'11'}}>{n.sentiment||'neutral'}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* Market Trends (6 tabs) */
+    function MarketTrendsCard({ data }) {
+      const [tab, setTab] = React.useState('most_active');
+      const scanner = data?.scanner || {};
+
+      const tabs = [
+        ['most_active','Más activos'],['top_movers','Top Movers'],
+        ['gainers','Gainers'],['losers','Losers'],
+        ['sector','Sectores'],['implied_move','Implied Move'],
+      ];
+
+      async function proposeSymbol(symbol) {
+        try {
+          await fetch('/symbols/propose', {method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({symbol, reason:'Added from Market Trends dashboard'})});
+        } catch(e) {}
+      }
+
+      const rows = scanner[tab] || [];
+
+      return (
+        <div className="card fade-up">
+          <div className="ch">
+            <span className="ct">Market Trends</span>
+            <div className="tabs">
+              {tabs.map(([k,l])=>(
+                <button key={k} className={`tab${tab===k?' on':''}`} onClick={()=>setTab(k)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{padding:'0 12px'}}>
+            {!rows.length && <div style={{padding:'14px 0',textAlign:'center',fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dimmer)'}}>// actualizando cada 5min...</div>}
+            {tab === 'sector' ? (
+              <div style={{display:'flex',flexDirection:'column',gap:6,padding:'10px 0'}}>
+                {rows.map((r,i)=>{
+                  const pct = parseFloat(r.change_pct||0);
+                  const color = pct>=0?'var(--green)':'var(--red)';
+                  return (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.73rem'}}>
+                      <span style={{width:36,color:'var(--text)',fontWeight:500}}>{r.symbol}</span>
+                      <span style={{width:80,color:'var(--muted)',fontSize:'.68rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>
+                      <div style={{flex:1,height:7,borderRadius:4,background:'rgba(255,255,255,.04)',overflow:'hidden'}}>
+                        <div style={{height:'100%',width:`${Math.min(Math.abs(pct)*10,100)}%`,background:color,borderRadius:4}}/>
+                      </div>
+                      <span style={{color,width:44,textAlign:'right'}}>{pct>=0?'+':''}{pct.toFixed(1)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : tab === 'implied_move' ? (
+              <div style={{display:'flex',flexDirection:'column',gap:4,padding:'8px 0'}}>
+                {rows.map((r,i)=>{
+                  const move = parseFloat(r.change_pct||0);
+                  const color = move>3?'var(--amber)':'var(--green)';
+                  return (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.73rem'}}>
+                      <span style={{width:48,color:'var(--text)',fontWeight:500,fontFamily:'"Bebas Neue",cursive',fontSize:'1rem'}}>{r.symbol}</span>
+                      <div style={{flex:1,height:7,borderRadius:4,background:'rgba(255,255,255,.04)',overflow:'hidden'}}>
+                        <div style={{height:'100%',width:`${Math.min(move*12,100)}%`,background:color,borderRadius:4}}/>
+                      </div>
+                      <span style={{color,width:44,textAlign:'right'}}>±{move.toFixed(1)}%</span>
+                      <span style={{color:'var(--dimmer)',fontSize:'.63rem'}}>7d</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div>
+                <div style={{padding:'5px 0 3px',fontFamily:'"Fira Code",monospace',fontSize:'.63rem',color:'var(--dimmer)'}}>
+                  {tab==='most_active'?'Most active by volume':tab==='top_movers'?'Largest % moves':tab==='gainers'?'Top gainers':'Top losers'} · 5min
+                </div>
+                {rows.slice(0,6).map((r,i)=>{
+                  const pct = parseFloat(r.change_pct||0);
+                  const vr = parseFloat(r.volume_ratio||0);
+                  return (
+                    <div key={i} style={{display:'grid',gridTemplateColumns:'48px 1fr 60px 55px 66px',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)',gap:4,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
+                      <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.05rem',color:'var(--text)'}}>{r.symbol}</span>
+                      <span style={{color:'var(--muted)',fontSize:'.68rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||''}</span>
+                      <span style={{color:pct>=0?'var(--green)':'var(--red)'}}>{pct>=0?'+':''}{pct.toFixed(1)}%</span>
+                      <span style={{padding:'1px 5px',borderRadius:3,fontSize:'.63rem',
+                        background:vr>2?'var(--green-bg)':'var(--amber-bg)',
+                        color:vr>2?'var(--green)':'var(--amber)',
+                        border:`1px solid ${vr>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}`}}>{vr.toFixed(1)}×</span>
+                      <button onClick={()=>proposeSymbol(r.symbol)}
+                        style={{background:'var(--blue-bg)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',padding:'2px 7px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
+                        + añadir
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* Mi Universo table */
+    function UniversoTable({ data }) {
+      const syms = data?.symbols_universe || [];
+      if (!syms.length) return null;
+
+      async function recalibrate(symbol) {
+        try {
+          await fetch(`/symbols/approve/${symbol}`, {method:'POST'});
+          alert(`Calibración iniciada para ${symbol}. Recibirás notificación en Telegram.`);
+        } catch(e) {}
+      }
+
+      return (
+        <div className="card fade-up">
+          <div className="ch"><span className="ct">Mi Universo — Entrenamiento y Backtesting</span></div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
+              <thead>
+                <tr>
+                  {['SYM','CALIBRADO','SL%','TP%','P.FACTOR','WIN RATE','TRADES','APRENDIZAJE','ÚLTIMA CAL.',''].map(h=>(
+                    <th key={h} style={{color:'var(--dim)',fontWeight:500,padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {syms.map(s=>(
+                  <tr key={s.symbol} style={{borderBottom:'1px solid var(--border)'}}>
+                    <td style={{padding:'5px 8px',color:'var(--text)',fontWeight:500}}>{s.symbol}</td>
+                    <td style={{padding:'5px 8px'}}>
+                      {s.backtest_calibrated
+                        ? <span style={{background:'var(--green-bg)',color:'var(--green)',border:'1px solid rgba(16,185,129,.3)',padding:'1px 6px',borderRadius:3,fontSize:'.63rem'}}>✓ backtest</span>
+                        : <span style={{background:'rgba(100,116,139,.1)',color:'var(--dim)',border:'1px solid var(--border)',padding:'1px 6px',borderRadius:3,fontSize:'.63rem'}}>defaults</span>}
+                    </td>
+                    <td style={{padding:'5px 8px',color:'var(--muted)'}}>{((s.stop_loss_pct||0)*100).toFixed(1)}%</td>
+                    <td style={{padding:'5px 8px',color:'var(--muted)'}}>{((s.take_profit_pct||0)*100).toFixed(1)}%</td>
+                    <td style={{padding:'5px 8px',color:'var(--muted)'}}>{s.backtest_profit_factor?.toFixed(2)||'—'}</td>
+                    <td style={{padding:'5px 8px',color:s.win_rate>=.5?'var(--green)':s.win_rate!=null?'var(--red)':'var(--dim)'}}>
+                      {s.win_rate!=null?`${(s.win_rate*100).toFixed(0)}%`:'—'}
+                    </td>
+                    <td style={{padding:'5px 8px',color:'var(--muted)'}}>{s.trade_count}</td>
+                    <td style={{padding:'5px 8px',maxWidth:120}}>
+                      {Object.entries(s.multipliers_drifted||{}).map(([k,v])=>(
+                        <span key={k} style={{marginRight:4,fontSize:'.63rem',color:v>1?'var(--green)':'var(--amber)'}}>
+                          {k.slice(0,3)} {v>1?'▲':'▼'}{v.toFixed(2)}
+                        </span>
+                      ))}
+                    </td>
+                    <td style={{padding:'5px 8px',color:'var(--dimmer)'}}>{s.backtest_calibrated_at?.slice(0,10)||'—'}</td>
+                    <td style={{padding:'5px 8px'}}>
+                      <button onClick={()=>recalibrate(s.symbol)}
+                        style={{background:'var(--blue-bg)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',
+                          padding:'2px 8px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
+                        ↻ Recal.
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    /* Control Bar */
+    function ControlBar({ data }) {
+      const mode = (data?.status?.mode||'paper').toUpperCase();
+      const paused = data?.status?.paused;
+      const ibConn = data?.ib_connected;
+
+      async function toggleScanner() {
+        if (!ibConn) return;
+        const ep = paused ? '/system/resume' : '/system/pause';
+        await fetch(ep, {method:'POST'}).catch(()=>{});
+      }
+
+      async function setNotifLevel(level) {
+        await fetch(`/notifications/level/${level}`, {method:'POST'}).catch(()=>{});
+      }
+
+      return (
+        <div className="card fade-up">
+          <div className="ch"><span className="ct">Control del Sistema</span></div>
+          <div style={{padding:'10px 12px',display:'flex',flexWrap:'wrap',alignItems:'center',gap:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:'.68rem',color:'var(--dim)',fontFamily:'"Fira Code",monospace'}}>SCANNER</span>
+              <button onClick={toggleScanner} disabled={!ibConn}
+                style={{padding:'3px 10px',borderRadius:4,fontSize:'.78rem',fontFamily:'"Barlow Condensed",sans-serif',
+                  fontWeight:700,letterSpacing:'.04em',cursor:ibConn?'pointer':'not-allowed',border:'1px solid',
+                  background: paused?'var(--red-bg)':'var(--green-bg)',
+                  color: paused?'var(--red)':'var(--green)',
+                  borderColor: paused?'rgba(244,63,94,.3)':'rgba(16,185,129,.3)'}}>
+                {paused ? '⏸ PAUSADO' : '▶ ACTIVO'}
+              </button>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:'.68rem',color:'var(--dim)',fontFamily:'"Fira Code",monospace'}}>NOTIF</span>
+              {['critico','normal','verbose'].map(l=>(
+                <button key={l} onClick={()=>setNotifLevel(l)}
+                  style={{padding:'3px 8px',borderRadius:3,fontSize:'.68rem',fontFamily:'"Fira Code",monospace',
+                    cursor:'pointer',border:'1px solid var(--border)',background:'transparent',color:'var(--muted)'}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <span style={{marginLeft:'auto',fontFamily:'"Fira Code",monospace',fontSize:'.64rem',color:'var(--dimmer)'}}>
+              ⚡ cerrar posición / pausar → confirmación Telegram
+            </span>
+          </div>
+        </div>
+      );
+    }
+
     /* ── Main App ── */
     function App() {
       const [data, setData] = useState(null);
@@ -909,6 +1275,13 @@ def render_dashboard_html() -> str:
               <MiCuenta data={data} />
             </div>
 
+            <SymbolChart data={data} />
+
+            <div className="row-2">
+              <NewsCard data={data} />
+              <MarketTrendsCard data={data} />
+            </div>
+
             <div className="row-2">
               <div className="card fade-up">
                 <div className="ch"><span className="ct">Señales Detectadas</span></div>
@@ -932,6 +1305,9 @@ def render_dashboard_html() -> str:
               </div>
               <div className="cb"><Learning data={data?.learning} /></div>
             </div>
+
+            <UniversoTable data={data} />
+            <ControlBar data={data} />
 
             {err && (
               <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.75rem',

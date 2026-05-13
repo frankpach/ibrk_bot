@@ -423,6 +423,22 @@ def system_resume():
     return {"status": "resumed"}
 
 
+@app.post("/notifications/level/{level}")
+def set_notification_level(level: str):
+    """Set notification level: critico, normal, verbose."""
+    from app.notifications.policy import NotificationPolicy
+    level_map = {"critico": "critical_only", "normal": "normal", "verbose": "verbose"}
+    mapped = level_map.get(level.lower())
+    if mapped is None:
+        raise HTTPException(status_code=400, detail=f"Invalid level '{level}'. Use: critico, normal, verbose")
+    try:
+        policy = NotificationPolicy()
+        policy.set_level(mapped)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "ok", "level": level, "mapped": mapped}
+
+
 @app.post("/system/mode/{mode}")
 def system_mode(mode: str):
     from app.system.controller import get_controller
