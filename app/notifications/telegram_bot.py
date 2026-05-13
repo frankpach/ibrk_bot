@@ -804,6 +804,12 @@ def start_bot(scheduler):
                 allowed_updates=["message", "callback_query"],
             )
             logger.info("Telegram polling active")
+            # Notify owner that bot is ready
+            from app.notifications.telegram import notify
+            try:
+                notify("🤖 Bot iniciado y escuchando comandos.\nUsa /ayuda para ver los comandos disponibles.")
+            except Exception:
+                pass
             # Keep coroutine alive until cancelled
             await asyncio.Event().wait()
 
