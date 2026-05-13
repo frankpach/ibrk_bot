@@ -161,41 +161,29 @@ def main():
     _last_connected_at = time.time() if (ib_client and ib_client.ib.isConnected()) else None
     _MISSING_SCAN_JOBS = []  # cola de scans que fallaron por desconexión
 
-    def _check_gateway_and_reconnect():
-        """Verifica la conexión a IB Gateway y reconecta si es necesario.
-        Si ib_client nunca se creó (arranque sin IB), lo instancia ahora.
-        """
-        nonlocal _last_connected_at
-        client = _ib_client_ref["client"]
-
-        # Caso 1: nunca se conectó al arrancar → intentar crear cliente nuevo
-        if client is None:
-            if _is_gateway_online():
-                logger.info("IB Gateway disponible. Creando IBKRClient por primera vez...")
-                try:
-                    new_client = get_client()
-                    _ib_client_ref["client"] = new_client
-                    client = new_client
-                    # Crear data_layer si no existe
-                    if _ib_client_ref["data_layer"] is None:
-                        from app.analysis.data import IBDataLayer
-                        _ib_client_ref["data_layer"] = IBDataLayer(new_client)
-                        logger.info("IBDataLayer creado")
-                    notify("IB Gateway conectado por primera vez. Sistema recuperado.")
-                    logger.info("IBKRClient creado exitosamente")
-                    _last_connected_at = time.time()
-                    # Reconciliar y reintentar scans pendientes
-                    reconcile_positions(client)
-                    _retry_missed_scans()
-                except Exception as e:
-                    logger.error(f"No se pudo crear IBKRClient: {e}")
-            return
+    def _save_account_snapshot(ib_client_instance):
+        """Save current account balance to account_snapshots when IB is connected."""
         try:
-            if not client.ib.isConnected():
-                raise ConnectionError("IB desconectado")
-            run_scan(client)
+            if not ib_client_instance or not ib_client_instance.ib.isConnected():
+                return
+            acct = ib_client_instance.get_account()
+            from app.db.database import upsert_account_snapshot, get_daily_pnl
+            from app.api.capital import get_operating_capital
+            from datetime import datetime as _dt
+            nl = float(acct.get("net_liquidation") or 0.0)
+            bp = float(acct.get("buying_power") or 0.0)
+            pnl = get_daily_pnl()
+            capital = get_operating_capital(nl) or nl or 500.0
+            upsert_account_snapshot(
+                date=_dt.utcnow().strftime("%Y-%m-%d"),
+                net_liquidation=round(nl, 2),
+                buying_power=round(bp, 2),
+                daily_pnl_usd=round(pnl, 2),
+                daily_pnl_pct=round(pnl / capital * 100, 4) if capital else 0.0,
+            )
+            logger.info(f"Account snapshot saved: NL=${nl:.2f} BP=${bp:.2f}")
         except Exception as e:
-            logger.error(f"run_scan falló: {e}")
+            logger.debug(f"Account snapshot skipped: {e}")
 
     def _check_gateway_and_reconnect():
         """Verifica la conexión a IB Gateway y reconecta si es necesario.
@@ -241,10 +229,12 @@ def main():
                 logger.info("IB Gateway reconnected")
                 _last_connected_at = time.time()
                 _retry_missed_scans()
+                _save_account_snapshot(client)
             except Exception as e:
                 logger.error(f"Reconnect failed: {e}")
         else:
             _last_connected_at = time.time()
+            _save_account_snapshot(client)
 
     def _retry_missed_scans():
         """Reintenta scans pre-open que fallaron por desconexión."""

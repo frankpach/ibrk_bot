@@ -636,21 +636,52 @@ def dashboard_data():
     # ── Status ──
     daily_pnl = get_daily_pnl()
     open_trades = get_open_trades()
+
+    # Try live IBKR account data first; fall back to last DB snapshot
+    _acct = {}
+    _acct_live = False
     try:
         _acct = client.get_account()
-        _capital = get_operating_capital(_acct.get("net_liquidation", 0.0))
+        _acct_live = bool(_acct.get("net_liquidation"))
     except Exception:
+        pass
+
+    # Fallback: use last account_snapshots entry when IB is offline
+    if not _acct_live:
+        try:
+            from app.db.database import get_account_history
+            hist = get_account_history(days=1)
+            if hist:
+                last = hist[-1]
+                _acct = {
+                    "net_liquidation": last.get("net_liquidation", 0.0),
+                    "buying_power": last.get("buying_power", 0.0),
+                }
+        except Exception:
+            pass
+
+    _nl = float(_acct.get("net_liquidation") or 0.0)
+    _bp = float(_acct.get("buying_power") or 0.0)
+    _capital = get_operating_capital(_nl) if _nl else None
+    if not _capital:
         from app.config.settings import CAPITAL_CAP
         _capital = CAPITAL_CAP
 
+    # Detect mode from settings + controller
+    from app.config.settings import PAPER_TRADING_ONLY
+    _mode = "paper" if PAPER_TRADING_ONLY else "live"
+
     status = {
-        "mode": "paper",
+        "mode": _mode,
         "paused": False,
         "daily_pnl_usd": round(daily_pnl, 2),
         "daily_pnl_pct": round(daily_pnl / _capital * 100, 4) if _capital else 0.0,
         "open_positions": len(open_trades),
         "operating_capital": _capital,
         "simulated_capital": _capital,
+        "net_liquidation": round(_nl, 2),
+        "buying_power": round(_bp, 2),
+        "ib_data_live": _acct_live,
     }
     try:
         from app.system.controller import get_controller
