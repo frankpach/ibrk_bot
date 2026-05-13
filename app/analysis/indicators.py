@@ -46,6 +46,11 @@ class FeatureSet:
     rs_vs_qqq_30d: Optional[float] = None
     # Price change today (gap + intraday)
     price_change_pct: Optional[float] = None
+    # Hourly timeframe features
+    rsi_1h: Optional[float] = None
+    volume_ratio_1h: Optional[float] = None
+    # Weekly trend
+    weekly_trend: Optional[str] = None  # "BULLISH" | "BEARISH" | "NEUTRAL"
     # Learned relevance per indicator (multipliers 0.5-1.5)
     feature_relevance: dict = field(default_factory=dict)
 
@@ -215,6 +220,11 @@ def compute_features(
         yesterday_close = df_daily["close"].iloc[-2]
         if yesterday_close > 0:
             fs.price_change_pct = round(float((today["close"] - yesterday_close) / yesterday_close * 100), 2)
+
+    # Hourly features (when available)
+    if df_hourly is not None and len(df_hourly) >= 15:
+        fs.rsi_1h = _compute_rsi(df_hourly)
+        fs.volume_ratio_1h = _compute_volume_ratio(df_hourly)
 
     if hv_series is not None and len(hv_series) > 0:
         fs.hist_volatility_30d = round(float(hv_series["close"].iloc[-1]), 4)

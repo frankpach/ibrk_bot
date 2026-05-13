@@ -68,6 +68,8 @@ class SignalFilter:
             _get('rs_vs_spy_30d', 0),
             _get('day_of_week', 0),
             _get('hour', 10),
+            _get('rsi_1h', 50),            # NEW: hourly RSI
+            _get('volume_ratio_1h', 1.0),  # NEW: hourly volume ratio
         ]
 
     def predict(self, features) -> float:
