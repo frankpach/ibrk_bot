@@ -145,6 +145,7 @@ class IBKRClient:
                 "symbol": item.contract.symbol,
                 "quantity": item.position,
                 "avg_cost": item.averageCost,
+                "market_price": item.marketPrice,
                 "market_value": item.marketValue,
                 "unrealized_pnl": item.unrealizedPNL,
             }

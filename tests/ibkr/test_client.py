@@ -80,10 +80,11 @@ def test_get_portfolio():
     client._lock = MagicMock()
     client._run_sync = MagicMock(return_value=[{
         "symbol": "AAPL", "quantity": 10, "avg_cost": 145.0,
-        "market_value": 1500.0, "unrealized_pnl": 50.0
+        "market_price": 150.0, "market_value": 1500.0, "unrealized_pnl": 50.0
     }])
     result = client.get_portfolio()
     assert result[0]["symbol"] == "AAPL"
+    assert result[0]["market_price"] == 150.0
 
 
 def test_place_order_lmt_with_price():
