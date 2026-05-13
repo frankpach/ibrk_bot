@@ -98,12 +98,29 @@ class IBDataLayer:
             what_to_show = get_what_to_show(sec_type)
             use_rth = get_use_rth(sec_type)
 
+            def _fetch(dur: str):
+                """Fetch historical bars — thread-safe for Python 3.12+."""
+                ib_loop = getattr(self._client, "_loop", None)
+                if isinstance(ib_loop, asyncio.AbstractEventLoop) and ib_loop.is_running():
+                    # Called from a thread without its own event loop — use IB client loop
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._client.ib.reqHistoricalDataAsync(
+                            contract, endDateTime="", durationStr=dur,
+                            barSizeSetting=bar_size, whatToShow=what_to_show,
+                            useRTH=use_rth, formatDate=1,
+                        ),
+                        ib_loop,
+                    )
+                    return future.result(timeout=30)
+                # Called from the IB loop thread directly (safe to call synchronously)
+                return self._client.ib.reqHistoricalData(
+                    contract, endDateTime="", durationStr=dur,
+                    barSizeSetting=bar_size, whatToShow=what_to_show,
+                    useRTH=use_rth, formatDate=1,
+                )
+
             # Primary request
-            bars = self._client.ib.reqHistoricalData(
-                contract, endDateTime="", durationStr=duration,
-                barSizeSetting=bar_size, whatToShow=what_to_show,
-                useRTH=use_rth, formatDate=1,
-            )
+            bars = _fetch(duration)
 
             # Fallback: if empty, try shorter durations progressively
             fallback_durations = ["30 D", "10 D", "5 D", "2 D"]
@@ -112,11 +129,7 @@ class IBDataLayer:
                     break
                 try:
                     logger.info(f"Retrying {symbol} with duration={fallback} (primary={duration} returned {len(bars) if bars else 0})")
-                    bars = self._client.ib.reqHistoricalData(
-                        contract, endDateTime="", durationStr=fallback,
-                        barSizeSetting=bar_size, whatToShow=what_to_show,
-                        useRTH=use_rth, formatDate=1,
-                    )
+                    bars = _fetch(fallback)
                 except Exception as retry_err:
                     logger.warning(f"Fallback {fallback} for {symbol} failed: {retry_err}")
 
@@ -167,6 +180,26 @@ class IBDataLayer:
             logger.warning(f"IBDataLayer.get_indicators({symbol}): {e}")
             return {}
 
+    def _fetch_threadsafe(self, contract, duration: str, bar_size: str,
+                          what_to_show: str, use_rth: bool = True) -> list:
+        """Thread-safe reqHistoricalData — works from any thread in Python 3.12+."""
+        ib_loop = getattr(self._client, "_loop", None)
+        if isinstance(ib_loop, asyncio.AbstractEventLoop) and ib_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(
+                self._client.ib.reqHistoricalDataAsync(
+                    contract, endDateTime="", durationStr=duration,
+                    barSizeSetting=bar_size, whatToShow=what_to_show,
+                    useRTH=use_rth, formatDate=1,
+                ),
+                ib_loop,
+            )
+            return future.result(timeout=30) or []
+        return self._client.ib.reqHistoricalData(
+            contract, endDateTime="", durationStr=duration,
+            barSizeSetting=bar_size, whatToShow=what_to_show,
+            useRTH=use_rth, formatDate=1,
+        ) or []
+
     def get_historical_volatility(self, symbol: str, context: str) -> pd.DataFrame | None:
         key = self._cache_key(symbol, context, "HV")
         cached = self._get_cached(key)
@@ -175,11 +208,8 @@ class IBDataLayer:
         try:
             from ib_insync import Stock
             contract = Stock(symbol.upper(), "SMART", "USD")
-            bars = self._client.ib.reqHistoricalData(
-                contract, endDateTime="", durationStr="30 D",
-                barSizeSetting="1 day", whatToShow="HISTORICAL_VOLATILITY",
-                useRTH=True, formatDate=1,
-            )
+            bars = self._fetch_threadsafe(contract, "30 D", "1 day",
+                                          "HISTORICAL_VOLATILITY", True)
             if not bars:
                 return None
             df = pd.DataFrame([{"close": b.close} for b in bars])
@@ -197,11 +227,8 @@ class IBDataLayer:
         try:
             from ib_insync import Stock
             contract = Stock(symbol.upper(), "SMART", "USD")
-            bars = self._client.ib.reqHistoricalData(
-                contract, endDateTime="", durationStr="30 D",
-                barSizeSetting="1 day", whatToShow="OPTION_IMPLIED_VOLATILITY",
-                useRTH=True, formatDate=1,
-            )
+            bars = self._fetch_threadsafe(contract, "30 D", "1 day",
+                                          "OPTION_IMPLIED_VOLATILITY", True)
             if not bars:
                 return None
             df = pd.DataFrame([{"close": b.close} for b in bars])
