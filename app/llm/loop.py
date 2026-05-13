@@ -82,14 +82,32 @@ def process_pending_signals():
 
 def _execute_order(symbol: str, decision: LLMDecision) -> bool:
     """Envía la orden a FastAPI. Primero hace preview para obtener unidades fraccionales."""
+    from app.config.settings import ENTRY_SLIPPAGE_BUFFER
+
+    # Calculate limit_price using current market price + slippage buffer
+    limit_price = None
+    order_type = "LMT"
+    try:
+        price_resp = httpx.get(f"{API_BASE}/price/{symbol}", timeout=5)
+        if price_resp.status_code == 200:
+            current_price = price_resp.json().get("market_price")
+            if current_price:
+                if decision.action == "BUY":
+                    limit_price = round(float(current_price) * (1 + ENTRY_SLIPPAGE_BUFFER), 2)
+                else:
+                    limit_price = round(float(current_price) * (1 - ENTRY_SLIPPAGE_BUFFER), 2)
+    except Exception:
+        order_type = "MKT"  # fallback to MKT if price fetch fails
+        limit_price = None
+
     preview_payload = {
         "symbol": symbol,
         "action": decision.action,
         "quantity": 1,  # placeholder, se recalcula en preview
-        "order_type": "MKT",
+        "order_type": order_type,
         "stop_loss_pct": decision.stop_loss_pct,
         "take_profit_pct": decision.take_profit_pct,
-        "limit_price": None,
+        "limit_price": limit_price,
     }
     try:
         # 1) Preview para obtener unidades calculadas
@@ -112,10 +130,10 @@ def _execute_order(symbol: str, decision: LLMDecision) -> bool:
             "symbol": symbol,
             "action": decision.action,
             "quantity": units,
-            "order_type": "MKT",
+            "order_type": order_type,
             "stop_loss_pct": decision.stop_loss_pct,
             "take_profit_pct": decision.take_profit_pct,
-            "limit_price": None,
+            "limit_price": limit_price,
         }
         r = httpx.post(f"{API_BASE}/orders/place", json=place_payload, timeout=30)
         if r.status_code == 403:
