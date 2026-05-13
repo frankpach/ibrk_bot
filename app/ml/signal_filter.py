@@ -53,16 +53,21 @@ class SignalFilter:
             logger.info("No signal filter model found — using heuristic fallback")
 
     def _extract_features(self, features) -> list:
-        """Extract numeric features from FeatureSet or similar object."""
+        """Extract numeric features from FeatureSet, dict, or similar object."""
+        def _get(key, default):
+            if isinstance(features, dict):
+                return features.get(key, default) or default
+            return getattr(features, key, default) or default
+
         return [
-            getattr(features, 'rsi_14', 50) or 50,
-            getattr(features, 'macd_line', 0) or 0,
-            getattr(features, 'atr_pct', 2.0) or 2.0,
-            getattr(features, 'volume_ratio_20d', 1.0) or 1.0,
-            getattr(features, 'bollinger_position', 0.5) or 0.5,
-            getattr(features, 'rs_vs_spy_30d', 0) or 0,
-            getattr(features, 'day_of_week', 0) or 0,
-            getattr(features, 'hour', 10) or 10,
+            _get('rsi_14', 50),
+            _get('macd_line', 0),
+            _get('atr_pct', 2.0),
+            _get('volume_ratio_20d', 1.0),
+            _get('bollinger_position', 0.5),
+            _get('rs_vs_spy_30d', 0),
+            _get('day_of_week', 0),
+            _get('hour', 10),
         ]
 
     def predict(self, features) -> float:
@@ -140,9 +145,10 @@ class SignalFilter:
                     if not snap_id:
                         continue
                     from app.db.database import get_feature_snapshot_by_id
-                    snap = get_feature_snapshot_by_id(snap_id)
-                    if snap is None:
+                    snap_or_none = get_feature_snapshot_by_id(snap_id)
+                    if snap_or_none is None:
                         continue
+                    snap = snap_or_none
                     pnl = getattr(trade, "pnl_pct", 0) or 0
 
                 X.append(self._extract_features(snap))
