@@ -567,13 +567,22 @@ from fastapi.responses import HTMLResponse
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    from app.api.dashboard import render_dashboard
+    from app.api.dashboard import render_dashboard_html
+    return HTMLResponse(content=render_dashboard_html())
+
+
+@app.get("/dashboard/data")
+def dashboard_data():
+    """JSON endpoint consumed by the React dashboard every 30s."""
+    import os
+    from pathlib import Path
     from app.db.database import (
         get_open_trades, get_closed_trades, get_pending_signals,
-        get_patterns_for_symbol, get_daily_pnl,
+        get_patterns_for_symbol, get_daily_pnl, get_closed_trades_by_symbol,
+        get_approved_symbols,
     )
-    from app.config.settings import ALLOWED_SYMBOLS
 
+    # ── Status ──
     daily_pnl = get_daily_pnl()
     open_trades = get_open_trades()
     try:
@@ -583,56 +592,106 @@ def dashboard():
         from app.config.settings import CAPITAL_CAP
         _capital = CAPITAL_CAP
 
-    status_data = {
+    status = {
         "mode": "paper",
         "paused": False,
         "daily_pnl_usd": round(daily_pnl, 2),
-        "daily_pnl_pct": round(daily_pnl / _capital * 100, 2) if _capital else 0.0,
+        "daily_pnl_pct": round(daily_pnl / _capital * 100, 4) if _capital else 0.0,
         "open_positions": len(open_trades),
         "operating_capital": _capital,
+        "simulated_capital": _capital,
     }
     try:
         from app.system.controller import get_controller
         ctrl = get_controller()
-        status_data["mode"] = ctrl.mode
-        status_data["paused"] = ctrl.is_paused
+        status["mode"] = ctrl.mode
+        status["paused"] = ctrl.is_paused
     except RuntimeError:
         pass
 
-    trades = [
+    # ── Open trades ──
+    trades_out = [
         {
-            "symbol": t.symbol, "action": t.action, "quantity": t.quantity,
-            "entry_price": t.entry_price, "stop_loss_price": t.stop_loss_price,
-            "take_profit_price": t.take_profit_price, "signal_strength": t.signal_strength,
-            "status": t.status, "opened_at": t.opened_at.isoformat(),
+            "symbol": t.symbol, "action": t.action,
+            "quantity": t.quantity,
+            "entry_price": t.entry_fill_price or t.entry_price,
+            "stop_loss_price": t.stop_loss_price,
+            "take_profit_price": t.take_profit_price,
+            "signal_strength": t.signal_strength,
+            "opened_at": t.opened_at.isoformat() if hasattr(t.opened_at, 'isoformat') else str(t.opened_at),
         }
         for t in open_trades
     ]
-    closed = [
+
+    # ── Closed trades (last 8, with pnl_pct) ──
+    closed_out = [
         {
-            "symbol": t.symbol, "action": t.action, "pnl_usd": t.pnl_usd,
+            "symbol": t.symbol, "action": t.action,
+            "pnl_usd": t.pnl_usd, "pnl_pct": t.pnl_pct,
             "exit_reason": t.exit_reason,
-            "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+            "closed_at": t.closed_at.isoformat() if t.closed_at and hasattr(t.closed_at, 'isoformat') else str(t.closed_at or ""),
         }
-        for t in get_closed_trades(limit=5)
+        for t in get_closed_trades(limit=8)
     ]
-    signals = [
+
+    # ── Signals (include extra_indicators for weekly_trend) ──
+    signals_out = [
         {
-            "symbol": s.symbol, "strength": s.strength, "rsi": s.rsi,
-            "volume_ratio": s.volume_ratio, "created_at": s.created_at.isoformat(),
+            "symbol": s.symbol, "strength": s.strength,
+            "rsi": s.rsi, "volume_ratio": s.volume_ratio,
+            "extra_indicators": s.extra_indicators or "{}",
+            "created_at": s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at),
         }
         for s in get_pending_signals()
     ]
-    all_patterns = []
-    for sym in ALLOWED_SYMBOLS[:5]:
-        for p in get_patterns_for_symbol(sym)[:1]:
-            all_patterns.append({
-                "symbol": p.symbol, "pattern": p.pattern_text,
-                "wins": p.win_count, "losses": p.loss_count,
-            })
 
-    html = render_dashboard(status_data, trades, closed, signals, all_patterns)
-    return HTMLResponse(content=html)
+    # ── Patterns (from approved symbols) ──
+    patterns_out = []
+    try:
+        syms = get_approved_symbols()[:8]
+        for sym in syms:
+            for p in get_patterns_for_symbol(sym, limit=1):
+                patterns_out.append({
+                    "symbol": p.symbol,
+                    "pattern_text": p.pattern_text,
+                    "wins": p.win_count, "losses": p.loss_count,
+                })
+    except Exception:
+        pass
+
+    # ── Learning metrics ──
+    learning = {"model_trained": False, "win_rates": {}, "total_trades": 0, "pkl_age_hours": None}
+    try:
+        pkl = Path("models/signal_filter.pkl")
+        if pkl.exists():
+            import time
+            age_h = (time.time() - pkl.stat().st_mtime) / 3600
+            learning["model_trained"] = True
+            learning["pkl_age_hours"] = round(age_h, 1)
+    except Exception:
+        pass
+    try:
+        all_closed = get_closed_trades(limit=150)
+        learning["total_trades"] = len(all_closed)
+        by_sym: dict = {}
+        for t in all_closed:
+            by_sym.setdefault(t.symbol, []).append(t)
+        for sym, ts in by_sym.items():
+            recent = ts[:10]
+            if len(recent) >= 3:
+                wins = sum(1 for t in recent if (t.pnl_pct or 0) > 0)
+                learning["win_rates"][sym] = round(wins / len(recent), 3)
+    except Exception:
+        pass
+
+    return {
+        "status": status,
+        "open_trades": trades_out,
+        "closed_trades": closed_out,
+        "signals": signals_out,
+        "patterns": patterns_out,
+        "learning": learning,
+    }
 
 
 @app.get("/backtest/{symbol}")

@@ -294,23 +294,12 @@ def test_dashboard():
     with patch("app.ibkr.client.IBKRClient") as MockClient:
         mock = MagicMock()
         mock.ib.isConnected.return_value = True
-        mock.get_account.return_value = {"net_liquidation": 1000.0}
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.api.dashboard.render_dashboard", return_value="<html></html>"), \
-             patch("app.system.controller.get_controller") as mock_ctrl, \
-             patch("app.db.database.get_open_trades", return_value=[]), \
-             patch("app.db.database.get_closed_trades", return_value=[]), \
-             patch("app.db.database.get_pending_signals", return_value=[]), \
-             patch("app.db.database.get_daily_pnl", return_value=0.0), \
-             patch("app.db.database.get_patterns_for_symbol", return_value=[]):
-            ctrl = MagicMock()
-            ctrl.mode = "paper"
-            ctrl.is_paused = False
-            mock_ctrl.return_value = ctrl
+        with patch("app.api.dashboard.render_dashboard_html", return_value="<html>ok</html>"):
             resp = client.get("/dashboard")
             assert resp.status_code == 200
-            assert resp.text == "<html></html>"
+            assert "html" in resp.text
 
 
 # ---- Backtest ----
