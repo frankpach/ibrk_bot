@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Final Additions</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@300;400;500&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#06090F;--surface:#0C1421;--surface2:#111D2E;--border:#1E2D42;--text:#E2E8F0;--muted:#94A3B8;--dim:#64748B;--dimmer:#334155;--green:#10B981;--red:#F43F5E;--blue:#38BDF8;--amber:#FBBF24;--purple:#A78BFA}
+[data-theme="light"]{--bg:#F1F5F9;--surface:#FFF;--surface2:#F8FAFC;--border:#E2E8F0;--text:#1E293B;--muted:#475569;--dim:#94A3B8;--dimmer:#CBD5E1;--green:#059669;--red:#DC2626;--blue:#0284C7;--amber:#D97706;--purple:#7C3AED}
+body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;padding:16px}
+h2{font-family:"Bebas Neue",cursive;font-size:1.7rem;letter-spacing:.08em;margin-bottom:2px}
+.sub{color:var(--dim);font-family:"Fira Code",monospace;font-size:.75rem;margin-bottom:20px}
+.slab{font-size:.67rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);margin-top:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:12px}
+.ch{background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ct{font-size:.67rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.cb{padding:12px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.row-2{grid-template-columns:1fr}}
+.tabs{display:flex;gap:2px;background:var(--bg);border-radius:5px;padding:2px;flex-wrap:wrap}
+.tab{padding:3px 8px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.65rem;color:var(--dim);cursor:pointer;border:none;background:transparent;white-space:nowrap}
+.tab.on{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.tc{display:none}.tc.on{display:block}
+/* news */
+.ni{padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:10px}.ni:last-child{border-bottom:none}
+.nsym{font-family:"Bebas Neue",cursive;font-size:1rem;min-width:44px;color:var(--text)}
+.nh{font-size:.78rem;line-height:1.35;color:var(--text);margin-bottom:3px}
+.nm{font-family:"Fira Code",monospace;font-size:.62rem;color:var(--dim);display:flex;gap:6px;align-items:center}
+.sp{padding:1px 5px;border-radius:3px;font-size:.62rem;font-family:"Fira Code",monospace}
+.spos{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.2)}
+.sneg{background:rgba(244,63,94,.1);color:var(--red);border:1px solid rgba(244,63,94,.2)}
+.sneu{background:rgba(100,116,139,.1);color:var(--dim);border:1px solid var(--border)}
+/* scanner */
+.sr{display:grid;grid-template-columns:46px 1fr 60px 55px 66px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);gap:4px;font-family:"Fira Code",monospace;font-size:.72rem}
+.sr:last-child{border-bottom:none}
+.ssym{font-family:"Bebas Neue",cursive;font-size:1rem;color:var(--text)}
+.sname{color:var(--muted);font-size:.67rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vbh{background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.25);padding:1px 5px;border-radius:3px;font-size:.62rem}
+.vbm{background:rgba(251,191,36,.08);color:var(--amber);border:1px solid rgba(251,191,36,.2);padding:1px 5px;border-radius:3px;font-size:.62rem}
+.badd{background:rgba(56,189,248,.1);color:var(--blue);border:1px solid rgba(56,189,248,.25);padding:2px 7px;border-radius:3px;font-size:.66rem;cursor:pointer;font-family:"Fira Code",monospace}
+/* sector bars */
+.sect{display:flex;align-items:center;gap:8px;padding:4px 0;font-family:"Fira Code",monospace;font-size:.72rem}
+.sect-name{width:90px;color:var(--muted);flex-shrink:0}
+.sect-bar{flex:1;height:7px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.04)}
+.sect-fill{height:100%;border-radius:4px}
+.sect-val{width:42px;text-align:right;flex-shrink:0}
+/* prediction */
+.pred{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-family:"Fira Code",monospace;font-size:.72rem}
+.pred:last-child{border-bottom:none}
+.pred-sym{font-family:"Bebas Neue",cursive;font-size:1rem;color:var(--text);width:50px}
+.pred-bar{flex:1;height:7px;border-radius:4px;background:rgba(251,191,36,.15);overflow:hidden;margin:0 8px}
+.pred-fill{height:100%;border-radius:4px;background:var(--amber)}
+/* recommended additions */
+.rec{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:11px 13px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start}
+.rec-icon{font-size:1.4rem;flex-shrink:0;margin-top:1px}
+.rec-title{font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:3px}
+.rec-desc{font-family:"Fira Code",monospace;font-size:.7rem;color:var(--muted);line-height:1.55}
+.tag{display:inline-block;padding:2px 7px;border-radius:3px;font-size:.63rem;font-family:"Fira Code",monospace;margin-top:4px}
+.te{background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.25)}
+.tm{background:rgba(251,191,36,.08);color:var(--amber);border:1px solid rgba(251,191,36,.2)}
+.th{background:rgba(244,63,94,.1);color:var(--red);border:1px solid rgba(244,63,94,.25)}
+/* mini widgets */
+.dd-bar{height:10px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);overflow:hidden;margin-top:4px}
+.earn-chip{display:inline-flex;gap:5px;align-items:center;background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.25);border-radius:4px;padding:2px 8px;font-family:"Fira Code",monospace;font-size:.68rem;color:var(--red)}
+.ml-stat{display:flex;flex-direction:column;gap:6px;font-family:"Fira Code",monospace;font-size:.72rem}
+.ml-row{display:flex;align-items:center;justify-content:space-between}
+.ml-label{color:var(--dim)}
+.ml-val{color:var(--text);font-weight:500}
+.auc-bar{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.04);overflow:hidden;margin:0 10px}
+.risk-bar{height:8px;border-radius:4px;position:relative;overflow:hidden;margin-top:5px}
+.risk-fill{height:100%;border-radius:4px;transition:width .4s ease}
+.risk-pin{position:absolute;top:-2px;width:3px;height:12px;background:var(--text);border-radius:2px}
+.theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:20px;font-size:.75rem;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:"Barlow Condensed",sans-serif;font-weight:600;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<button class="theme-btn" onclick="toggleTheme()"><span id="ti">☀️</span><span id="tl">Claro</span></button>
+
+<!-- ═══════════════════════════════════
+     CAMBIO 1: NEWS → "Mi universo" default
+     ═══════════════════════════════════ -->
+<div class="slab">Cambio 1 — Noticias: tab predeterminado "Mi universo"</div>
+<div class="card">
+  <div class="ch">
+    <span class="ct">Noticias IBKR</span>
+    <div class="tabs">
+      <button class="tab"    onclick="sw('nw','all')">Todas</button>
+      <button class="tab on" onclick="sw('nw','uni')">Mi universo ✓</button>
+      <button class="tab"    onclick="sw('nw','op')">Posiciones</button>
+    </div>
+  </div>
+  <div id="nw-all" class="tc" style="padding:0 12px">
+    <div class="ni"><span class="nsym">FED</span><div><p class="nh">Fed mantiene tasas; Powell señala cautela ante datos mixtos</p><div class="nm"><span>Dow Jones</span><span>hace 34min</span><span class="sp sneu">neutral</span></div></div></div>
+    <div class="ni"><span class="nsym">MKT</span><div><p class="nh">S&P 500 abre al alza; VIX en mínimos de 3 meses</p><div class="nm"><span>Briefing</span><span>hace 2h</span><span class="sp spos">positivo</span></div></div></div>
+  </div>
+  <div id="nw-uni" class="tc on" style="padding:0 12px">
+    <div style="padding:5px 0 3px;font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dimmer)">Filtrando por AAPL, NVDA, SPY, QQQ, MSFT, TSLA … (40 símbolos activos)</div>
+    <div class="ni"><span class="nsym">AAPL</span><div><p class="nh">Apple anuncia chip M4 para MacBook Air con eficiencia energética récord</p><div class="nm"><span>Briefing</span><span>hace 12min</span><span class="sp spos">positivo</span></div></div></div>
+    <div class="ni"><span class="nsym">NVDA</span><div><p class="nh">Blackwell GPU shipments delayed Q2 — analyst downgrade to neutral</p><div class="nm"><span>Briefing</span><span>hace 1h 20min</span><span class="sp sneg">negativo</span></div></div></div>
+    <div class="ni"><span class="nsym">TSLA</span><div><p class="nh">Tesla raises Model Y prices in Europe by 3% — supply constraints easing</p><div class="nm"><span>Briefing</span><span>hace 2h</span><span class="sp sneu">neutral</span></div></div></div>
+    <div class="ni"><span class="nsym">META</span><div><p class="nh">Meta AI Studio rolls out to all creators — monetization announced</p><div class="nm"><span>Dow Jones</span><span>hace 3h</span><span class="sp spos">positivo</span></div></div></div>
+  </div>
+  <div id="nw-op" class="tc" style="padding:0 12px">
+    <div class="ni"><span class="nsym">AAPL</span><div><p class="nh">Apple anuncia chip M4 para MacBook Air con eficiencia energética récord</p><div class="nm"><span>Briefing</span><span>hace 12min</span><span class="sp spos">positivo</span></div></div></div>
+    <div class="ni"><span class="nsym">NVDA</span><div><p class="nh">Blackwell GPU shipments delayed Q2 — analyst downgrade to neutral</p><div class="nm"><span>Briefing</span><span>hace 1h 20min</span><span class="sp sneg">negativo</span></div></div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     CAMBIO 2: MARKET TRENDS — 6 tabs
+     ═══════════════════════════════════ -->
+<div class="slab">Cambio 2 — Market Trends: 6 tabs</div>
+<div class="card">
+  <div class="ch">
+    <span class="ct">Market Trends</span>
+    <div class="tabs">
+      <button class="tab on" onclick="sw('sc','mv')">Más activos</button>
+      <button class="tab"    onclick="sw('sc','tm')">Top Movers</button>
+      <button class="tab"    onclick="sw('sc','ga')">Gainers</button>
+      <button class="tab"    onclick="sw('sc','lo')">Losers</button>
+      <button class="tab"    onclick="sw('sc','se')">Sectores</button>
+      <button class="tab"    onclick="sw('sc','pm')">Implied Move</button>
+    </div>
+  </div>
+
+  <!-- Más activos -->
+  <div id="sc-mv" class="tc on" style="padding:0 12px;display:block">
+    <div style="padding:5px 0 3px;font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dimmer)">Most active by volume · IBKR scanner · actualiza 5min</div>
+    <div class="sr"><span class="ssym">NVDA</span><span class="sname">Nvidia Corp</span><span style="color:var(--red)">-2.1%</span><span class="vbh">3.8×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">TSLA</span><span class="sname">Tesla Inc</span><span style="color:var(--green)">+4.3%</span><span class="vbh">4.2×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">AMD</span><span class="sname">Advanced Micro Devices</span><span style="color:var(--green)">+3.1%</span><span class="vbh">3.3×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">COIN</span><span class="sname">Coinbase Global</span><span style="color:var(--green)">+6.7%</span><span class="vbh">5.1×</span><button class="badd">+ añadir</button></div>
+  </div>
+
+  <!-- Top Movers -->
+  <div id="sc-tm" class="tc" style="padding:0 12px">
+    <div style="padding:5px 0 3px;font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dimmer)">Mayores movimientos en % · cualquier dirección</div>
+    <div class="sr"><span class="ssym">COIN</span><span class="sname">Coinbase</span><span style="color:var(--green)">+6.7%</span><span class="vbh">5.1×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">SNAP</span><span class="sname">Snap Inc</span><span style="color:var(--red)">-5.9%</span><span class="vbh">4.8×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">PLTR</span><span class="sname">Palantir</span><span style="color:var(--green)">+5.2%</span><span class="vbm">2.9×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">TSLA</span><span class="sname">Tesla Inc</span><span style="color:var(--green)">+4.3%</span><span class="vbh">4.2×</span><button class="badd">+ añadir</button></div>
+  </div>
+
+  <!-- Gainers -->
+  <div id="sc-ga" class="tc" style="padding:0 12px">
+    <div style="padding:5px 0 3px;font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dimmer)">Top gainers del día · % cambio</div>
+    <div class="sr"><span class="ssym">COIN</span><span class="sname">Coinbase</span><span style="color:var(--green)">+6.7%</span><span class="vbh">5.1×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">PLTR</span><span class="sname">Palantir</span><span style="color:var(--green)">+5.2%</span><span class="vbm">2.9×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">TSLA</span><span class="sname">Tesla Inc</span><span style="color:var(--green)">+4.3%</span><span class="vbh">4.2×</span><button class="badd">+ añadir</button></div>
+  </div>
+
+  <!-- Losers -->
+  <div id="sc-lo" class="tc" style="padding:0 12px">
+    <div style="padding:5px 0 3px;font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dimmer)">Top losers del día · % cambio</div>
+    <div class="sr"><span class="ssym">SNAP</span><span class="sname">Snap Inc</span><span style="color:var(--red)">-5.9%</span><span class="vbh">4.8×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">NVDA</span><span class="sname">Nvidia Corp</span><span style="color:var(--red)">-2.1%</span><span class="vbh">3.8×</span><button class="badd">+ añadir</button></div>
+    <div class="sr"><span class="ssym">PYPL</span><span class="sname">PayPal</span><span style="color:var(--red)">-1.8%</span><span class="vbm">2.2×</span><button class="badd">+ añadir</button></div>
+  </div>
+
+  <!-- Sectores -->
+  <div id="sc-se" class="tc cb">
+    <p style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--dimmer);margin-bottom:8px">Performance por sector hoy · sector ETFs via IBKR</p>
+    <div class="sect"><span class="sect-name">Tech (XLK)</span><div class="sect-bar"><div class="sect-fill" style="width:72%;background:var(--green)"></div></div><span class="sect-val" style="color:var(--green)">+1.8%</span></div>
+    <div class="sect"><span class="sect-name">Finance (XLF)</span><div class="sect-bar"><div class="sect-fill" style="width:55%;background:var(--green)"></div></div><span class="sect-val" style="color:var(--green)">+0.9%</span></div>
+    <div class="sect"><span class="sect-name">Consumer (XLY)</span><div class="sect-bar"><div class="sect-fill" style="width:40%;background:var(--green)"></div></div><span class="sect-val" style="color:var(--green)">+0.4%</span></div>
+    <div class="sect"><span class="sect-name">Energy (XLE)</span><div class="sect-bar"><div class="sect-fill" style="width:30%;background:var(--red)"></div></div><span class="sect-val" style="color:var(--red)">-0.7%</span></div>
+    <div class="sect"><span class="sect-name">Health (XLV)</span><div class="sect-bar"><div class="sect-fill" style="width:20%;background:var(--red)"></div></div><span class="sect-val" style="color:var(--red)">-1.1%</span></div>
+    <div class="sect"><span class="sect-name">Industrial (XLI)</span><div class="sect-bar"><div class="sect-fill" style="width:48%;background:var(--green)"></div></div><span class="sect-val" style="color:var(--green)">+0.2%</span></div>
+  </div>
+
+  <!-- Implied Move (Prediction Markets) -->
+  <div id="sc-pm" class="tc cb">
+    <p style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--dimmer);margin-bottom:8px">Movimiento esperado por opciones (IV implícita) · mi universo</p>
+    <div class="pred"><span class="pred-sym">NVDA</span><div class="pred-bar"><div class="pred-fill" style="width:68%"></div></div><span style="color:var(--amber);font-family:'Fira Code',monospace;font-size:.72rem">±4.2%</span><span style="color:var(--dimmer);font-family:'Fira Code',monospace;font-size:.62rem;margin-left:6px">7d</span></div>
+    <div class="pred"><span class="pred-sym">TSLA</span><div class="pred-bar"><div class="pred-fill" style="width:82%"></div></div><span style="color:var(--amber);font-family:'Fira Code',monospace;font-size:.72rem">±5.8%</span><span style="color:var(--dimmer);font-family:'Fira Code',monospace;font-size:.62rem;margin-left:6px">7d</span></div>
+    <div class="pred"><span class="pred-sym">AAPL</span><div class="pred-bar"><div class="pred-fill" style="width:35%"></div></div><span style="color:var(--green);font-family:'Fira Code',monospace;font-size:.72rem">±1.9%</span><span style="color:var(--dimmer);font-family:'Fira Code',monospace;font-size:.62rem;margin-left:6px">7d</span></div>
+    <div class="pred"><span class="pred-sym">META</span><div class="pred-bar"><div class="pred-fill" style="width:52%"></div></div><span style="color:var(--amber);font-family:'Fira Code',monospace;font-size:.72rem">±3.1%</span><span style="color:var(--dimmer);font-family:'Fira Code',monospace;font-size:.62rem;margin-left:6px">7d</span></div>
+    <div class="pred"><span class="pred-sym">SPY</span><div class="pred-bar"><div class="pred-fill" style="width:22%"></div></div><span style="color:var(--green);font-family:'Fira Code',monospace;font-size:.72rem">±1.2%</span><span style="color:var(--dimmer);font-family:'Fira Code',monospace;font-size:.62rem;margin-left:6px">7d</span></div>
+    <p style="font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dimmer);margin-top:8px">Rango ámbar &gt;3% = alta volatilidad esperada · verde = movimiento moderado</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     MIS RECOMENDACIONES ADICIONALES
+     ═══════════════════════════════════ -->
+<div class="slab">Mis 4 recomendaciones antes de pasar a arquitectura</div>
+
+<!-- 1. Earnings calendar -->
+<div class="rec">
+  <span class="rec-icon">📅</span>
+  <div>
+    <div class="rec-title">Earnings Calendar — badge en posiciones y señales</div>
+    <div class="rec-desc">
+      Cuando una posición abierta o señal tiene earnings en los próximos 3 días, mostrar un badge rojo de advertencia.<br>
+      El bot ya tiene <code>IBDataLayer.get_earnings_date()</code>. Solo hay que mostrarlo visualmente.<br>
+      Esto previene que el sistema entre o mantenga posiciones a través de earnings — el mayor riesgo de gap inesperado.
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-family:'Bebas Neue',cursive;font-size:1.1rem;color:var(--text)">NVDA</span>
+      <span style="background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:3px;font-size:.67rem;font-family:'Fira Code',monospace">BUY</span>
+      <span class="earn-chip">⚠ Earnings en 2 días</span>
+      <span style="font-family:'Fira Code',monospace;font-size:.67rem;color:var(--dimmer)">← aparece en la tarjeta de posición</span>
+    </div>
+    <span class="tag te">esfuerzo XS — get_earnings_date() ya existe</span>
+  </div>
+</div>
+
+<!-- 2. Drawdown gauge -->
+<div class="rec">
+  <span class="rec-icon">📉</span>
+  <div>
+    <div class="rec-title">Drawdown Gauge — qué tan cerca del modo cautious</div>
+    <div class="rec-desc">
+      El sistema tiene 4 modos automáticos: normal / cautious (5%) / pause (10%) / paper-only (15%).<br>
+      Frank necesita saber visualmente dónde está antes de que el sistema cambie de modo solo.<br>
+      Una barra de progreso en los stat cards muestra el drawdown actual vs los thresholds.
+    </div>
+    <div style="margin-top:8px;max-width:320px">
+      <div style="display:flex;justify-content:space-between;font-family:'Fira Code',monospace;font-size:.65rem;color:var(--dim);margin-bottom:4px">
+        <span>Drawdown actual: 3.2%</span><span style="color:var(--amber)">cautious en 5%</span>
+      </div>
+      <div style="height:10px;border-radius:5px;background:linear-gradient(to right,var(--green) 0% 33%,var(--amber) 33% 66%,var(--red) 66%);position:relative;overflow:visible">
+        <div style="position:absolute;left:64%;top:-3px;width:4px;height:16px;background:var(--text);border-radius:2px;box-shadow:0 0 4px var(--text)"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-family:'Fira Code',monospace;font-size:.6rem;color:var(--dimmer);margin-top:3px">
+        <span>0%</span><span>5% cautious</span><span>10% pause</span><span>15%</span>
+      </div>
+    </div>
+    <span class="tag te">esfuerzo XS — datos en drawdown.py ya calculados</span>
+  </div>
+</div>
+
+<!-- 3. Position risk gauge -->
+<div class="rec">
+  <span class="rec-icon">🎯</span>
+  <div>
+    <div class="rec-title">Risk/Reward Visual en cada posición</div>
+    <div class="rec-desc">
+      Por cada posición abierta: una barra que muestra dónde está el precio actual entre SL y TP.<br>
+      Verde si está cerca del TP, rojo si está cerca del SL. Inmediatamente comunica el estado de la posición sin calcular números.
+    </div>
+    <div style="margin-top:8px;max-width:280px">
+      <div style="display:flex;justify-content:space-between;font-family:'Fira Code',monospace;font-size:.63rem;margin-bottom:3px">
+        <span style="color:var(--red)">SL $177.74</span>
+        <span style="color:var(--text)">$184.20</span>
+        <span style="color:var(--green)">TP $193.24</span>
+      </div>
+      <div style="height:9px;border-radius:4px;background:linear-gradient(to right,rgba(244,63,94,.3),rgba(16,185,129,.3));position:relative">
+        <div style="position:absolute;left:41%;top:-2px;width:5px;height:13px;background:var(--text);border-radius:2px;box-shadow:0 0 5px var(--text)"></div>
+      </div>
+      <div style="font-family:'Fira Code',monospace;font-size:.63rem;color:var(--dim);margin-top:3px;text-align:center">41% del camino hacia TP · R/R actual 1:1.4</div>
+    </div>
+    <span class="tag te">esfuerzo XS — cálculo simple con datos existentes</span>
+  </div>
+</div>
+
+<!-- 4. Learning Engine widget -->
+<div class="rec">
+  <span class="rec-icon">🧠</span>
+  <div>
+    <div class="rec-title">Learning Engine Status — visible en el dashboard</div>
+    <div class="rec-desc">
+      Mini widget que muestra si el sistema está aprendiendo de verdad: AUC del modelo, cuántos trades tiene, cuándo fue el último retrain.<br>
+      Cuando el AUC mejora semana a semana, Frank sabe que el sistema está funcionando. Cuando no mejora, es una señal de investigar.
+    </div>
+    <div style="margin-top:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;max-width:320px">
+      <div style="font-size:.67rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Motor de Aprendizaje</div>
+      <div class="ml-stat">
+        <div class="ml-row">
+          <span class="ml-label">SignalFilter AUC</span>
+          <div style="display:flex;align-items:center;gap:8px;flex:1;margin-left:10px">
+            <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.05);overflow:hidden">
+              <div style="height:100%;width:63%;background:var(--blue);border-radius:3px"></div>
+            </div>
+            <span class="ml-val" style="color:var(--blue)">0.631</span>
+          </div>
+        </div>
+        <div class="ml-row"><span class="ml-label">Trades entrenados</span><span class="ml-val">47</span></div>
+        <div class="ml-row"><span class="ml-label">Último retrain</span><span class="ml-val" style="color:var(--green)">hoy 17:05</span></div>
+        <div class="ml-row"><span class="ml-label">Win rate global</span><span class="ml-val" style="color:var(--green)">58%</span></div>
+      </div>
+    </div>
+    <span class="tag te">esfuerzo XS — datos ya en LearningReport de cycle.py</span>
+  </div>
+</div>
+
+<script>
+function toggleTheme(){
+  const h=document.documentElement,d=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',d?'light':'dark');
+  document.getElementById('ti').textContent=d?'🌙':'☀️';
+  document.getElementById('tl').textContent=d?'Oscuro':'Claro';
+}
+function sw(card,name){
+  document.querySelectorAll('[id^="'+card+'-"]').forEach(el=>{
+    el.classList.remove('on');
+    const m=el.id.replace(card+'-','');
+    const b=document.querySelector('[onclick*="\''+card+'\',\''+m+'\'"]');
+    if(b)b.classList.remove('on');
+  });
+  const el=document.getElementById(card+'-'+name);
+  if(el)el.classList.add('on');
+  const b=document.querySelector('[onclick*="\''+card+'\',\''+name+'\'"]');
+  if(b)b.classList.add('on');
+}
+</script>
+</body>
+</html>

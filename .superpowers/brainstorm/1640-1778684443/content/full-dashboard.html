@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IBKR AI Trader — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@300;400;500&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ─── Reset & Tokens ─────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06090F;--surface:#0C1421;--surface2:#111D2E;--border:#1E2D42;
+  --text:#E2E8F0;--muted:#94A3B8;--dim:#64748B;--dimmer:#334155;
+  --green:#10B981;--red:#F43F5E;--blue:#38BDF8;--amber:#FBBF24;--purple:#A78BFA;
+  --green-bg:rgba(16,185,129,.12);--red-bg:rgba(244,63,94,.1);
+  --blue-bg:rgba(56,189,248,.1);--amber-bg:rgba(251,191,36,.08);
+}
+[data-theme="light"]{
+  --bg:#F1F5F9;--surface:#FFFFFF;--surface2:#F8FAFC;--border:#E2E8F0;
+  --text:#1E293B;--muted:#475569;--dim:#94A3B8;--dimmer:#CBD5E1;
+  --green:#059669;--red:#DC2626;--blue:#0284C7;--amber:#D97706;
+}
+body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;min-height:100vh}
+
+/* ─── IB Status Bar ──────────────────────────────── */
+.ib-bar{
+  padding:5px 16px;display:flex;align-items:center;gap:8px;
+  font-family:"Fira Code",monospace;font-size:.68rem;
+}
+.ib-bar.online{background:rgba(16,185,129,.08);border-bottom:1px solid rgba(16,185,129,.15)}
+.ib-bar.offline{background:rgba(244,63,94,.07);border-bottom:1px solid rgba(244,63,94,.15)}
+.ib-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.ib-bar.online .ib-dot{background:var(--green);box-shadow:0 0 5px var(--green)}
+.ib-bar.offline .ib-dot{background:var(--red)}
+.ib-bar.online .ib-status{color:var(--green)}
+.ib-bar.offline .ib-status{color:var(--red)}
+.ib-cache{margin-left:auto;color:var(--dimmer)}
+.ib-warn{color:var(--amber);margin-left:4px}
+
+/* ─── Header ─────────────────────────────────────── */
+.header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:9px 16px;display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:20;
+}
+.logo{font-family:"Bebas Neue",cursive;font-size:1.3rem;letter-spacing:.1em}
+.badge{padding:2px 8px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.68rem}
+.badge-paper{background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.badge-offline{background:var(--red-bg);color:var(--red);border:1px solid rgba(244,63,94,.25)}
+.hbtn{
+  padding:4px 10px;border-radius:5px;font-family:"Barlow Condensed",sans-serif;
+  font-size:.8rem;font-weight:600;letter-spacing:.04em;cursor:pointer;
+  background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+}
+.hbtn-pause{color:var(--amber);border-color:rgba(251,191,36,.25);background:var(--amber-bg)}
+.theme-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--dim);
+  padding:4px 10px;border-radius:20px;font-size:.75rem;cursor:pointer;
+  display:flex;align-items:center;gap:5px;font-family:"Barlow Condensed",sans-serif;font-weight:600;
+}
+.refresh-ring{width:20px;height:20px}
+.countdown{font-family:"Fira Code",monospace;font-size:.65rem;color:var(--dimmer)}
+
+/* ─── Layout ─────────────────────────────────────── */
+.page{max-width:1200px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.row-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:700px){.row-2,.row-3,.row-4{grid-template-columns:1fr}}
+
+/* ─── Cards ──────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.ch{
+  background:var(--surface2);border-bottom:1px solid var(--border);
+  padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+}
+.ct{font-size:.67rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.cb{padding:12px}
+
+/* ─── Stat cards ─────────────────────────────────── */
+.sc{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:12px}
+.sl{font-size:.62rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+.sv{font-family:"Bebas Neue",cursive;font-size:2.1rem;line-height:1.05}
+.ss{font-family:"Fira Code",monospace;font-size:.67rem;color:var(--muted);margin-top:2px}
+.green{color:var(--green)}.red{color:var(--red)}.blue{color:var(--blue)}.amber{color:var(--amber)}
+
+/* ─── Tabs ───────────────────────────────────────── */
+.tabs{display:flex;gap:2px;background:var(--bg);border-radius:5px;padding:2px}
+.tab{
+  padding:3px 9px;border-radius:4px;font-family:"Fira Code",monospace;
+  font-size:.66rem;color:var(--dim);cursor:pointer;border:none;background:transparent;
+  white-space:nowrap;
+}
+.tab.on{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.tc{display:none}.tc.on{display:block}
+
+/* ─── Positions ──────────────────────────────────── */
+.pos{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px}
+.pos:last-child{margin-bottom:0}
+.pos-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.psym{font-family:"Bebas Neue",cursive;font-size:1.25rem;letter-spacing:.06em}
+.ptag{padding:1px 6px;border-radius:3px;font-size:.67rem;font-family:"Fira Code",monospace}
+.buy{background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.sell{background:var(--red-bg);color:var(--red);border:1px solid rgba(244,63,94,.3)}
+.str-s{color:var(--green);background:var(--green-bg);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:3px;font-size:.67rem}
+.str-m{color:var(--amber);background:var(--amber-bg);border:1px solid rgba(251,191,36,.25);padding:1px 6px;border-radius:3px;font-size:.67rem}
+.ppnl{font-family:"Fira Code",monospace;font-size:.85rem;font-weight:500}
+.bcl{background:var(--red-bg);color:var(--red);border:1px solid rgba(244,63,94,.3);padding:3px 9px;border-radius:4px;font-size:.7rem;font-family:"Fira Code",monospace;cursor:pointer}
+.pos-g{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;font-family:"Fira Code",monospace;font-size:.71rem}
+.pk{color:var(--muted)}
+
+/* ─── Table ──────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-family:"Fira Code",monospace;font-size:.71rem}
+th{color:var(--dim);font-weight:500;padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted)}
+td.sym{color:var(--text);font-weight:500}tr:last-child td{border-bottom:none}
+
+/* ─── News ───────────────────────────────────────── */
+.ni{padding:9px 0;border-bottom:1px solid var(--border);display:flex;gap:10px}
+.ni:last-child{border-bottom:none}
+.nsym{font-family:"Bebas Neue",cursive;font-size:1.05rem;min-width:46px;color:var(--text)}
+.nh{font-size:.8rem;line-height:1.35;color:var(--text);margin-bottom:3px}
+.nm{font-family:"Fira Code",monospace;font-size:.63rem;color:var(--dim);display:flex;gap:7px;align-items:center}
+.sp{padding:1px 5px;border-radius:3px;font-size:.62rem;font-family:"Fira Code",monospace}
+.spos{background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.2)}
+.sneg{background:var(--red-bg);color:var(--red);border:1px solid rgba(244,63,94,.2)}
+.sneu{background:rgba(100,116,139,.1);color:var(--dim);border:1px solid var(--border)}
+
+/* ─── Scanner ────────────────────────────────────── */
+.sr{display:grid;grid-template-columns:46px 1fr 62px 58px 68px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);gap:4px;font-family:"Fira Code",monospace;font-size:.73rem}
+.sr:last-child{border-bottom:none}
+.ssym{font-family:"Bebas Neue",cursive;font-size:1.05rem;color:var(--text)}
+.sname{color:var(--muted);font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vbh{background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.25);padding:1px 5px;border-radius:3px;font-size:.63rem}
+.vbm{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(251,191,36,.2);padding:1px 5px;border-radius:3px;font-size:.63rem}
+.badd{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(56,189,248,.25);padding:2px 7px;border-radius:3px;font-size:.67rem;cursor:pointer;font-family:"Fira Code",monospace}
+
+/* ─── Lazy symbol selector ───────────────────────── */
+.sym-bar{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);
+}
+.schip{
+  padding:3px 10px;border-radius:12px;font-family:"Fira Code",monospace;font-size:.68rem;
+  cursor:pointer;border:1px solid var(--border);color:var(--muted);background:transparent;
+}
+.schip.on{background:var(--blue-bg);color:var(--blue);border-color:rgba(56,189,248,.35)}
+
+/* ─── Control bar ────────────────────────────────── */
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:10px 12px}
+.ctag{font-size:.68rem;color:var(--dim);font-family:"Fira Code",monospace}
+.nbtn{padding:3px 8px;border-radius:3px;font-size:.67rem;font-family:"Fira Code",monospace;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted)}
+.nbtn.on{background:var(--blue-bg);color:var(--blue);border-color:rgba(56,189,248,.3)}
+.scanner-on{background:var(--green-bg);color:var(--green);border-color:rgba(16,185,129,.3);padding:3px 10px;border-radius:4px;font-size:.78rem;font-family:"Barlow Condensed",sans-serif;font-weight:700;letter-spacing:.04em;cursor:pointer;border-width:1px;border-style:solid}
+.hint{margin-left:auto;font-family:"Fira Code",monospace;font-size:.64rem;color:var(--dimmer)}
+
+/* ─── Chart helpers ──────────────────────────────── */
+.ch-area{overflow:hidden;border-radius:4px}
+.meter{height:8px;border-radius:4px;overflow:hidden;flex:1;background:rgba(255,255,255,.05)}
+.meter-fill{height:100%;border-radius:4px}
+
+/* ─── Footer ─────────────────────────────────────── */
+.footer{text-align:center;color:var(--dimmer);font-family:"Fira Code",monospace;font-size:.63rem;padding:12px}
+</style>
+</head>
+<body>
+
+<!-- ══ IB GATEWAY STATUS ══ -->
+<div class="ib-bar online">
+  <span class="ib-dot"></span>
+  <span class="ib-status">IB Gateway · conectado</span>
+  <span style="color:var(--dim)">paper · port 4002</span>
+  <span class="ib-cache">datos frescos · 14:23:07</span>
+</div>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)"></span>
+    <span class="logo">IBKR AI Trader</span>
+    <span class="badge badge-paper">PAPER</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="hbtn hbtn-pause">⏸ Pausar</button>
+    <button class="theme-btn" onclick="toggleTheme()">
+      <span id="ti">☀️</span><span id="tl">Claro</span>
+    </button>
+    <div style="display:flex;align-items:center;gap:4px">
+      <svg class="refresh-ring" viewBox="0 0 20 20">
+        <circle cx="10" cy="10" r="7" fill="none" stroke="var(--border)" stroke-width="1.5"/>
+        <circle cx="10" cy="10" r="7" fill="none" stroke="var(--blue)" stroke-width="1.5"
+          stroke-dasharray="43.98" stroke-dashoffset="15"
+          style="transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset 1s linear"/>
+      </svg>
+      <span class="countdown">15s</span>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- ══ ROW 1: STAT CARDS ══ -->
+<div class="row-4">
+  <div class="sc">
+    <div class="sl">Net Liquidation</div>
+    <div class="sv blue">$1,247</div>
+    <div class="ss">IBKR real · hace 2min</div>
+  </div>
+  <div class="sc">
+    <div class="sl">P&amp;L Hoy</div>
+    <div class="sv green">+$47.20</div>
+    <div class="ss">+3.9% · 2 trades cerrados</div>
+  </div>
+  <div class="sc">
+    <div class="sl">Buying Power</div>
+    <div class="sv" style="color:var(--text)">$712</div>
+    <div class="ss">disponible para nuevas entradas</div>
+  </div>
+  <div class="sc">
+    <div class="sl">Posiciones</div>
+    <div class="sv" style="color:var(--text)">2<span style="font-size:1rem;color:var(--dim)">/3</span></div>
+    <div class="ss">1 slot libre · scanner activo</div>
+  </div>
+</div>
+
+<!-- ══ ROW 2: POSICIONES + CUENTA ══ -->
+<div class="row-2">
+
+  <!-- Posiciones abiertas -->
+  <div class="card">
+    <div class="ch">
+      <span class="ct">Posiciones Abiertas</span>
+      <span style="font-family:'Fira Code',monospace;font-size:.68rem;color:var(--muted)">P&amp;L live · hace 2min</span>
+    </div>
+    <div class="cb">
+
+      <div class="pos">
+        <div class="pos-top">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span class="psym">AAPL</span>
+            <span class="ptag buy">BUY</span>
+            <span class="str-s">STRONG</span>
+            <span style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--blue)">▲ BULL</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="ppnl green">+$4.21 <span style="font-size:.75rem">+1.04%</span></span>
+            <button class="bcl">Cerrar</button>
+          </div>
+        </div>
+        <div class="pos-g">
+          <div><span class="pk">ENTRY </span><span style="color:var(--text)">$182.30</span></div>
+          <div><span class="pk">ACTUAL </span><span style="color:var(--text)">$184.20</span></div>
+          <div><span class="pk">QTY </span><span style="color:var(--text)">2.2 u</span></div>
+          <div><span class="pk">SL </span><span style="color:var(--red)">$177.74</span></div>
+          <div><span class="pk">TP </span><span style="color:var(--green)">$193.24</span></div>
+          <div><span class="pk">RIESGO </span><span style="color:var(--muted)">$5.00</span></div>
+        </div>
+      </div>
+
+      <div class="pos">
+        <div class="pos-top">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span class="psym">NVDA</span>
+            <span class="ptag buy">BUY</span>
+            <span class="str-m">MEDIUM</span>
+            <span style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--red)">▼ BEAR</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="ppnl red">-$1.80 <span style="font-size:.75rem">-0.36%</span></span>
+            <button class="bcl">Cerrar</button>
+          </div>
+        </div>
+        <div class="pos-g">
+          <div><span class="pk">ENTRY </span><span style="color:var(--text)">$495.00</span></div>
+          <div><span class="pk">ACTUAL </span><span style="color:var(--text)">$493.20</span></div>
+          <div><span class="pk">QTY </span><span style="color:var(--text)">1.0 u</span></div>
+          <div><span class="pk">SL </span><span style="color:var(--red)">$482.13</span></div>
+          <div><span class="pk">TP </span><span style="color:var(--green)">$524.70</span></div>
+          <div><span class="pk">RIESGO </span><span style="color:var(--muted)">$12.87</span></div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border:1px dashed var(--border);border-radius:6px;padding:14px;text-align:center;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dimmer)">
+        slot disponible — esperando señal STRONG
+      </div>
+    </div>
+  </div>
+
+  <!-- Mi cuenta tabs -->
+  <div class="card">
+    <div class="ch">
+      <span class="ct">Mi Cuenta</span>
+      <div class="tabs">
+        <button class="tab on"  onclick="sw('ac','eq')">Equity</button>
+        <button class="tab"     onclick="sw('ac','wk')">Semanal</button>
+        <button class="tab"     onclick="sw('ac','ex')">Exits</button>
+        <button class="tab"     onclick="sw('ac','hr')">Horas</button>
+      </div>
+    </div>
+
+    <!-- equity -->
+    <div id="ac-eq" class="tc on cb" style="padding:8px 12px">
+      <div class="ch-area" style="height:148px">
+        <svg width="100%" height="100%" viewBox="0 0 420 148" preserveAspectRatio="none">
+          <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38BDF8" stop-opacity=".22"/>
+            <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+          </linearGradient></defs>
+          <polyline points="0,125 21,121 42,116 63,119 84,113 105,108 126,103 147,107 168,96 189,90 210,93 231,83 252,76 273,80 294,68 315,61 336,64 357,55 378,48 399,43 420,38"
+            fill="none" stroke="#38BDF8" stroke-width="2.2"/>
+          <polygon points="0,125 21,121 42,116 63,119 84,113 105,108 126,103 147,107 168,96 189,90 210,93 231,83 252,76 273,80 294,68 315,61 336,64 357,55 378,48 399,43 420,38 420,148 0,148"
+            fill="url(#g1)"/>
+          <rect x="1"   y="130" width="16" height="12" fill="#10B981" opacity=".75"/>
+          <rect x="22"  y="128" width="16" height="14" fill="#10B981" opacity=".75"/>
+          <rect x="43"  y="132" width="16" height="10" fill="#F43F5E" opacity=".75"/>
+          <rect x="64"  y="129" width="16" height="13" fill="#10B981" opacity=".75"/>
+          <rect x="85"  y="131" width="16" height="11" fill="#10B981" opacity=".75"/>
+          <rect x="106" y="134" width="16" height="8"  fill="#F43F5E" opacity=".75"/>
+          <rect x="127" y="128" width="16" height="14" fill="#10B981" opacity=".75"/>
+          <rect x="148" y="126" width="16" height="16" fill="#10B981" opacity=".75"/>
+          <rect x="169" y="132" width="16" height="10" fill="#F43F5E" opacity=".75"/>
+          <rect x="190" y="127" width="16" height="15" fill="#10B981" opacity=".75"/>
+          <rect x="211" y="125" width="16" height="17" fill="#10B981" opacity=".75"/>
+          <rect x="232" y="129" width="16" height="13" fill="#10B981" opacity=".75"/>
+          <rect x="253" y="133" width="16" height="9"  fill="#F43F5E" opacity=".75"/>
+          <rect x="274" y="126" width="16" height="16" fill="#10B981" opacity=".75"/>
+          <rect x="295" y="124" width="16" height="18" fill="#10B981" opacity=".75"/>
+          <rect x="316" y="128" width="16" height="14" fill="#10B981" opacity=".75"/>
+          <rect x="337" y="132" width="16" height="10" fill="#F43F5E" opacity=".75"/>
+          <rect x="358" y="125" width="16" height="17" fill="#10B981" opacity=".75"/>
+          <rect x="379" y="123" width="16" height="19" fill="#10B981" opacity=".75"/>
+          <rect x="400" y="124" width="16" height="18" fill="#10B981" opacity=".75"/>
+          <text x="3" y="14" fill="#334155" font-size="9" font-family="monospace">$1,247 · 30 días</text>
+          <text x="3" y="143" fill="#1E2D42" font-size="8" font-family="monospace">$500</text>
+        </svg>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;font-family:'Fira Code',monospace;font-size:.68rem">
+        <span style="color:var(--blue)">━ balance</span>
+        <span style="color:var(--green)">▮ día +</span>
+        <span style="color:var(--red)">▮ día −</span>
+        <span style="margin-left:auto;color:var(--green)">+$747 · +149.4%</span>
+      </div>
+    </div>
+
+    <!-- semanal -->
+    <div id="ac-wk" class="tc cb" style="padding:8px 12px">
+      <div class="ch-area" style="height:148px">
+        <svg width="100%" height="100%" viewBox="0 0 420 148" preserveAspectRatio="none">
+          <line x1="0" y1="130" x2="420" y2="130" stroke="var(--border)" stroke-width="1"/>
+          <rect x="20"  y="80"  width="55" height="50" fill="#10B981" opacity=".8" rx="3"/>
+          <rect x="100" y="55"  width="55" height="75" fill="#10B981" opacity=".8" rx="3"/>
+          <rect x="180" y="105" width="55" height="25" fill="#F43F5E" opacity=".8" rx="3"/>
+          <rect x="260" y="65"  width="55" height="65" fill="#10B981" opacity=".8" rx="3"/>
+          <rect x="340" y="42"  width="55" height="88" fill="#10B981" opacity=".8" rx="3"/>
+          <text x="28"  y="145" fill="#334155" font-size="8" font-family="monospace">Sem 1</text>
+          <text x="108" y="145" fill="#334155" font-size="8" font-family="monospace">Sem 2</text>
+          <text x="188" y="145" fill="#334155" font-size="8" font-family="monospace">Sem 3</text>
+          <text x="268" y="145" fill="#334155" font-size="8" font-family="monospace">Sem 4</text>
+          <text x="348" y="145" fill="#334155" font-size="8" font-family="monospace">Sem 5</text>
+          <text x="3" y="14" fill="#334155" font-size="9" font-family="monospace">P&amp;L por semana</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- exits -->
+    <div id="ac-ex" class="tc cb">
+      <p style="font-family:'Fira Code',monospace;font-size:.68rem;color:var(--dim);margin-bottom:10px">Distribución de cierres · últimos 30 trades</p>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;display:inline-block"></span>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--muted);width:100px">Take Profit</span>
+          <div class="meter"><div class="meter-fill" style="width:53%;background:var(--green)"></div></div>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--green);width:32px;text-align:right">53%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0;display:inline-block"></span>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--muted);width:100px">Stop Loss</span>
+          <div class="meter"><div class="meter-fill" style="width:31%;background:var(--red)"></div></div>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--red);width:32px;text-align:right">31%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;display:inline-block"></span>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--muted);width:100px">Trailing</span>
+          <div class="meter"><div class="meter-fill" style="width:10%;background:var(--amber)"></div></div>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--amber);width:32px;text-align:right">10%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--dim);flex-shrink:0;display:inline-block"></span>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--muted);width:100px">Manual</span>
+          <div class="meter"><div class="meter-fill" style="width:6%;background:var(--dim)"></div></div>
+          <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--dim);width:32px;text-align:right">6%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- horas -->
+    <div id="ac-hr" class="tc cb" style="padding:8px 12px">
+      <div class="ch-area" style="height:148px">
+        <svg width="100%" height="100%" viewBox="0 0 420 148" preserveAspectRatio="none">
+          <line x1="0" y1="74" x2="420" y2="74" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,4"/>
+          <rect x="10"  y="54" width="24" height="20" fill="#10B981" opacity=".8" rx="1"/>
+          <rect x="44"  y="60" width="24" height="14" fill="#10B981" opacity=".6" rx="1"/>
+          <rect x="78"  y="76" width="24" height="14" fill="#F43F5E" opacity=".7" rx="1"/>
+          <rect x="112" y="80" width="24" height="18" fill="#F43F5E" opacity=".5" rx="1"/>
+          <rect x="146" y="44" width="24" height="30" fill="#10B981" opacity=".9" rx="1"/>
+          <rect x="180" y="38" width="24" height="36" fill="#10B981" opacity=".95" rx="1"/>
+          <rect x="214" y="55" width="24" height="19" fill="#10B981" opacity=".7" rx="1"/>
+          <rect x="248" y="68" width="24" height="8"  fill="#10B981" opacity=".4" rx="1"/>
+          <rect x="282" y="77" width="24" height="16" fill="#F43F5E" opacity=".6" rx="1"/>
+          <rect x="316" y="64" width="24" height="12" fill="#10B981" opacity=".5" rx="1"/>
+          <rect x="350" y="78" width="24" height="18" fill="#F43F5E" opacity=".5" rx="1"/>
+          <rect x="384" y="80" width="24" height="22" fill="#F43F5E" opacity=".6" rx="1"/>
+          <text x="10"  y="140" fill="#334155" font-size="8" font-family="monospace">9:30</text>
+          <text x="146" y="140" fill="#334155" font-size="8" font-family="monospace">11:00</text>
+          <text x="248" y="140" fill="#334155" font-size="8" font-family="monospace">13:00</text>
+          <text x="384" y="140" fill="#334155" font-size="8" font-family="monospace">15:30</text>
+          <text x="3"   y="14"  fill="#334155" font-size="9" font-family="monospace">Mejor hora para entrar (P&amp;L promedio)</text>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+</div><!-- row 2 -->
+
+<!-- ══ ROW 3: SYMBOL CHART (lazy) ══ -->
+<div class="card">
+  <div class="sym-bar">
+    <span style="font-family:'Fira Code',monospace;font-size:.67rem;color:var(--dim)">SYM:</span>
+    <button class="schip on" onclick="pickSym(this,'AAPL')">AAPL</button>
+    <button class="schip"    onclick="pickSym(this,'NVDA')">NVDA</button>
+    <button class="schip"    onclick="pickSym(this,'SPY')">SPY</button>
+    <button class="schip"    onclick="pickSym(this,'QQQ')">QQQ</button>
+    <button class="schip"    onclick="pickSym(this,'MSFT')">MSFT</button>
+    <button class="schip"    onclick="pickSym(this,'TSLA')">TSLA</button>
+    <span style="font-family:'Fira Code',monospace;font-size:.64rem;color:var(--dimmer)">lazy · caché 5min</span>
+  </div>
+  <div class="ch">
+    <span class="ct" id="sym-label">AAPL · $184.20 <span style="color:var(--green)">▲ +1.04% · STRONG</span></span>
+    <div class="tabs">
+      <button class="tab on" onclick="sw('sy','td')">Hoy 5min</button>
+      <button class="tab"    onclick="sw('sy','d30')">30D diario</button>
+      <button class="tab"    onclick="sw('sy','ind')">Indicadores</button>
+    </div>
+  </div>
+
+  <div id="sy-td" class="tc cb" style="padding:8px 12px">
+    <div class="ch-area" style="height:140px">
+      <svg width="100%" height="100%" viewBox="0 0 420 140" preserveAspectRatio="none">
+        <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#10B981" stop-opacity=".18"/>
+          <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+        </linearGradient></defs>
+        <line x1="90" y1="0" x2="90" y2="140" stroke="#FBBF24" stroke-width="1" stroke-dasharray="3,3" opacity=".7"/>
+        <text x="93" y="13" fill="#FBBF24" font-size="8" font-family="monospace">ENTRY $182.30</text>
+        <line x1="0" y1="118" x2="420" y2="118" stroke="#F43F5E" stroke-width="1" stroke-dasharray="4,4" opacity=".6"/>
+        <text x="4" y="115" fill="#F43F5E" font-size="7" font-family="monospace">SL $177.74</text>
+        <line x1="0" y1="28" x2="420" y2="28" stroke="#10B981" stroke-width="1" stroke-dasharray="4,4" opacity=".5"/>
+        <text x="4" y="25" fill="#10B981" font-size="7" font-family="monospace">TP $193.24</text>
+        <polyline points="0,98 21,95 42,91 63,93 84,89 105,84 126,79 147,82 168,75 189,69 210,72 231,65 252,60 273,63 294,56 315,51 336,54 357,47 378,43 399,40 420,37"
+          fill="none" stroke="#10B981" stroke-width="2"/>
+        <polygon points="0,98 21,95 42,91 63,93 84,89 105,84 126,79 147,82 168,75 189,69 210,72 231,65 252,60 273,63 294,56 315,51 336,54 357,47 378,43 399,40 420,37 420,140 0,140"
+          fill="url(#g2)"/>
+        <text x="3" y="135" fill="#334155" font-size="8" font-family="monospace">09:30</text>
+        <text x="195" y="135" fill="#334155" font-size="8" font-family="monospace">12:00</text>
+        <text x="395" y="135" fill="#334155" font-size="8" font-family="monospace">15:30</text>
+      </svg>
+    </div>
+  </div>
+
+  <div id="sy-d30" class="tc cb" style="padding:8px 12px">
+    <div class="ch-area" style="height:140px">
+      <svg width="100%" height="100%" viewBox="0 0 420 140" preserveAspectRatio="none">
+        <defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#38BDF8" stop-opacity=".18"/>
+          <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+        </linearGradient></defs>
+        <polyline points="0,108 21,104 42,107 63,99 84,96 105,100 126,92 147,88 168,91 189,83 210,86 231,79 252,73 273,77 294,68 315,62 336,65 357,58 378,52 399,48 420,45"
+          fill="none" stroke="#38BDF8" stroke-width="2"/>
+        <polygon points="0,108 21,104 42,107 63,99 84,96 105,100 126,92 147,88 168,91 189,83 210,86 231,79 252,73 273,77 294,68 315,62 336,65 357,58 378,52 399,48 420,45 420,140 0,140"
+          fill="url(#g3)"/>
+        <polyline points="0,112 63,105 126,98 189,93 252,86 315,78 378,70 420,65"
+          fill="none" stroke="#FBBF24" stroke-width="1.5" stroke-dasharray="5,3" opacity=".7"/>
+        <text x="350" y="60" fill="#FBBF24" font-size="8" font-family="monospace">SMA20</text>
+        <text x="3" y="14" fill="#334155" font-size="9" font-family="monospace">Precio diario 30 días</text>
+      </svg>
+    </div>
+  </div>
+
+  <div id="sy-ind" class="tc cb">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim);margin-bottom:6px">RSI (14)</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;background:linear-gradient(to right,#F43F5E 0% 30%,#FBBF24 30% 70%,#10B981 70%);height:8px;border-radius:4px;position:relative">
+            <div style="position:absolute;left:27%;top:-4px;width:4px;height:16px;background:var(--text);border-radius:2px"></div>
+          </div>
+          <span style="font-family:'Bebas Neue',cursive;font-size:1.4rem;color:var(--green)">28</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:'Fira Code',monospace;font-size:.62rem;color:var(--dim);margin-top:3px">
+          <span>Oversold</span><span>Neutral</span><span>Overbought</span>
+        </div>
+      </div>
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim);margin-bottom:6px">Bollinger Position</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;height:32px;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(244,63,94,.12) 0%,rgba(16,185,129,.08) 50%,rgba(244,63,94,.12) 100%)"></div>
+          <div style="position:absolute;top:50%;left:72%;transform:translate(-50%,-50%);width:10px;height:10px;background:var(--text);border-radius:50%;border:2px solid var(--blue)"></div>
+          <span style="position:absolute;bottom:2px;left:4px;font-family:'Fira Code',monospace;font-size:.6rem;color:var(--dim)">Lower</span>
+          <span style="position:absolute;bottom:2px;right:4px;font-family:'Fira Code',monospace;font-size:.6rem;color:var(--dim)">Upper</span>
+        </div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--muted);margin-top:4px">72% — zona alta</p>
+      </div>
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim);margin-bottom:6px">Volumen vs Media 20d</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);height:26px;border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:82%;background:var(--green-bg);display:flex;align-items:center;padding-left:8px">
+            <span style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--green)">2.1× volumen alto</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim);margin-bottom:6px">MACD</p>
+        <p style="font-family:'Fira Code',monospace;font-size:.73rem;color:var(--green)">▲ Crossover alcista</p>
+        <p style="font-family:'Fira Code',monospace;font-size:.68rem;color:var(--muted);margin-top:3px">Signal line cruzada hace 2 barras</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ROW 4: NEWS + SCANNER ══ -->
+<div class="row-2">
+
+  <!-- Noticias -->
+  <div class="card">
+    <div class="ch">
+      <span class="ct">Noticias IBKR</span>
+      <div class="tabs">
+        <button class="tab on" onclick="sw('nw','all')">Todas</button>
+        <button class="tab"    onclick="sw('nw','uni')">Mi universo</button>
+        <button class="tab"    onclick="sw('nw','op')">Posiciones</button>
+      </div>
+    </div>
+    <div id="nw-all" class="tc" style="padding:0 12px;display:block">
+      <div class="ni">
+        <span class="nsym">AAPL</span>
+        <div><p class="nh">Apple anuncia chip M4 para MacBook Air con eficiencia energética récord</p>
+        <div class="nm"><span>Briefing</span><span>hace 12min</span><span class="sp spos">positivo</span></div></div>
+      </div>
+      <div class="ni">
+        <span class="nsym">FED</span>
+        <div><p class="nh">Fed mantiene tasas; Powell señala cautela ante datos mixtos de empleo</p>
+        <div class="nm"><span>Dow Jones</span><span>hace 34min</span><span class="sp sneu">neutral</span></div></div>
+      </div>
+      <div class="ni">
+        <span class="nsym">NVDA</span>
+        <div><p class="nh">Blackwell GPU shipments delayed Q2 — analyst downgrade to neutral</p>
+        <div class="nm"><span>Briefing</span><span>hace 1h 20min</span><span class="sp sneg">negativo</span></div></div>
+      </div>
+      <div class="ni">
+        <span class="nsym">SPY</span>
+        <div><p class="nh">S&amp;P 500 abre al alza; sector tech lidera, VIX en mínimos de 3 meses</p>
+        <div class="nm"><span>Briefing</span><span>hace 2h</span><span class="sp spos">positivo</span></div></div>
+      </div>
+    </div>
+    <div id="nw-uni" class="tc" style="padding:12px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim)">Filtrando por los 40 símbolos de tu universo...</div>
+    <div id="nw-op"  class="tc" style="padding:12px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim)">Solo noticias de AAPL y NVDA (posiciones abiertas)...</div>
+  </div>
+
+  <!-- Scanner / Trends -->
+  <div class="card">
+    <div class="ch">
+      <span class="ct">Market Trends</span>
+      <div class="tabs">
+        <button class="tab on" onclick="sw('sc','mv')">Activos</button>
+        <button class="tab"    onclick="sw('sc','ga')">Gainers</button>
+        <button class="tab"    onclick="sw('sc','lo')">Losers</button>
+        <button class="tab"    onclick="sw('sc','vo')">Vol ↑</button>
+      </div>
+    </div>
+    <div id="sc-mv" class="tc" style="padding:0 12px;display:block">
+      <div style="padding:5px 0 3px;font-family:'Fira Code',monospace;font-size:.64rem;color:var(--dimmer)">Top activos · actualiza 5min · + para proponer al bot</div>
+      <div class="sr"><span class="ssym">NVDA</span><span class="sname">Nvidia Corp</span><span class="red">-2.1%</span><span class="vbh">3.8×</span><button class="badd">+ añadir</button></div>
+      <div class="sr"><span class="ssym">TSLA</span><span class="sname">Tesla Inc</span><span class="green">+4.3%</span><span class="vbh">4.2×</span><button class="badd">+ añadir</button></div>
+      <div class="sr"><span class="ssym">META</span><span class="sname">Meta Platforms</span><span class="green">+1.8%</span><span class="vbm">2.1×</span><button class="badd">+ añadir</button></div>
+      <div class="sr"><span class="ssym">AMD</span><span class="sname">Advanced Micro Devices</span><span class="green">+3.1%</span><span class="vbh">3.3×</span><button class="badd">+ añadir</button></div>
+      <div class="sr"><span class="ssym">COIN</span><span class="sname">Coinbase Global</span><span class="green">+6.7%</span><span class="vbh">5.1×</span><button class="badd">+ añadir</button></div>
+    </div>
+    <div id="sc-ga" class="tc" style="padding:12px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim)">Top gainers del día...</div>
+    <div id="sc-lo" class="tc" style="padding:12px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim)">Top losers del día...</div>
+    <div id="sc-vo" class="tc" style="padding:12px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--dim)">Vol inusual detectado...</div>
+  </div>
+</div>
+
+<!-- ══ ROW 5: SEÑALES + HISTORIAL ══ -->
+<div class="row-2">
+  <div class="card">
+    <div class="ch">
+      <span class="ct">Señales Detectadas</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-family:'Fira Code',monospace;font-size:.7rem;width:76px" placeholder="TICKER"/>
+        <button class="hbtn" style="background:var(--blue-bg);color:var(--blue);border-color:rgba(56,189,248,.3);font-size:.72rem">Analizar</button>
+        <button class="hbtn" style="background:var(--green-bg);color:var(--green);border-color:rgba(16,185,129,.3);font-size:.72rem">Aprobar</button>
+      </div>
+    </div>
+    <div class="cb" style="padding:8px">
+      <table>
+        <thead><tr><th>SYM</th><th>FUERZA</th><th>RSI</th><th>VOL</th><th>TREND</th><th>HORA</th></tr></thead>
+        <tbody>
+          <tr><td class="sym">MSFT</td><td><span class="str-s">STRONG</span></td><td>28.4</td><td>2.1×</td><td style="color:var(--blue);font-size:.68rem">▲ BULL</td><td>14:08</td></tr>
+          <tr><td class="sym">SPY</td><td><span class="str-m">MEDIUM</span></td><td>42.1</td><td>1.4×</td><td style="color:var(--dim);font-size:.68rem">— NEU</td><td>13:55</td></tr>
+          <tr><td class="sym">TSLA</td><td><span class="str-m">MEDIUM</span></td><td>38.7</td><td>1.8×</td><td style="color:var(--red);font-size:.68rem">▼ BEAR</td><td>13:41</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ch"><span class="ct">Historial Reciente</span></div>
+    <div class="cb" style="padding:8px">
+      <table>
+        <thead><tr><th>SYM</th><th>P&amp;L $</th><th>%</th><th>RAZÓN</th><th>FECHA</th></tr></thead>
+        <tbody>
+          <tr><td class="sym">AAPL</td><td class="green">+$12.40</td><td class="green">+6.8%</td><td>TAKE PROFIT</td><td>05/13 14:05</td></tr>
+          <tr><td class="sym">QQQ</td><td class="red">-$8.20</td><td class="red">-2.5%</td><td>STOP LOSS</td><td>05/12 11:32</td></tr>
+          <tr><td class="sym">NVDA</td><td class="green">+$43.10</td><td class="green">+9.1%</td><td>TAKE PROFIT</td><td>05/11 15:48</td></tr>
+          <tr><td class="sym">META</td><td class="green">+$18.70</td><td class="green">+3.9%</td><td>TRAILING</td><td>05/10 13:20</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ROW 6: CONTROL ══ -->
+<div class="card">
+  <div class="ch"><span class="ct">Control del Sistema</span></div>
+  <div class="ctrl">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="ctag">SCANNER</span>
+      <button class="scanner-on">▶ ACTIVO</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="ctag">NOTIF</span>
+      <div style="display:flex;gap:3px">
+        <button class="nbtn">critico</button>
+        <button class="nbtn on">normal</button>
+        <button class="nbtn">verbose</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="ctag">MODO</span>
+      <span class="badge badge-paper" style="font-size:.75rem">PAPER</span>
+    </div>
+    <span class="hint">⚡ cerrar posición / pausar → confirmar por Telegram</span>
+  </div>
+</div>
+
+</div><!-- page -->
+<div class="footer">IBKR AI Trader · mockup completo · dark/light mode</div>
+
+<script>
+function toggleTheme(){
+  const h=document.documentElement,dark=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',dark?'light':'dark');
+  document.getElementById('ti').textContent=dark?'🌙':'☀️';
+  document.getElementById('tl').textContent=dark?'Oscuro':'Claro';
+}
+function sw(card,name){
+  document.querySelectorAll('[id^="'+card+'-"]').forEach(el=>{
+    el.classList.remove('on');
+    const match=el.id.replace(card+'-','');
+    const btn=document.querySelector('[onclick*="\''+card+'\',\''+match+'\'"]');
+    if(btn)btn.classList.remove('on');
+  });
+  const el=document.getElementById(card+'-'+name);
+  if(el)el.classList.add('on');
+  const btn=document.querySelector('[onclick*="\''+card+'\',\''+name+'\'"]');
+  if(btn)btn.classList.add('on');
+}
+function pickSym(el,sym){
+  document.querySelectorAll('.schip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('sym-label').innerHTML=
+    sym+' · $184.20 <span style="color:var(--green)">▲ +1.04% · STRONG</span>';
+}
+</script>
+</body>
+</html>

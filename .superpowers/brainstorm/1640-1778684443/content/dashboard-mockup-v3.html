@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Mockup v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@300;400;500&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;transition:background .2s,color .2s,border-color .2s}
+
+/* ── DARK (default) ── */
+:root{
+  --bg:#06090F;
+  --surface:#0C1421;
+  --surface2:#111D2E;
+  --border:#1E2D42;
+  --text:#E2E8F0;          /* más brillante que antes */
+  --text-muted:#94A3B8;    /* slate-400 — legible en oscuro */
+  --text-dim:#64748B;      /* slate-500 */
+  --text-dimmer:#334155;   /* slate-700 */
+  --green:#10B981;
+  --red:#F43F5E;
+  --blue:#38BDF8;
+  --amber:#FBBF24;
+}
+
+/* ── LIGHT ── */
+[data-theme="light"]{
+  --bg:#F1F5F9;
+  --surface:#FFFFFF;
+  --surface2:#F8FAFC;
+  --border:#E2E8F0;
+  --text:#1E293B;
+  --text-muted:#475569;
+  --text-dim:#94A3B8;
+  --text-dimmer:#CBD5E1;
+  --green:#059669;
+  --red:#DC2626;
+  --blue:#0284C7;
+  --amber:#D97706;
+}
+
+body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px}
+
+/* ── Header ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.logo{font-family:"Bebas Neue",cursive;font-size:1.3rem;letter-spacing:.1em;color:var(--text)}
+.badge-paper{padding:2px 8px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.7rem;background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.35)}
+.btn{padding:4px 12px;border-radius:4px;font-family:"Barlow Condensed",sans-serif;font-size:.8rem;cursor:pointer;border:1px solid var(--border);font-weight:600;letter-spacing:.05em;background:var(--surface2);color:var(--text-muted)}
+.theme-toggle{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:4px 12px;border-radius:20px;font-size:.78rem;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:"Barlow Condensed",sans-serif;font-weight:600}
+
+/* ── Layout ── */
+.content{max-width:1100px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.card-head{background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim)}
+.card-body{padding:12px}
+
+/* ── Stat cards ── */
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px}
+.stat-label{font-size:.65rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px}
+.stat-value{font-family:"Bebas Neue",cursive;font-size:2.2rem;line-height:1}
+.stat-sub{font-family:"Fira Code",monospace;font-size:.7rem;color:var(--text-muted);margin-top:3px}
+
+/* ── Positions ── */
+.position{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px}
+.pos-sym{font-family:"Bebas Neue",cursive;font-size:1.3rem;letter-spacing:.06em;color:var(--text)}
+.pos-pnl{font-family:"Fira Code",monospace;font-size:.85rem;font-weight:500}
+.pos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-family:"Fira Code",monospace;font-size:.73rem;margin-top:6px}
+.pos-key{color:var(--text-muted)}   /* más claro que antes */
+
+.btn-close{background:rgba(244,63,94,.12);color:var(--red);border:1px solid rgba(244,63,94,.3);padding:3px 10px;border-radius:4px;font-size:.72rem;font-family:"Fira Code",monospace;cursor:pointer}
+.tag-buy{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:3px;font-size:.68rem;font-family:"Fira Code",monospace}
+
+/* ── Badges ── */
+.badge-strong{color:var(--green);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);padding:1px 6px;border-radius:3px;font-size:.68rem}
+.badge-medium{color:var(--amber);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);padding:1px 6px;border-radius:3px;font-size:.68rem}
+
+/* ── Table ── */
+table{width:100%;border-collapse:collapse;font-family:"Fira Code",monospace;font-size:.73rem}
+th{color:var(--text-dim);font-weight:500;padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text-muted)}
+td.sym{color:var(--text);font-weight:500}
+
+/* ── Controls ── */
+.input-sym{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-family:"Fira Code",monospace;font-size:.72rem;width:80px}
+.notif-btn{padding:3px 8px;border-radius:3px;font-size:.68rem;font-family:"Fira Code",monospace;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-muted)}
+.notif-btn.active{background:rgba(56,189,248,.12);color:var(--blue);border-color:rgba(56,189,248,.3)}
+
+/* ── Misc ── */
+.green{color:var(--green)}.red{color:var(--red)}.blue{color:var(--blue)}.dim{color:var(--text-dim)}
+.dot-live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);margin-right:6px}
+.watermark{text-align:center;color:var(--text-dimmer);font-size:.65rem;font-family:"Fira Code",monospace;padding:14px}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span class="dot-live"></span>
+    <span class="logo">IBKR AI TRADER</span>
+    <span class="badge-paper">PAPER</span>
+    <span style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-muted)">14:23:07</span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn">⏸ Pausar</button>
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <span id="ti">☀️</span><span id="tl">Claro</span>
+    </button>
+    <span style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--text-dimmer)">↻ 15s</span>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Net Liquidation</div>
+      <div class="stat-value blue">$1,247</div>
+      <div class="stat-sub">IBKR · hace 2min</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">P&amp;L Hoy</div>
+      <div class="stat-value green">+$47</div>
+      <div class="stat-sub">+3.9% · 2 trades</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Buying Power</div>
+      <div class="stat-value" style="color:var(--text)">$712</div>
+      <div class="stat-sub">disponible</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Posiciones</div>
+      <div class="stat-value" style="color:var(--text)">2<span style="font-size:1rem;color:var(--text-dim)">/3</span></div>
+      <div class="stat-sub">1 slot libre</div>
+    </div>
+  </div>
+
+  <!-- EQUITY + POSICIONES -->
+  <div class="grid-2">
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Crecimiento 30 Días</span>
+        <span style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--green)">+$747 (+149%)</span>
+      </div>
+      <div class="card-body" style="padding:8px 12px">
+        <div style="height:140px;overflow:hidden">
+          <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="grd" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polyline points="0,115 20,112 40,108 60,110 80,105 100,100 120,95 140,98 160,88 180,82 200,85 220,75 240,68 260,72 280,60 300,52 320,55 340,45 360,38 380,32 400,28"
+              fill="none" stroke="#38BDF8" stroke-width="2"/>
+            <polygon points="0,115 20,112 40,108 60,110 80,105 100,100 120,95 140,98 160,88 180,82 200,85 220,75 240,68 260,72 280,60 300,52 320,55 340,45 360,38 380,32 400,28 400,130 0,130"
+              fill="url(#grd)"/>
+            <rect x="0"   y="118" width="14" height="9"  fill="#10B981" opacity="0.7"/>
+            <rect x="20"  y="116" width="14" height="11" fill="#10B981" opacity="0.7"/>
+            <rect x="40"  y="119" width="14" height="8"  fill="#F43F5E" opacity="0.7"/>
+            <rect x="60"  y="115" width="14" height="12" fill="#10B981" opacity="0.7"/>
+            <rect x="80"  y="117" width="14" height="10" fill="#10B981" opacity="0.7"/>
+            <rect x="100" y="120" width="14" height="7"  fill="#F43F5E" opacity="0.7"/>
+            <rect x="120" y="116" width="14" height="11" fill="#10B981" opacity="0.7"/>
+            <rect x="140" y="114" width="14" height="13" fill="#10B981" opacity="0.7"/>
+            <rect x="160" y="118" width="14" height="9"  fill="#F43F5E" opacity="0.7"/>
+            <rect x="180" y="115" width="14" height="12" fill="#10B981" opacity="0.7"/>
+            <rect x="200" y="113" width="14" height="14" fill="#10B981" opacity="0.7"/>
+            <rect x="220" y="116" width="14" height="11" fill="#10B981" opacity="0.7"/>
+            <rect x="240" y="119" width="14" height="8"  fill="#F43F5E" opacity="0.7"/>
+            <rect x="260" y="114" width="14" height="13" fill="#10B981" opacity="0.7"/>
+            <rect x="280" y="112" width="14" height="15" fill="#10B981" opacity="0.7"/>
+            <rect x="300" y="115" width="14" height="12" fill="#10B981" opacity="0.7"/>
+            <rect x="320" y="119" width="14" height="8"  fill="#F43F5E" opacity="0.7"/>
+            <rect x="340" y="113" width="14" height="14" fill="#10B981" opacity="0.7"/>
+            <rect x="360" y="111" width="14" height="16" fill="#10B981" opacity="0.7"/>
+            <rect x="380" y="112" width="14" height="15" fill="#10B981" opacity="0.7"/>
+          </svg>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:6px;font-family:'Fira Code',monospace;font-size:.7rem">
+          <span style="color:var(--blue)">━ balance</span>
+          <span style="color:var(--green)">▮ día +</span>
+          <span style="color:var(--red)">▮ día −</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Posiciones Abiertas</span>
+        <span style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-muted)">live · hace 2min</span>
+      </div>
+      <div class="card-body">
+
+        <div class="position">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pos-sym">AAPL</span>
+              <span class="tag-buy">BUY</span>
+              <span class="badge-strong">STRONG</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pos-pnl green">+$4.21 (+1.04%)</span>
+              <button class="btn-close">Cerrar</button>
+            </div>
+          </div>
+          <div class="pos-grid">
+            <div><span class="pos-key">ENTRY </span><span style="color:var(--text)">$182.30</span></div>
+            <div><span class="pos-key">ACTUAL </span><span style="color:var(--text)">$184.20</span></div>
+            <div><span class="pos-key">QTY </span><span style="color:var(--text)">2.2 u</span></div>
+            <div><span class="pos-key">SL </span><span style="color:var(--red)">$177.74</span></div>
+            <div><span class="pos-key">TP </span><span style="color:var(--green)">$193.24</span></div>
+            <div><span class="pos-key">RIESGO </span><span style="color:var(--text-muted)">$5.00</span></div>
+          </div>
+        </div>
+
+        <div class="position">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pos-sym">NVDA</span>
+              <span class="tag-buy">BUY</span>
+              <span class="badge-medium">MEDIUM</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pos-pnl red">-$1.80 (-0.36%)</span>
+              <button class="btn-close">Cerrar</button>
+            </div>
+          </div>
+          <div class="pos-grid">
+            <div><span class="pos-key">ENTRY </span><span style="color:var(--text)">$495.00</span></div>
+            <div><span class="pos-key">ACTUAL </span><span style="color:var(--text)">$493.20</span></div>
+            <div><span class="pos-key">QTY </span><span style="color:var(--text)">1.0 u</span></div>
+            <div><span class="pos-key">SL </span><span style="color:var(--red)">$482.13</span></div>
+            <div><span class="pos-key">TP </span><span style="color:var(--green)">$524.70</span></div>
+            <div><span class="pos-key">RIESGO </span><span style="color:var(--text-muted)">$12.87</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- SEÑALES + HISTORIAL -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Señales Detectadas</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input class="input-sym" placeholder="TICKER"/>
+          <button class="btn" style="background:rgba(56,189,248,.1);color:var(--blue);border-color:rgba(56,189,248,.3)">Analizar</button>
+          <button class="btn" style="background:rgba(16,185,129,.1);color:var(--green);border-color:rgba(16,185,129,.3)">Aprobar</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:8px">
+        <table>
+          <thead><tr><th>SYM</th><th>FUERZA</th><th>RSI</th><th>VOL</th><th>TREND</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="sym">MSFT</td>
+              <td><span class="badge-strong">STRONG</span></td>
+              <td>28.4</td><td>2.1x</td>
+              <td style="color:var(--blue);font-size:.7rem">▲ BULL</td>
+            </tr>
+            <tr>
+              <td class="sym">SPY</td>
+              <td><span class="badge-medium">MEDIUM</span></td>
+              <td>42.1</td><td>1.4x</td>
+              <td style="color:var(--text-dim);font-size:.7rem">— NEU</td>
+            </tr>
+            <tr>
+              <td class="sym">TSLA</td>
+              <td><span class="badge-medium">MEDIUM</span></td>
+              <td>38.7</td><td>1.8x</td>
+              <td style="color:var(--red);font-size:.7rem">▼ BEAR</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Historial Reciente</span></div>
+      <div class="card-body" style="padding:8px">
+        <table>
+          <thead><tr><th>SYM</th><th>P&amp;L</th><th>%</th><th>RAZÓN</th></tr></thead>
+          <tbody>
+            <tr><td class="sym">AAPL</td><td class="green">+$12.40</td><td class="green">+6.8%</td><td>TAKE PROFIT</td></tr>
+            <tr><td class="sym">QQQ</td><td class="red">-$8.20</td><td class="red">-2.5%</td><td>STOP LOSS</td></tr>
+            <tr><td class="sym">NVDA</td><td class="green">+$43.10</td><td class="green">+9.1%</td><td>TAKE PROFIT</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROL -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">Control del Sistema</span></div>
+    <div style="padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:.7rem;color:var(--text-dim);font-family:'Fira Code',monospace">SCANNER</span>
+        <button class="btn" style="background:rgba(16,185,129,.12);color:var(--green);border-color:rgba(16,185,129,.3)">▶ ACTIVO</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:.7rem;color:var(--text-dim);font-family:'Fira Code',monospace">NOTIF</span>
+        <div style="display:flex;gap:4px">
+          <button class="notif-btn">critico</button>
+          <button class="notif-btn active">normal</button>
+          <button class="notif-btn">verbose</button>
+        </div>
+      </div>
+      <span style="margin-left:auto;font-family:'Fira Code',monospace;font-size:.68rem;color:var(--text-dimmer)">
+        ⚡ cerrar posición → confirmar por Telegram
+      </span>
+    </div>
+  </div>
+
+</div>
+
+<div class="watermark">mockup v3 · live-dashboard · dark/light</div>
+
+<script>
+function toggleTheme(){
+  const h = document.documentElement;
+  const dark = h.getAttribute('data-theme') === 'dark';
+  h.setAttribute('data-theme', dark ? 'light' : 'dark');
+  document.getElementById('ti').textContent = dark ? '🌙' : '☀️';
+  document.getElementById('tl').textContent = dark ? 'Oscuro' : 'Claro';
+}
+</script>
+</body>
+</html>

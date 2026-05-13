@@ -1,0 +1,55 @@
+<h2>Acciones interactivas — ¿Qué se puede hacer desde la web?</h2>
+<p class="subtitle">Selecciona las acciones que quieres. Cada una requiere confirmación por Telegram.</p>
+
+<div class="options" data-multiselect>
+
+  <div class="option" data-choice="close-position" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Cerrar posición</h3>
+      <p>Botón "Cerrar" en cada posición abierta. Web envía request → bot manda confirmación a Telegram → confirmas → se ejecuta.</p>
+      <p style="margin-top:4px;font-size:0.8em;color:#10B981">Alta utilidad — lo más frecuente en trading activo</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="pause-resume" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Pausar / Reanudar scanner</h3>
+      <p>Toggle en el header del dashboard. Útil cuando ves algo en el mercado y no quieres que el bot abra nuevas posiciones.</p>
+      <p style="margin-top:4px;font-size:0.8em;color:#10B981">Alta utilidad — control rápido del sistema</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="approve-symbol" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Aprobar símbolo nuevo</h3>
+      <p>Input de texto en la sección de símbolos: escribes el ticker y confirmas. Equivale al comando /aprobar de Telegram.</p>
+      <p style="margin-top:4px;font-size:0.8em;color:#F59E0B">Utilidad media — ya tienes /aprobar en Telegram</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="notification-level" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Cambiar nivel de notificaciones</h3>
+      <p>Selector visual: critico / normal / verbose. Sin confirmación Telegram (no es acción de trading).</p>
+      <p style="margin-top:4px;font-size:0.8em;color:#10B981">Baja complejidad — solo llama al endpoint existente</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="force-analysis" onclick="toggleSelect(this)">
+    <div class="letter">E</div>
+    <div class="content">
+      <h3>Forzar análisis de símbolo</h3>
+      <p>Botón "Analizar ahora" en cualquier símbolo. Llama al endpoint /analyze sin esperar el ciclo de 15 min del scanner.</p>
+      <p style="margin-top:4px;font-size:0.8em;color:#F59E0B">Utilidad media — ya tienes /analizar en Telegram</p>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top:1rem;color:#475569;font-size:0.82em">
+  💡 Las acciones A y B requieren confirmación por Telegram. C, D y E son más simples.
+</p>

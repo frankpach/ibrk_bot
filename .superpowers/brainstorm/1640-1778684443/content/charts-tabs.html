@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Charts Tabs</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@300;400;500&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#06090F;--surface:#0C1421;--surface2:#111D2E;--border:#1E2D42;--text:#E2E8F0;--text-muted:#94A3B8;--text-dim:#64748B;--green:#10B981;--red:#F43F5E;--blue:#38BDF8;--amber:#FBBF24}
+body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;padding:16px}
+h2{font-family:"Bebas Neue",cursive;font-size:1.8rem;letter-spacing:.08em;color:var(--text);margin-bottom:4px}
+.subtitle{color:var(--text-dim);font-family:"Fira Code",monospace;font-size:.78rem;margin-bottom:24px}
+.section{margin-bottom:28px}
+.section-title{font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
+.card-head{background:var(--surface2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card-title{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
+
+/* tabs */
+.tabs{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:3px}
+.tab{padding:4px 10px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.68rem;color:var(--text-dim);cursor:pointer;border:none;background:transparent;transition:all .15s}
+.tab.active{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.tab-content{padding:12px;display:none}
+.tab-content.active{display:block}
+
+/* chart area */
+.chart{height:140px;width:100%;overflow:hidden;border-radius:4px}
+
+/* lazy symbol selector */
+.sym-selector{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sym-chip{padding:3px 10px;border-radius:12px;font-family:"Fira Code",monospace;font-size:.7rem;cursor:pointer;border:1px solid var(--border);color:var(--text-muted);background:transparent;transition:all .15s}
+.sym-chip.active{background:rgba(56,189,248,.12);color:var(--blue);border-color:rgba(56,189,248,.35)}
+.sym-chip-label{font-size:.65rem;color:var(--text-dim);font-family:"Fira Code",monospace}
+
+/* mini donut */
+.donut-row{display:flex;align-items:center;gap:16px;padding:4px 0}
+.donut-bar{height:8px;border-radius:4px;flex:1}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* rec cards */
+.rec{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px}
+.rec-title{font-size:.9rem;font-weight:700;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.rec-desc{font-family:"Fira Code",monospace;font-size:.72rem;color:var(--text-muted);line-height:1.5}
+.tag{display:inline-block;padding:2px 7px;border-radius:3px;font-size:.65rem;font-family:"Fira Code",monospace}
+.tag-easy{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.tag-med{background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.25)}
+.tag-hard{background:rgba(244,63,94,.1);color:var(--red);border:1px solid rgba(244,63,94,.25)}
+.tag-lazy{background:rgba(56,189,248,.1);color:var(--blue);border:1px solid rgba(56,189,248,.3)}
+</style>
+</head>
+<body>
+
+<h2>Charts Propuestos</h2>
+<p class="subtitle">Dos cards con tabs — cada tab es una gráfica diferente</p>
+
+<!-- ════════════════════════════════════════════════
+     CARD 1: CUENTA
+     ════════════════════════════════════════════════ -->
+<div class="section">
+<div class="section-title">Card 1 — "Mi Cuenta" (datos históricos de la DB)</div>
+<div class="card">
+  <div class="card-head">
+    <span class="card-title">Mi Cuenta</span>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('account','equity')">Equity</button>
+      <button class="tab"        onclick="switchTab('account','weekly')">Semanal</button>
+      <button class="tab"        onclick="switchTab('account','exits')">Exits</button>
+      <button class="tab"        onclick="switchTab('account','hours')">Por Hora</button>
+    </div>
+  </div>
+
+  <!-- Tab: Equity curve -->
+  <div id="account-equity" class="tab-content active">
+    <div class="chart">
+      <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+        <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#38BDF8" stop-opacity=".25"/>
+          <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+        </linearGradient></defs>
+        <polyline points="0,115 40,108 80,105 120,95 160,88 200,85 240,68 280,60 320,55 360,38 400,28"
+          fill="none" stroke="#38BDF8" stroke-width="2.5"/>
+        <polygon points="0,115 40,108 80,105 120,95 160,88 200,85 240,68 280,60 320,55 360,38 400,28 400,130 0,130"
+          fill="url(#g1)"/>
+        <rect x="0"   y="117" width="18" height="10" fill="#10B981" opacity=".7"/>
+        <rect x="40"  y="119" width="18" height="8"  fill="#F43F5E" opacity=".7"/>
+        <rect x="80"  y="116" width="18" height="11" fill="#10B981" opacity=".7"/>
+        <rect x="120" y="118" width="18" height="9"  fill="#10B981" opacity=".7"/>
+        <rect x="160" y="120" width="18" height="7"  fill="#F43F5E" opacity=".7"/>
+        <rect x="200" y="115" width="18" height="12" fill="#10B981" opacity=".7"/>
+        <rect x="240" y="117" width="18" height="10" fill="#10B981" opacity=".7"/>
+        <rect x="280" y="114" width="18" height="13" fill="#10B981" opacity=".7"/>
+        <rect x="320" y="118" width="18" height="9"  fill="#F43F5E" opacity=".7"/>
+        <rect x="360" y="113" width="18" height="14" fill="#10B981" opacity=".7"/>
+        <text x="4" y="14" fill="#374151" font-size="9" font-family="monospace">Balance + P&amp;L diario · 30 días</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Tab: P&L semanal -->
+  <div id="account-weekly" class="tab-content">
+    <div class="chart">
+      <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+        <!-- positive weeks -->
+        <rect x="20"  y="60" width="50" height="60" fill="#10B981" opacity=".8" rx="2"/>
+        <rect x="90"  y="40" width="50" height="80" fill="#10B981" opacity=".8" rx="2"/>
+        <rect x="160" y="80" width="50" height="40" fill="#F43F5E" opacity=".8" rx="2"/>
+        <rect x="230" y="50" width="50" height="70" fill="#10B981" opacity=".8" rx="2"/>
+        <rect x="300" y="30" width="50" height="90" fill="#10B981" opacity=".8" rx="2"/>
+        <line x1="0" y1="120" x2="400" y2="120" stroke="#1E2D42" stroke-width="1"/>
+        <text x="20"  y="135" fill="#374151" font-size="9" font-family="monospace">Sem1</text>
+        <text x="90"  y="135" fill="#374151" font-size="9" font-family="monospace">Sem2</text>
+        <text x="160" y="135" fill="#374151" font-size="9" font-family="monospace">Sem3</text>
+        <text x="230" y="135" fill="#374151" font-size="9" font-family="monospace">Sem4</text>
+        <text x="300" y="135" fill="#374151" font-size="9" font-family="monospace">Sem5</text>
+        <text x="4"   y="14"  fill="#374151" font-size="9" font-family="monospace">P&amp;L por semana · últimas 5</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Tab: Distribución exits -->
+  <div id="account-exits" class="tab-content">
+    <div style="padding:8px 4px;display:flex;flex-direction:column;gap:10px">
+      <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim)">Cómo se cerraron los últimos 30 trades</p>
+      <div class="donut-row">
+        <span class="legend-dot" style="background:#10B981"></span>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-muted);width:110px">Take Profit</span>
+        <div class="donut-bar" style="background:rgba(16,185,129,.15)">
+          <div style="height:100%;width:53%;background:#10B981;border-radius:4px"></div>
+        </div>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--green);width:32px;text-align:right">53%</span>
+      </div>
+      <div class="donut-row">
+        <span class="legend-dot" style="background:#F43F5E"></span>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-muted);width:110px">Stop Loss</span>
+        <div class="donut-bar" style="background:rgba(244,63,94,.12)">
+          <div style="height:100%;width:31%;background:#F43F5E;border-radius:4px"></div>
+        </div>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--red);width:32px;text-align:right">31%</span>
+      </div>
+      <div class="donut-row">
+        <span class="legend-dot" style="background:#FBBF24"></span>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-muted);width:110px">Trailing Stop</span>
+        <div class="donut-bar" style="background:rgba(251,191,36,.1)">
+          <div style="height:100%;width:10%;background:#FBBF24;border-radius:4px"></div>
+        </div>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--amber);width:32px;text-align:right">10%</span>
+      </div>
+      <div class="donut-row">
+        <span class="legend-dot" style="background:#64748B"></span>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-muted);width:110px">Manual</span>
+        <div class="donut-bar" style="background:rgba(100,116,139,.1)">
+          <div style="height:100%;width:6%;background:#64748B;border-radius:4px"></div>
+        </div>
+        <span style="font-family:'Fira Code',monospace;font-size:.75rem;color:var(--text-dim);width:32px;text-align:right">6%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: P&L por hora del día -->
+  <div id="account-hours" class="tab-content">
+    <div class="chart">
+      <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+        <line x1="0" y1="65" x2="400" y2="65" stroke="#1E2D42" stroke-width="1" stroke-dasharray="4,4"/>
+        <rect x="10"  y="50" width="22" height="15" fill="#10B981" opacity=".7" rx="1"/>
+        <rect x="40"  y="55" width="22" height="10" fill="#10B981" opacity=".5" rx="1"/>
+        <rect x="70"  y="68" width="22" height="10" fill="#F43F5E" opacity=".7" rx="1"/>
+        <rect x="100" y="72" width="22" height="15" fill="#F43F5E" opacity=".5" rx="1"/>
+        <rect x="130" y="45" width="22" height="20" fill="#10B981" opacity=".9" rx="1"/>
+        <rect x="160" y="40" width="22" height="25" fill="#10B981" opacity=".9" rx="1"/>
+        <rect x="190" y="50" width="22" height="15" fill="#10B981" opacity=".7" rx="1"/>
+        <rect x="220" y="60" width="22" height="5"  fill="#10B981" opacity=".4" rx="1"/>
+        <rect x="250" y="70" width="22" height="12" fill="#F43F5E" opacity=".6" rx="1"/>
+        <rect x="280" y="55" width="22" height="10" fill="#10B981" opacity=".5" rx="1"/>
+        <rect x="310" y="68" width="22" height="8"  fill="#F43F5E" opacity=".4" rx="1"/>
+        <rect x="340" y="72" width="22" height="15" fill="#F43F5E" opacity=".6" rx="1"/>
+        <text x="10"  y="125" fill="#374151" font-size="8" font-family="monospace">9:30</text>
+        <text x="130" y="125" fill="#374151" font-size="8" font-family="monospace">11:00</text>
+        <text x="250" y="125" fill="#374151" font-size="8" font-family="monospace">13:00</text>
+        <text x="340" y="125" fill="#374151" font-size="8" font-family="monospace">15:30</text>
+        <text x="4"   y="14"  fill="#374151" font-size="9" font-family="monospace">Mejor hora para entrar · últimos 30 días</text>
+      </svg>
+    </div>
+  </div>
+
+</div>
+</div><!-- end card 1 -->
+
+
+<!-- ════════════════════════════════════════════════
+     CARD 2: SÍMBOLO (lazy)
+     ════════════════════════════════════════════════ -->
+<div class="section">
+<div class="section-title">Card 2 — "Símbolo" (lazy load — solo fetcha cuando se selecciona)</div>
+<div class="card">
+
+  <!-- Symbol selector -->
+  <div class="sym-selector">
+    <span class="sym-chip-label">SÍMBOLO:</span>
+    <button class="sym-chip active" onclick="selectSym(this,'AAPL')">AAPL</button>
+    <button class="sym-chip"        onclick="selectSym(this,'NVDA')">NVDA</button>
+    <button class="sym-chip"        onclick="selectSym(this,'SPY')">SPY</button>
+    <button class="sym-chip"        onclick="selectSym(this,'ES')">ES</button>
+    <span style="font-family:'Fira Code',monospace;font-size:.65rem;color:var(--text-dim);margin-left:4px">
+      o cualquier símbolo activo
+    </span>
+  </div>
+
+  <div class="card-head" style="border-top:none">
+    <span class="card-title" id="sym-title">AAPL · $184.20 <span style="color:#10B981">▲ +1.04%</span></span>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('sym','intraday')">Hoy 5min</button>
+      <button class="tab"        onclick="switchTab('sym','daily')">30D diario</button>
+      <button class="tab"        onclick="switchTab('sym','indicators')">Indicadores</button>
+    </div>
+  </div>
+
+  <!-- Tab: Intraday 5min -->
+  <div id="sym-intraday" class="tab-content active">
+    <div class="chart">
+      <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+        <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#10B981" stop-opacity=".2"/>
+          <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+        </linearGradient></defs>
+        <!-- entry marker -->
+        <line x1="80" y1="0" x2="80" y2="130" stroke="#FBBF24" stroke-width="1" stroke-dasharray="3,3" opacity=".6"/>
+        <text x="82" y="12" fill="#FBBF24" font-size="8" font-family="monospace">ENTRY</text>
+        <!-- price line -->
+        <polyline points="0,90 20,88 40,85 60,87 80,84 100,80 120,76 140,79 160,74 180,70 200,72 220,67 240,63 260,66 280,60 300,57 320,59 340,54 360,50 380,48 400,45"
+          fill="none" stroke="#10B981" stroke-width="2"/>
+        <polygon points="0,90 20,88 40,85 60,87 80,84 100,80 120,76 140,79 160,74 180,70 200,72 220,67 240,63 260,66 280,60 300,57 320,59 340,54 360,50 380,48 400,45 400,130 0,130"
+          fill="url(#g2)"/>
+        <!-- SL line -->
+        <line x1="0" y1="105" x2="400" y2="105" stroke="#F43F5E" stroke-width="1" stroke-dasharray="4,4" opacity=".7"/>
+        <text x="4" y="103" fill="#F43F5E" font-size="8" font-family="monospace">SL</text>
+        <!-- TP line -->
+        <line x1="0" y1="30" x2="400" y2="30" stroke="#10B981" stroke-width="1" stroke-dasharray="4,4" opacity=".5"/>
+        <text x="4" y="28" fill="#10B981" font-size="8" font-family="monospace">TP</text>
+        <text x="4" y="125" fill="#374151" font-size="8" font-family="monospace">09:30</text>
+        <text x="180" y="125" fill="#374151" font-size="8" font-family="monospace">12:00</text>
+        <text x="360" y="125" fill="#374151" font-size="8" font-family="monospace">15:30</text>
+      </svg>
+    </div>
+    <p style="font-family:'Fira Code',monospace;font-size:.67rem;color:var(--text-dim);padding:0 4px 4px;margin-top:4px">
+      ⚡ lazy — se carga solo cuando seleccionas este símbolo · caché 5min
+    </p>
+  </div>
+
+  <!-- Tab: 30D daily -->
+  <div id="sym-daily" class="tab-content">
+    <div class="chart">
+      <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+        <defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#38BDF8" stop-opacity=".2"/>
+          <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+        </linearGradient></defs>
+        <polyline points="0,100 20,95 40,98 60,90 80,88 100,92 120,85 140,80 160,83 180,76 200,79 220,72 240,68 260,71 280,63 300,58 320,61 340,54 360,49 380,45 400,42"
+          fill="none" stroke="#38BDF8" stroke-width="2"/>
+        <polygon points="0,100 20,95 40,98 60,90 80,88 100,92 120,85 140,80 160,83 180,76 200,79 220,72 240,68 260,71 280,63 300,58 320,61 340,54 360,49 380,45 400,42 400,130 0,130"
+          fill="url(#g3)"/>
+        <!-- SMA 20 -->
+        <polyline points="0,105 40,100 80,95 120,90 160,87 200,83 240,78 280,72 320,67 360,60 400,55"
+          fill="none" stroke="#FBBF24" stroke-width="1.5" stroke-dasharray="5,3" opacity=".7"/>
+        <text x="330" y="52" fill="#FBBF24" font-size="8" font-family="monospace">SMA20</text>
+        <text x="4" y="14" fill="#374151" font-size="9" font-family="monospace">Precio diario · 30 días</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Tab: Indicadores inline -->
+  <div id="sym-indicators" class="tab-content">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px">
+
+      <!-- RSI gauge -->
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim);margin-bottom:6px">RSI (14)</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;background:linear-gradient(to right,#F43F5E 0%,#F43F5E 30%,#FBBF24 30%,#FBBF24 70%,#10B981 70%);height:8px;border-radius:4px;position:relative">
+            <div style="position:absolute;left:28%;top:-4px;width:4px;height:16px;background:#E2E8F0;border-radius:2px"></div>
+          </div>
+          <span style="font-family:'Bebas Neue',cursive;font-size:1.4rem;color:#10B981">28</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:'Fira Code',monospace;font-size:.65rem;color:var(--text-dim);margin-top:3px">
+          <span>Oversold</span><span>Neutral</span><span>Overbought</span>
+        </div>
+      </div>
+
+      <!-- MACD -->
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim);margin-bottom:6px">MACD</p>
+        <div style="height:50px;overflow:hidden">
+          <svg width="100%" height="50" viewBox="0 0 200 50">
+            <line x1="0" y1="25" x2="200" y2="25" stroke="#1E2D42" stroke-width="1"/>
+            <rect x="10"  y="22" width="12" height="5"  fill="#F43F5E" opacity=".8"/>
+            <rect x="28"  y="20" width="12" height="7"  fill="#F43F5E" opacity=".8"/>
+            <rect x="46"  y="18" width="12" height="9"  fill="#F43F5E" opacity=".8"/>
+            <rect x="64"  y="22" width="12" height="4"  fill="#F43F5E" opacity=".6"/>
+            <rect x="82"  y="24" width="12" height="3"  fill="#10B981" opacity=".6"/>
+            <rect x="100" y="21" width="12" height="6"  fill="#10B981" opacity=".8"/>
+            <rect x="118" y="18" width="12" height="8"  fill="#10B981" opacity=".8"/>
+            <rect x="136" y="15" width="12" height="11" fill="#10B981" opacity=".9"/>
+            <rect x="154" y="14" width="12" height="13" fill="#10B981" opacity=".9"/>
+            <rect x="172" y="12" width="12" height="15" fill="#10B981" opacity=".9"/>
+            <!-- MACD line -->
+            <polyline points="16,30 34,28 52,26 70,27 88,24 106,22 124,20 142,18 160,16 178,14"
+              fill="none" stroke="#38BDF8" stroke-width="1.5"/>
+            <!-- Signal line -->
+            <polyline points="16,31 34,30 52,28 70,28 88,26 106,24 124,22 142,20 160,18 178,16"
+              fill="none" stroke="#FBBF24" stroke-width="1" stroke-dasharray="3,2"/>
+          </svg>
+        </div>
+        <p style="font-family:'Fira Code',monospace;font-size:.68rem;color:var(--green);margin-top:2px">▲ Crossover alcista</p>
+      </div>
+
+      <!-- Bollinger position -->
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim);margin-bottom:6px">Bollinger Position</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;height:32px;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(244,63,94,.15) 0%,rgba(16,185,129,.1) 50%,rgba(244,63,94,.15) 100%)"></div>
+          <div style="position:absolute;top:50%;left:72%;transform:translate(-50%,-50%);width:12px;height:12px;background:#E2E8F0;border-radius:50%;border:2px solid var(--blue)"></div>
+          <span style="position:absolute;bottom:2px;left:4px;font-family:'Fira Code',monospace;font-size:.62rem;color:var(--text-dim)">Lower</span>
+          <span style="position:absolute;bottom:2px;right:4px;font-family:'Fira Code',monospace;font-size:.62rem;color:var(--text-dim)">Upper</span>
+        </div>
+        <p style="font-family:'Fira Code',monospace;font-size:.68rem;color:var(--text-muted);margin-top:3px">72% — zona alta</p>
+      </div>
+
+      <!-- Volume -->
+      <div>
+        <p style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim);margin-bottom:6px">Volumen vs Media 20d</p>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;background:var(--surface2);height:24px;border-radius:4px;overflow:hidden;border:1px solid var(--border)">
+            <div style="height:100%;width:210%;background:rgba(16,185,129,.25);display:flex;align-items:center;padding-left:6px">
+              <span style="font-family:'Fira Code',monospace;font-size:.7rem;color:var(--green)">2.1×</span>
+            </div>
+          </div>
+        </div>
+        <p style="font-family:'Fira Code',monospace;font-size:.68rem;color:var(--green);margin-top:3px">▲ Volumen alto</p>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</div><!-- end card 2 -->
+
+
+<!-- RECOMENDACIONES TEXTUALES -->
+<div class="section">
+<div class="section-title">Resumen de lo propuesto</div>
+
+<div class="rec">
+  <div class="rec-title"><span class="tag tag-easy">fácil</span> Card "Mi Cuenta" — 4 tabs</div>
+  <div class="rec-desc">
+    Tab 1: Equity curve (combo línea + barras) — ya diseñado ✓<br>
+    Tab 2: P&L por semana (barras verdes/rojas) — datos de DB<br>
+    Tab 3: Distribución exits (TP / SL / Trailing / Manual) — barras horizontales<br>
+    Tab 4: P&L por hora del día (cuándo rinde más) — datos de DB
+  </div>
+</div>
+
+<div class="rec">
+  <div class="rec-title"><span class="tag tag-lazy">lazy</span> Card "Símbolo" — 3 tabs con carga bajo demanda</div>
+  <div class="rec-desc">
+    Selector de símbolo (chips clicables — posiciones abiertas + señales activas)<br>
+    Tab 1: Gráfico 5min del día — fetch IBKR al seleccionar, caché 5min<br>
+    Tab 2: Gráfico diario 30 días — fetch IBKR al seleccionar, caché 1h<br>
+    Tab 3: Indicadores inline (RSI gauge, MACD histogram, Bollinger, Volumen)
+  </div>
+</div>
+
+<div class="rec">
+  <div class="rec-title"><span class="tag tag-med">opcional</span> Gráfico de P&L acumulado en tiempo real (intraday)</div>
+  <div class="rec-desc">
+    Mini sparkline en la tarjeta de stats: P&L de la cuenta hora a hora hoy.<br>
+    Calculado de trades cerrados hoy + P&L flotante de posiciones abiertas.
+  </div>
+</div>
+
+</div>
+
+<script>
+function switchTab(card, name) {
+  document.querySelectorAll(`[id^="${card}-"]`).forEach(el => el.classList.remove('active'));
+  document.querySelectorAll(`[id^="${card}-"]`).forEach(el => {
+    const btn = document.querySelector(`[onclick*="'${card}','${el.id.split('-')[1]}"]`);
+    if(btn) btn.classList.remove('active');
+  });
+  document.getElementById(`${card}-${name}`).classList.add('active');
+  const btn = document.querySelector(`[onclick*="'${card}','${name}'"]`);
+  if(btn) btn.classList.add('active');
+}
+function selectSym(el, sym) {
+  document.querySelectorAll('.sym-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sym-title').innerHTML = `${sym} · $184.20 <span style="color:#10B981">▲ +1.04%</span>`;
+}
+</script>
+</body>
+</html>

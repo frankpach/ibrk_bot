@@ -1,0 +1,55 @@
+<h2>Live Dashboard — ¿Qué construimos?</h2>
+<p class="subtitle">Selecciona los features que quieres en la primera versión</p>
+
+<div class="options" data-multiselect>
+
+  <div class="option" data-choice="pnl-live" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>P&amp;L flotante en tiempo real</h3>
+      <p>Cada posición abierta muestra el precio actual de IBKR, la ganancia/pérdida en $ y %, actualizado cada 2 min automáticamente por el bot.</p>
+      <p style="margin-top:6px;font-size:0.8em;color:#10B981">⚡ Esfuerzo bajo — reutiliza check_positions()</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="equity-curve" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Curva de crecimiento de la cuenta (30 días)</h3>
+      <p>Gráfico de línea con el balance real de IBKR día a día. Guardado automáticamente cada día a las 17:05 ET en una tabla nueva.</p>
+      <p style="margin-top:6px;font-size:0.8em;color:#F59E0B">⚡ Esfuerzo medio — nueva tabla + SVG chart</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="intraday-pnl" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>P&amp;L intraday del día actual</h3>
+      <p>Barra de progreso o mini-chart con el P&amp;L acumulado del día: trades cerrados hoy + posiciones abiertas flotantes.</p>
+      <p style="margin-top:6px;font-size:0.8em;color:#10B981">⚡ Esfuerzo bajo — calcula de trades del día</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="account-stats" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Stats de cuenta real (balance, buying power, margen)</h3>
+      <p>Tarjetas con datos directos de IBKR: Net Liquidation, Available Funds, Buying Power, Total P&amp;L de la cuenta.</p>
+      <p style="margin-top:6px;font-size:0.8em;color:#F59E0B">⚡ Esfuerzo medio — llamada a client.get_account()</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="interactivity" onclick="toggleSelect(this)">
+    <div class="letter">E</div>
+    <div class="content">
+      <h3>Interactividad básica (cerrar posición, pausar scanner)</h3>
+      <p>Botones de acción en el dashboard: cerrar una posición, pausar/reanudar el scanner, aprobar un símbolo nuevo.</p>
+      <p style="margin-top:6px;font-size:0.8em;color:#F43F5E">⚡ Esfuerzo alto — requiere auth/PIN + seguridad</p>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top:1.5rem;color:#475569;font-size:0.85em">
+  💡 Selecciona uno o varios. Puedes seleccionar todos si quieres el módulo completo.
+</p>

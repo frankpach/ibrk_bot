@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>News + Trends</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Fira+Code:wght@300;400;500&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#06090F;--surface:#0C1421;--surface2:#111D2E;--border:#1E2D42;--text:#E2E8F0;--text-muted:#94A3B8;--text-dim:#64748B;--green:#10B981;--red:#F43F5E;--blue:#38BDF8;--amber:#FBBF24;--purple:#A78BFA}
+body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;padding:16px}
+h2{font-family:"Bebas Neue",cursive;font-size:1.8rem;letter-spacing:.08em;color:var(--text);margin-bottom:4px}
+.subtitle{color:var(--text-dim);font-family:"Fira Code",monospace;font-size:.78rem;margin-bottom:20px}
+.section-title{font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.card-head{background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card-title{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
+.card-body{padding:12px}
+
+/* connection status */
+.conn-bar{display:flex;align-items:center;gap:8px;padding:6px 14px;background:rgba(16,185,129,.08);border-bottom:1px solid rgba(16,185,129,.2);font-family:"Fira Code",monospace;font-size:.7rem}
+.conn-bar.offline{background:rgba(244,63,94,.08);border-color:rgba(244,63,94,.2)}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-on{background:#10B981;box-shadow:0 0 5px #10B981}
+.dot-off{background:#F43F5E}
+.cache-note{margin-left:auto;color:var(--text-dim);font-size:.65rem}
+
+/* tabs */
+.tabs{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:3px}
+.tab{padding:4px 10px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.68rem;color:var(--text-dim);cursor:pointer;border:none;background:transparent}
+.tab.active{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* news items */
+.news-item{padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start}
+.news-item:last-child{border-bottom:none}
+.news-sym{font-family:"Bebas Neue",cursive;font-size:1.1rem;letter-spacing:.06em;color:var(--text);min-width:48px}
+.news-body{flex:1}
+.news-headline{font-size:.82rem;color:var(--text);line-height:1.35;margin-bottom:3px}
+.news-meta{font-family:"Fira Code",monospace;font-size:.65rem;color:var(--text-dim);display:flex;gap:8px}
+.sentiment{padding:1px 6px;border-radius:3px;font-size:.65rem;font-family:"Fira Code",monospace}
+.s-pos{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.25)}
+.s-neg{background:rgba(244,63,94,.1);color:var(--red);border:1px solid rgba(244,63,94,.2)}
+.s-neu{background:rgba(100,116,139,.1);color:var(--text-dim);border:1px solid var(--border)}
+
+/* scanner rows */
+.scan-row{display:grid;grid-template-columns:52px 1fr 70px 70px 70px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);gap:4px;font-family:"Fira Code",monospace;font-size:.75rem}
+.scan-row:last-child{border-bottom:none}
+.scan-sym{font-family:"Bebas Neue",cursive;font-size:1.1rem;color:var(--text)}
+.scan-name{color:var(--text-muted);font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chg-pos{color:var(--green)}
+.chg-neg{color:var(--red)}
+.vol-badge{padding:1px 6px;border-radius:3px;font-size:.65rem}
+.vol-high{background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.25)}
+.vol-med{background:rgba(251,191,36,.08);color:var(--amber);border:1px solid rgba(251,191,36,.2)}
+.btn-add{background:rgba(56,189,248,.1);color:var(--blue);border:1px solid rgba(56,189,248,.25);padding:2px 8px;border-radius:4px;font-size:.68rem;cursor:pointer;font-family:"Fira Code",monospace}
+
+/* architecture note */
+.arch-note{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px}
+.arch-note h4{font-size:.78rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;font-family:"Barlow Condensed",sans-serif;letter-spacing:.06em}
+.arch-note p{font-family:"Fira Code",monospace;font-size:.7rem;color:var(--text-dim);line-height:1.6}
+.arch-note code{color:var(--blue);background:rgba(56,189,248,.08);padding:1px 4px;border-radius:3px}
+</style>
+</head>
+<body>
+
+<h2>Noticias + Market Trends</h2>
+<p class="subtitle">Nuevas secciones propuestas · el offline de IBKR está manejado</p>
+
+<!-- ═══════════════════════════════
+     ESTADO DE CONEXIÓN IB GATEWAY
+     ═══════════════════════════════ -->
+<div class="section-title" style="margin-bottom:10px">Indicador de estado visible en todo el dashboard</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+  <div class="card" style="overflow:visible">
+    <div class="conn-bar">
+      <span class="dot dot-on"></span>
+      <span style="color:#10B981">IB Gateway · conectado</span>
+      <span class="cache-note">datos frescos</span>
+    </div>
+    <div style="padding:8px 14px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim)">
+      Las acciones (cerrar posición, aprobar símbolo) están activas.
+    </div>
+  </div>
+  <div class="card">
+    <div class="conn-bar offline">
+      <span class="dot dot-off"></span>
+      <span style="color:var(--red)">IB Gateway · offline</span>
+      <span class="cache-note">última conexión hace 8min</span>
+    </div>
+    <div style="padding:8px 14px;font-family:'Fira Code',monospace;font-size:.7rem;color:var(--text-dim)">
+      Mostrando datos en caché. Acciones bloqueadas hasta reconexión.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════
+     CARD: NOTICIAS
+     ═══════════════════════════════ -->
+<div class="section-title">Card — Noticias IBKR (reqHistoricalNews)</div>
+<div class="card">
+  <div class="card-head">
+    <span class="card-title">Noticias del Mercado</span>
+    <div class="tabs">
+      <button class="tab active" onclick="sw('news','all')">Todas</button>
+      <button class="tab"        onclick="sw('news','watchlist')">Mi universo</button>
+      <button class="tab"        onclick="sw('news','open')">Posiciones abiertas</button>
+    </div>
+  </div>
+  <div id="news-all" class="tab-content active" style="padding:0 14px">
+
+    <div class="news-item">
+      <span class="news-sym">AAPL</span>
+      <div class="news-body">
+        <p class="news-headline">Apple anuncia nuevo chip M4 para MacBook Air con eficiencia energética récord</p>
+        <div class="news-meta">
+          <span>Briefing.com</span>
+          <span>hace 12min</span>
+          <span class="sentiment s-pos">positivo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <span class="news-sym">FED</span>
+      <div class="news-body">
+        <p class="news-headline">Fed mantiene tasas sin cambios; Powell señala cautela ante datos de empleo mixtos</p>
+        <div class="news-meta">
+          <span>Dow Jones</span>
+          <span>hace 34min</span>
+          <span class="sentiment s-neu">neutral</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <span class="news-sym">NVDA</span>
+      <div class="news-body">
+        <p class="news-headline">NVDA: Blackwell GPU shipments delayed to Q2 — analyst downgrade to neutral</p>
+        <div class="news-meta">
+          <span>Briefing.com</span>
+          <span>hace 1h 20min</span>
+          <span class="sentiment s-neg">negativo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <span class="news-sym">SPY</span>
+      <div class="news-body">
+        <p class="news-headline">S&amp;P 500 abre al alza impulsado por sector tecnológico; VIX cae a mínimos de 3 meses</p>
+        <div class="news-meta">
+          <span>Briefing.com</span>
+          <span>hace 2h</span>
+          <span class="sentiment s-pos">positivo</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div id="news-watchlist" class="tab-content" style="padding:12px 14px">
+    <p style="font-family:'Fira Code',monospace;font-size:.72rem;color:var(--text-dim)">Noticias filtradas por los 40 símbolos de tu universo aprobado...</p>
+  </div>
+  <div id="news-open" class="tab-content" style="padding:12px 14px">
+    <p style="font-family:'Fira Code',monospace;font-size:.72rem;color:var(--text-dim)">Solo noticias de AAPL y NVDA (posiciones abiertas)...</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════
+     CARD: MARKET TRENDS / SCANNER
+     ═══════════════════════════════ -->
+<div class="section-title" style="margin-top:6px">Card — Market Trends (reqScannerSubscription)</div>
+<div class="card">
+  <div class="card-head">
+    <span class="card-title">Tendencias del Mercado</span>
+    <div class="tabs">
+      <button class="tab active" onclick="sw('scan','movers')">Más activos</button>
+      <button class="tab"        onclick="sw('scan','gainers')">Gainers</button>
+      <button class="tab"        onclick="sw('scan','losers')">Losers</button>
+      <button class="tab"        onclick="sw('scan','volume')">Vol inusual</button>
+    </div>
+  </div>
+  <div id="scan-movers" class="tab-content active" style="padding:0 14px">
+    <div style="padding:6px 0 4px;font-family:'Fira Code',monospace;font-size:.65rem;color:var(--text-dim)">Top 10 por actividad · actualizado cada 5min · botón + para proponer al bot</div>
+
+    <div class="scan-row">
+      <span class="scan-sym">NVDA</span>
+      <span class="scan-name">Nvidia Corp</span>
+      <span class="chg-neg">-2.1%</span>
+      <span class="vol-high">3.8×</span>
+      <button class="btn-add">+ proponer</button>
+    </div>
+    <div class="scan-row">
+      <span class="scan-sym">TSLA</span>
+      <span class="scan-name">Tesla Inc</span>
+      <span class="chg-pos">+4.3%</span>
+      <span class="vol-high">4.2×</span>
+      <button class="btn-add">+ proponer</button>
+    </div>
+    <div class="scan-row">
+      <span class="scan-sym">META</span>
+      <span class="scan-name">Meta Platforms</span>
+      <span class="chg-pos">+1.8%</span>
+      <span class="vol-med">2.1×</span>
+      <button class="btn-add">+ proponer</button>
+    </div>
+    <div class="scan-row">
+      <span class="scan-sym">AMD</span>
+      <span class="scan-name">Advanced Micro Devices</span>
+      <span class="chg-pos">+3.1%</span>
+      <span class="vol-high">3.3×</span>
+      <button class="btn-add">+ proponer</button>
+    </div>
+    <div class="scan-row">
+      <span class="scan-sym">COIN</span>
+      <span class="scan-name">Coinbase Global</span>
+      <span class="chg-pos">+6.7%</span>
+      <span class="vol-high">5.1×</span>
+      <button class="btn-add">+ proponer</button>
+    </div>
+
+  </div>
+  <div id="scan-gainers" class="tab-content" style="padding:12px 14px">
+    <p style="font-family:'Fira Code',monospace;font-size:.72rem;color:var(--text-dim)">Top gainers del día cargando...</p>
+  </div>
+  <div id="scan-losers" class="tab-content" style="padding:12px 14px">
+    <p style="font-family:'Fira Code',monospace;font-size:.72rem;color:var(--text-dim)">Top losers del día cargando...</p>
+  </div>
+  <div id="scan-volume" class="tab-content" style="padding:12px 14px">
+    <p style="font-family:'Fira Code',monospace;font-size:.72rem;color:var(--text-dim)">Símbolos con volumen inusual cargando...</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════
+     ARQUITECTURA
+     ═══════════════════════════════ -->
+<div class="section-title" style="margin-top:6px">Cómo funciona — sin conflicto con IBKR app móvil</div>
+
+<div class="arch-note">
+  <h4>Fetch periódico — no en cada click del dashboard</h4>
+  <p>
+    El bot fetcha noticias y scanner cada <code>N min</code> via APScheduler y las guarda en DB.<br>
+    Cuando abres la app móvil e IB Gateway cae, el dashboard sigue mostrando los últimos datos con un timestamp.<br>
+    <br>
+    <code>noticias</code> → guardadas en tabla <code>news_cache</code> · fetch cada 10min<br>
+    <code>scanner</code> → guardado en tabla <code>scanner_results</code> · fetch cada 5min<br>
+    <code>/dashboard/data</code> → solo hace SELECTs a SQLite, nunca llama IBKR directamente
+  </p>
+</div>
+
+<div class="arch-note">
+  <h4>Botón "Proponer símbolo" desde Market Trends</h4>
+  <p>
+    El botón <code>+ proponer</code> en cada fila del scanner llama a <code>POST /symbols/propose</code>.<br>
+    El bot recibe la propuesta y la manda a Telegram para aprobación con <code>/aprobar TICKER</code>.<br>
+    No requiere que IB Gateway esté online — es solo una escritura en la DB.
+  </p>
+</div>
+
+<script>
+function sw(card, name) {
+  document.querySelectorAll(`[id^="${card}-"]`).forEach(el => {
+    el.classList.remove('active');
+    const btn = document.querySelector(`[onclick*="'${card}','${el.id.replace(card+'-','')}"]`);
+    if(btn) btn.classList.remove('active');
+  });
+  document.getElementById(`${card}-${name}`).classList.add('active');
+  const btn = document.querySelector(`[onclick*="'${card}','${name}'"]`);
+  if(btn) btn.classList.add('active');
+}
+</script>
+</body>
+</html>

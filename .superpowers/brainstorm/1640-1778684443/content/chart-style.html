@@ -1,0 +1,83 @@
+<h2>Curva de crecimiento — ¿Qué estilo de gráfico?</h2>
+<p class="subtitle">Los 3 estilos posibles para el equity curve de 30 días</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="line-fill" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0C1421;padding:16px;height:160px;position:relative;overflow:hidden">
+      <svg width="100%" height="100%" viewBox="0 0 300 130">
+        <defs>
+          <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#10B981" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <polyline points="0,110 30,105 60,90 90,95 120,80 150,70 180,75 210,60 240,45 270,40 300,30"
+          fill="none" stroke="#10B981" stroke-width="2.5"/>
+        <polygon points="0,110 30,105 60,90 90,95 120,80 150,70 180,75 210,60 240,45 270,40 300,30 300,130 0,130"
+          fill="url(#g1)"/>
+        <text x="5" y="20" fill="#475569" font-size="10" font-family="monospace">$1,247</text>
+        <text x="5" y="125" fill="#374151" font-size="9" font-family="monospace">$500</text>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>A — Línea con área rellena</h3>
+      <p>Clásico. Muestra tendencia claramente. Verde si gana, rojo si pierde vs inicio. SVG puro, sin librerías.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="bar-daily" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0C1421;padding:16px;height:160px;position:relative;overflow:hidden">
+      <svg width="100%" height="100%" viewBox="0 0 300 130">
+        <rect x="5"  y="100" width="18" height="25" fill="#10B981" opacity="0.8"/>
+        <rect x="30" y="90"  width="18" height="35" fill="#10B981" opacity="0.8"/>
+        <rect x="55" y="85"  width="18" height="40" fill="#10B981" opacity="0.8"/>
+        <rect x="80" y="95"  width="18" height="30" fill="#F43F5E" opacity="0.8"/>
+        <rect x="105" y="75" width="18" height="50" fill="#10B981" opacity="0.8"/>
+        <rect x="130" y="70" width="18" height="55" fill="#10B981" opacity="0.8"/>
+        <rect x="155" y="80" width="18" height="45" fill="#F43F5E" opacity="0.8"/>
+        <rect x="180" y="60" width="18" height="65" fill="#10B981" opacity="0.8"/>
+        <rect x="205" y="50" width="18" height="75" fill="#10B981" opacity="0.8"/>
+        <rect x="230" y="45" width="18" height="80" fill="#10B981" opacity="0.8"/>
+        <rect x="255" y="35" width="18" height="90" fill="#10B981" opacity="0.8"/>
+        <line x1="0" y1="125" x2="300" y2="125" stroke="#1E2D42" stroke-width="1"/>
+        <text x="5" y="15" fill="#475569" font-size="9" font-family="monospace">P&amp;L diario</text>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>B — Barras de P&amp;L diario</h3>
+      <p>Muestra días ganadores (verde) y perdedores (rojo). Se ve rápido qué días fueron buenos. Complementa la línea de balance.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="combo" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0C1421;padding:16px;height:160px;position:relative;overflow:hidden">
+      <svg width="100%" height="100%" viewBox="0 0 300 130">
+        <defs>
+          <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#0EA5E9" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <!-- equity line -->
+        <polyline points="0,110 30,105 60,90 90,95 120,80 150,70 180,75 210,60 240,45 270,40 300,30"
+          fill="none" stroke="#0EA5E9" stroke-width="2"/>
+        <polygon points="0,110 30,105 60,90 90,95 120,80 150,70 180,75 210,60 240,45 270,40 300,30 300,130 0,130"
+          fill="url(#g2)"/>
+        <!-- daily bars (mini, below) -->
+        <rect x="8"   y="115" width="12" height="10" fill="#10B981" opacity="0.7"/>
+        <rect x="33"  y="112" width="12" height="13" fill="#10B981" opacity="0.7"/>
+        <rect x="58"  y="110" width="12" height="15" fill="#10B981" opacity="0.7"/>
+        <rect x="83"  y="118" width="12" height="7"  fill="#F43F5E" opacity="0.7"/>
+        <rect x="108" y="108" width="12" height="17" fill="#10B981" opacity="0.7"/>
+        <rect x="133" y="106" width="12" height="19" fill="#10B981" opacity="0.7"/>
+        <text x="5" y="12" fill="#475569" font-size="9" font-family="monospace">Balance + P&amp;L diario</text>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>C — Combo: línea de balance + barras diarias</h3>
+      <p>Arriba el balance acumulado (azul), abajo mini-barras de P&amp;L diario. Más información, misma altura de pantalla.</p>
+    </div>
+  </div>
+
+</div>
