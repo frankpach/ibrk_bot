@@ -25,14 +25,14 @@ from datetime import date
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-IB_HOST = "127.0.0.1"
-IB_PORT = 4002
+IB_HOST = os.getenv("IB_HOST", "127.0.0.1")
+IB_PORT = int(os.getenv("IB_PORT", "4002"))
 GATEWAY_CHECK_INTERVAL = 30  # segundos entre reintentos
 GATEWAY_MAX_WAIT = 600        # esperar máximo 10 minutos
 
 
 def _is_gateway_online() -> bool:
-    """Verifica si IB Gateway acepta conexiones en el puerto 4002."""
+    """Verifica si IB Gateway acepta conexiones."""
     try:
         with socket.create_connection((IB_HOST, IB_PORT), timeout=3):
             return True
