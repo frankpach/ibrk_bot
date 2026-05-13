@@ -803,7 +803,7 @@ def dashboard_data():
     try:
         from app.db.database import get_news_cache
         all_syms = get_approved_symbols()
-        news = get_news_cache(symbols=all_syms[:40], limit=20)
+        news = get_news_cache(symbols=all_syms, limit=20)
     except Exception as e:
         logger.warning(f"News cache failed: {e}")
 
@@ -820,7 +820,7 @@ def dashboard_data():
     symbols_universe = []
     try:
         from app.db.database import get_or_create_symbol_parameters
-        for sym in get_approved_symbols()[:40]:
+        for sym in get_approved_symbols():
             try:
                 params = get_or_create_symbol_parameters(sym)
                 trades_sym = get_closed_trades_by_symbol(sym, limit=20)

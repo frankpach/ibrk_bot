@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 STEP_TIMEOUTS = {
     "fetch_data": 30, "compute_indicators": 10,
-    "score": 2, "hard_rules": 5, "llm_interpret": 60,
+    "score": 2, "hard_rules": 5, "llm_interpret": 150,
 }
 TOTAL_TIMEOUT = 600
 
