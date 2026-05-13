@@ -450,6 +450,27 @@ def get_closed_trades_endpoint(limit: int = 10):
     ]
 
 
+@app.post("/orders/close/id/{trade_id}")
+def close_trade_by_id(trade_id: int):
+    """Request to close a position by trade ID — sends Telegram confirmation."""
+    from app.db.database import get_open_trades
+    trades = [t for t in get_open_trades() if t.id == trade_id]
+    if not trades:
+        raise HTTPException(status_code=404, detail="Trade not found or already closed")
+    trade = trades[0]
+    try:
+        from app.notifications.telegram import notify
+        notify(
+            f"\U0001f514 Solicitud de cierre desde dashboard:\n"
+            f"<b>{trade.symbol}</b> {trade.action} {trade.quantity}u\n"
+            f"Responde /cerrar {trade.symbol} para confirmar."
+        )
+        return {"message": f"Confirmación enviada por Telegram para {trade.symbol}",
+                "trade_id": trade_id, "symbol": trade.symbol}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/orders/close/{symbol}")
 def close_position(symbol: str):
     from app.db.database import get_open_trades, close_trade

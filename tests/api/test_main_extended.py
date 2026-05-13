@@ -367,6 +367,52 @@ def test_candidate_analysis_error():
             assert resp.status_code == 500
 
 
+# ---- Dashboard HTML (LD-004) ----
+
+def test_dashboard_html_has_ib_status():
+    from app.api.dashboard import render_dashboard_html
+    html = render_dashboard_html()
+    assert "ib_connected" in html or "IB Gateway" in html or "ibConnected" in html
+
+
+def test_dashboard_html_has_smart_refresh():
+    from app.api.dashboard import render_dashboard_html
+    html = render_dashboard_html()
+    assert "open_trades" in html  # smart refresh logic references open_trades
+
+
+def test_close_trade_by_id_not_found():
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+        with patch("app.db.database.get_open_trades", return_value=[]):
+            resp = client.post("/orders/close/id/99999")
+            assert resp.status_code == 404
+
+
+def test_close_trade_by_id_sends_telegram():
+    trade = MagicMock()
+    trade.id = 42
+    trade.symbol = "AAPL"
+    trade.action = "BUY"
+    trade.quantity = 1
+    with patch("app.ibkr.client.IBKRClient") as MockClient:
+        mock = MagicMock()
+        mock.ib.isConnected.return_value = True
+        MockClient.return_value = mock
+        client = _fresh_client()
+        with patch("app.db.database.get_open_trades", return_value=[trade]), \
+             patch("app.notifications.telegram.notify") as mock_notify:
+            resp = client.post("/orders/close/id/42")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["trade_id"] == 42
+            assert data["symbol"] == "AAPL"
+            mock_notify.assert_called_once()
+
+
 # ---- Single indicator ----
 
 def test_single_indicator_success():
