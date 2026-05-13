@@ -250,15 +250,28 @@ class IBDataLayer:
             try:
                 from ib_insync import Stock
                 contract = Stock(symbol.upper(), "SMART", "USD")
+                # Qualify contract first to get real conId (required for reqHistoricalNews)
+                ib_loop = getattr(self._client, "_loop", None)
+                if isinstance(ib_loop, asyncio.AbstractEventLoop) and ib_loop.is_running():
+                    fut = asyncio.run_coroutine_threadsafe(
+                        self._client.ib.qualifyContractsAsync(contract), ib_loop
+                    )
+                    fut.result(timeout=10)
+                else:
+                    self._client.ib.qualifyContracts(contract)
+                con_id = contract.conId or 0
+                if con_id == 0:
+                    raise ValueError(f"Could not qualify contract for {symbol}")
                 news = self._client.ib.reqHistoricalNews(
-                    reqId=1, conId=contract.conId if hasattr(contract, "conId") else 0,
+                    reqId=1, conId=con_id,
                     providerCodes="BRFG+DJNL+BRFUPDN",
                     startDateTime="", endDateTime="", totalResults=3,
                 )
                 for item in (news or []):
                     headline = getattr(item, "headline", "")
                     sentiment = _extract_sentiment(headline)
-                    news_items.append({"title": headline, "sentiment": sentiment, "date": getattr(item, "time", "")})
+                    news_items.append({"title": headline, "sentiment": sentiment, "date": getattr(item, "time", ""),
+                                       "provider": getattr(item, "providerCode", ""), "article_id": getattr(item, "articleId", "")})
             except Exception:
                 pass
 
