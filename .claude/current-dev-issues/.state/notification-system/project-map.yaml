@@ -1,0 +1,60 @@
+version: "1.0"
+module: notification-system
+updated_at: "2026-05-12T19:00:00Z"
+
+objectives:
+  current: notification-system
+  status: phase_4_complete
+  phases:
+    phase_0: {status: complete, completed_at: "2026-05-12T18:10:00Z", artifacts: ["docs/dev/artifacts/notification-system/01-design-concept.md", "docs/dev/artifacts/notification-system/02-persona-journey.md"]}
+    phase_1: {status: complete, completed_at: "2026-05-12T18:15:00Z", artifacts: ["docs/dev/artifacts/notification-system/03-architecture-map.md", "docs/dev/artifacts/notification-system/04-constraints.md", "docs/dev/artifacts/notification-system/05-why-decisions.md"]}
+    phase_2: {status: complete, completed_at: "2026-05-12T18:20:00Z", artifacts: ["docs/dev/artifacts/notification-system/06-interface-design.md"]}
+    phase_3: {status: complete, completed_at: "2026-05-12T18:25:00Z", artifacts: ["docs/dev/artifacts/notification-system/08-prd.md"]}
+    phase_4: {status: complete, completed_at: "2026-05-12T19:00:00Z", artifacts: [".claude/current-dev-issues/NS-001-throttler-queue.md", ".claude/current-dev-issues/NS-002-approval-manager.md", ".claude/current-dev-issues/NS-003-policy-digest.md", ".claude/current-dev-issues/NS-004-order-monitor.md", ".claude/current-dev-issues/NS-005-preflight-dedup.md"]}
+    phase_5: {status: in_progress, completed_at: null, issues_completed: 2, issues_total: 5}
+    phase_6: {status: pending, completed_at: null, artifact: null}
+    phase_7: {status: pending, completed_at: null, artifact: null}
+    phase_8: {status: pending, completed_at: null, artifact: null}
+
+personas:
+  - name: "Frank (Trader / Operator)"
+    device: mobile
+    environment: mobile
+    goal: "Recibir solo información nueva y relevante"
+    constraint: "No quiere ser bombardeado"
+    critical_flows: ["circuit_breaker_once", "order_approval_fast", "daily_digest", "fill_verification"]
+  - name: "Sistema Autónomo (Bot)"
+    device: raspberry_pi
+    environment: server_24_7
+    goal: "Notificar sin repetir, garantizar ejecución, no bloquear threads"
+    constraint: "Sin DB pesada, async-safe, fill verification"
+    critical_flows: ["throttled_notify", "callback_approval", "order_monitoring"]
+
+constraints:
+  timeline: null
+  technical:
+    - "No modificar IBKRClient"
+    - "In-memory state, no DB tables (excepto trade status)"
+    - "python-telegram-bot v20+"
+    - "Async-safe queue para threads APScheduler"
+    - "Backward compatible con notify() existente"
+    - "Fill verification antes de DB commit"
+  business:
+    - "Eliminar 100% de notificaciones duplicadas"
+    - "Aprobación de órdenes < 3s"
+    - "Usuario controla nivel de ruido"
+    - "0 órdenes duplicadas"
+    - "P&L real con fill prices"
+
+issues:
+  - {id: "NS-001", title: "NotificationThrottler + NotificationQueue", status: complete, priority: P0, effort: M, blocked_by: []}
+  - {id: "NS-002", title: "ApprovalManager (Async Callbacks)", status: pending, priority: P0, effort: M, blocked_by: ["NS-001"]}
+  - {id: "NS-003", title: "NotificationPolicy + Digest + Commands", status: pending, priority: P1, effort: S, blocked_by: ["NS-001"]}
+  - {id: "NS-004", title: "OrderExecutionMonitor + Fill Verification", status: pending, priority: P0, effort: M, blocked_by: ["NS-001"]}
+  - {id: "NS-005", title: "Order Deduplication + Pre-flight Checks", status: pending, priority: P1, effort: S, blocked_by: ["NS-004"]}
+
+next_action:
+  phase: 5
+  goal: "Execute Issues NS-002, NS-003, NS-004 in parallel"
+  deadline: null
+  blockers: []

@@ -26,8 +26,14 @@ def _get_bot():
     return Bot(token=TELEGRAM_BOT_TOKEN)
 
 
-def notify(message: str) -> bool:
+def notify(message: str, message_type: str = "generic") -> bool:
     """Envia notificacion simple sin esperar respuesta. Retorna True si enviado."""
+    from app.notifications.policy import get_policy
+    policy = get_policy()
+    if not policy.should_notify(message_type):
+        logger.debug(f"Notification suppressed by policy: {message_type}")
+        return False
+
     bot = _get_bot()
     if not bot:
         return False

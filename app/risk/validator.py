@@ -16,7 +16,7 @@ ALLOWED_ORDER_TYPES = {"MKT", "LMT"}
 class ValidationResult:
     approved: bool
     reasons: list[str] = field(default_factory=list)
-    position_size_units: int = 0
+    position_size_units: float = 0.0
     estimated_risk_usd: float = 0.0
 
 

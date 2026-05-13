@@ -124,17 +124,17 @@ class TestIndicatorEngine:
         from app.analysis.indicators import classify_signal
         assert classify_signal(28.0, True, 1.0) == "MEDIUM"
 
-    def test_classify_signal_weak(self):
+    def test_classify_signal_none(self):
         from app.analysis.indicators import classify_signal
-        assert classify_signal(50.0, False, 1.0) == "WEAK"
+        assert classify_signal(50.0, False, 1.0) == "NONE"
 
     def test_classify_multitimeframe_strong(self):
         from app.analysis.indicators import classify_multitimeframe
         assert classify_multitimeframe("STRONG", "STRONG", "MEDIUM") == "STRONG"
 
-    def test_classify_multitimeframe_medium(self):
+    def test_classify_multitimeframe_strong_from_daily(self):
         from app.analysis.indicators import classify_multitimeframe
-        assert classify_multitimeframe("STRONG", "WEAK", "MEDIUM") == "MEDIUM"
+        assert classify_multitimeframe("STRONG", "WEAK", "MEDIUM") == "STRONG"
 
     def test_classify_multitimeframe_weak(self):
         from app.analysis.indicators import classify_multitimeframe

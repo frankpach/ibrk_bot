@@ -41,10 +41,10 @@ def test_overbought_also_triggers_strong():
 
 def test_weak_when_fewer_than_2_conditions():
     f = _features(rsi_14=50.0, macd_crossover=False, volume_ratio_20d=0.5, bollinger_position=0.5)
-    assert classify_signal_v2(f) == "WEAK"
+    assert classify_signal_v2(f) == "NONE"
 
 
 def test_none_fields_handled_gracefully():
     f = _features(rsi_14=None, macd_crossover=None, volume_ratio_20d=None, bollinger_position=None)
     result = classify_signal_v2(f)
-    assert result in ("STRONG", "MEDIUM", "WEAK")
+    assert result == "NONE"

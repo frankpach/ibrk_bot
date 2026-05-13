@@ -35,10 +35,11 @@ def test_position_size_units_backward_compat():
 
 
 def test_position_size_units_crypto_fractional():
-    """BTC at $67 000 with capital=$5 000 → 0 integer units (correct, fractional qty is caller's job)."""
+    """BTC at $67 000 with capital=$5 000 → fractional units allowed."""
     result = validate_order(
         symbol="BTC", action="BUY", quantity=0, order_type="MKT",
         stop_loss_pct=0.02, capital=5_000.0, active_positions=0,
         now=datetime(2025, 6, 10, 14, 0, 0), price=67_000.0,
     )
-    assert result.position_size_units == 0
+    assert result.position_size_units > 0
+    assert result.position_size_units < 1

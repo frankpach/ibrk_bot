@@ -17,6 +17,13 @@ class Signal:
     processed: bool = False
 
 
+# Order lifecycle states
+TRADE_STATUSES = [
+    "PENDING", "SUBMITTED", "PARTIAL", "FILLED",
+    "OPEN", "CLOSE_REQUESTED", "CLOSE_PARTIAL",
+    "CLOSE_FILLED", "CLOSED", "FAILED", "CANCELLED",
+]
+
 @dataclass
 class Trade:
     id: Optional[int]
@@ -38,6 +45,13 @@ class Trade:
     opened_at: datetime
     closed_at: Optional[datetime]
     order_id: Optional[str]
+    # State machine + fill tracking
+    trade_status: str = "PENDING"
+    entry_fill_price: Optional[float] = None
+    exit_fill_price: Optional[float] = None
+    close_order_id: Optional[str] = None
+    partial_exit_done: bool = False
+    remaining_quantity: Optional[float] = None
 
 
 @dataclass

@@ -137,8 +137,19 @@ class AnalysisPipeline:
                 # Skip LLM for daily_discovery with low scores to save tokens
                 if not (self._context.mode == "daily_discovery" and
                         self._result.score and self._result.score.total < 60):
-                    self._llm_interpret()
-                    self._check_abort()
+                    # ML signal filter gate (< 100ms)
+                    from app.ml.signal_filter import get_signal_filter
+                    ml_filter = get_signal_filter()
+                    if ml_filter.should_ignore(self._result.features):
+                        self._result.recommendation = "REJECTED"
+                        self._result.llm_narrative = "ML filter: weak signal, skipping LLM"
+                        self._notify(
+                            f"🤖 <b>{self.symbol}</b> rechazado por filtro ML (señal débil). "
+                            f"Saltando análisis LLM."
+                        )
+                    else:
+                        self._llm_interpret()
+                        self._check_abort()
             elif self._result.hard_rules:
                 self._result.recommendation = "REJECTED"
                 self._notify(

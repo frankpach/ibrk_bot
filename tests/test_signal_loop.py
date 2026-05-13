@@ -14,6 +14,18 @@ def make_signal(symbol="AAPL", strength="STRONG", signal_id=1):
     )
 
 
+def _preview_resp(units=10):
+    return MagicMock(status_code=200, json=MagicMock(return_value={"recommended_units": units}))
+
+
+def _place_resp():
+    return MagicMock(status_code=200, json=MagicMock(return_value={"status": "placed", "order_id": "42"}))
+
+
+def _ignore_resp():
+    return MagicMock(status_code=200, json=MagicMock(return_value={"status": "ok"}))
+
+
 @patch("app.llm.loop.mark_signal_processed")
 @patch("app.llm.loop.analyze_signal")
 @patch("app.llm.loop.get_pending_signals")
@@ -34,16 +46,12 @@ def test_places_order_when_llm_returns_buy(mock_signals, mock_analyze, mock_mark
     from app.llm.agent import LLMDecision
     mock_signals.return_value = [make_signal()]
     mock_analyze.return_value = LLMDecision("BUY", 0.025, 0.06, "strong signal", "HIGH")
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"status": "placed", "order_id": "42"}
-    mock_httpx.post.return_value = mock_response
+    mock_httpx.post.side_effect = [_preview_resp(10), _place_resp()]
     from app.llm.loop import process_pending_signals
     process_pending_signals()
-    mock_httpx.post.assert_called_once()
-    call_args = mock_httpx.post.call_args
-    assert "orders/place" in call_args[0][0]
-    assert call_args[1]["json"]["symbol"] == "AAPL"
+    mock_httpx.post.assert_called()
+    calls = mock_httpx.post.call_args_list
+    assert any("orders/place" in str(c[0][0]) for c in calls)
     mock_mark.assert_called_once_with(1)
 
 

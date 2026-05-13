@@ -68,10 +68,13 @@ def test_loop_still_works():
         )
         mock_sig.return_value = [sig]
         mock_analyze.return_value = LLMDecision("BUY", 0.025, 0.06, "test", "HIGH")
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"status": "placed"}
-        mock_http.post.return_value = mock_resp
+        preview_resp = MagicMock()
+        preview_resp.status_code = 200
+        preview_resp.json.return_value = {"recommended_units": 10}
+        place_resp = MagicMock()
+        place_resp.status_code = 200
+        place_resp.json.return_value = {"status": "placed"}
+        mock_http.post.side_effect = [preview_resp, place_resp]
 
         from app.llm.loop import process_pending_signals
         process_pending_signals()

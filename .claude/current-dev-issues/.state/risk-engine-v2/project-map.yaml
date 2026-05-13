@@ -1,0 +1,68 @@
+version: "1.0"
+module: risk-engine-v2
+updated_at: "2026-05-12T19:00:00Z"
+
+objectives:
+  current: risk-engine-v2
+  status: phase_4_complete
+  phases:
+    phase_0: {status: complete, completed_at: "2026-05-12T18:10:00Z", artifacts: ["docs/dev/artifacts/risk-engine-v2/01-design-concept.md", "docs/dev/artifacts/risk-engine-v2/02-persona-journey.md"]}
+    phase_1: {status: complete, completed_at: "2026-05-12T18:15:00Z", artifacts: ["docs/dev/artifacts/risk-engine-v2/03-architecture-map.md", "docs/dev/artifacts/risk-engine-v2/04-constraints.md", "docs/dev/artifacts/risk-engine-v2/05-why-decisions.md"]}
+    phase_2: {status: complete, completed_at: "2026-05-12T18:20:00Z", artifacts: ["docs/dev/artifacts/risk-engine-v2/06-interface-design.md"]}
+    phase_3: {status: complete, completed_at: "2026-05-12T18:25:00Z", artifacts: ["docs/dev/artifacts/risk-engine-v2/08-prd.md"]}
+    phase_4: {status: complete, completed_at: "2026-05-12T19:00:00Z", artifacts: [".claude/current-dev-issues/RE-001-position-sizer.md", ".claude/current-dev-issues/RE-002-trailing-stop.md", ".claude/current-dev-issues/RE-003-regime-time.md", ".claude/current-dev-issues/RE-004-lmt-integration.md", ".claude/current-dev-issues/RE-005-state-machine.md", ".claude/current-dev-issues/RE-006-fill-price.md", ".claude/current-dev-issues/RE-007-atr-sl.md", ".claude/current-dev-issues/RE-008-partial-exits.md", ".claude/current-dev-issues/RE-009-cooldown.md", ".claude/current-dev-issues/RE-010-ml-filter.md", ".claude/current-dev-issues/RE-011-drawdown-recovery.md"]}
+    phase_5: {status: in_progress, completed_at: null, issues_completed: 7, issues_total: 11}
+    phase_6: {status: pending, completed_at: null, artifact: null}
+    phase_7: {status: pending, completed_at: null, artifact: null}
+    phase_8: {status: pending, completed_at: null, artifact: null}
+
+personas:
+  - name: "Sistema Autónomo (Bot)"
+    device: raspberry_pi
+    environment: server_24_7
+    goal: "Operar con riesgo adaptativo, proteger ganancias, maximizar profit factor"
+    constraint: "Sin modificar IBKRClient, < 1ms por cálculo"
+    critical_flows: ["adaptive_entry", "trailing_protection", "regime_filter", "fill_verification", "drawdown_recovery"]
+  - name: "Frank (Trader / Operator)"
+    device: mobile
+    environment: mobile
+    goal: "Ver mejor P&L, menos stops por ruido, capital protegido"
+    constraint: "Sin intervención manual necesaria"
+    critical_flows: ["position_protection", "regime_notification", "partial_exits", "drawdown_alert"]
+
+constraints:
+  timeline: null
+  technical:
+    - "No modificar IBKRClient"
+    - "Usar IBDataLayer para VIX"
+    - "Schema DB puede cambiar (state machine)"
+    - "Trailing stop computado on-the-fly"
+    - "LMT para entradas, MKT para salidas"
+    - "Fill verification antes de DB commit"
+    - "ML filter < 100ms"
+  business:
+    - "Reducir stops por ruido 40%"
+    - "Mejorar profit factor > 1.5"
+    - "0 operaciones en VIX > 35"
+    - "Cooldown post-SL 24h"
+    - "P&L real con fill prices"
+    - "Drawdown recovery automático"
+
+issues:
+  - {id: "RE-001", title: "PositionSizer + SlippageEstimator", status: complete, priority: P0, effort: M, blocked_by: []}
+  - {id: "RE-002", title: "TrailingStopManager", status: pending, priority: P0, effort: M, blocked_by: ["RE-001"]}
+  - {id: "RE-003", title: "MarketRegimeDetector + TimeFilter", status: complete, priority: P1, effort: S, blocked_by: []}
+  - {id: "RE-004", title: "LMT Orders + Integration", status: pending, priority: P1, effort: S, blocked_by: ["RE-001", "RE-003"]}
+  - {id: "RE-005", title: "Order Lifecycle State Machine (DB)", status: complete, priority: P0, effort: M, blocked_by: []}
+  - {id: "RE-006", title: "Real Fill Price Tracking", status: pending, priority: P1, effort: S, blocked_by: ["RE-005"]}
+  - {id: "RE-007", title: "ATR-Based Adaptive Stop Loss", status: complete, priority: P0, effort: S, blocked_by: []}
+  - {id: "RE-008", title: "Partial Exits (Escalonado de Ganancias)", status: pending, priority: P1, effort: M, blocked_by: ["RE-002", "RE-007"]}
+  - {id: "RE-009", title: "Re-entry Rules + Cooldown", status: complete, priority: P0, effort: S, blocked_by: []}
+  - {id: "RE-010", title: "ML Ligero como Filtro Previo", status: pending, priority: P1, effort: L, blocked_by: ["RE-001"]}
+  - {id: "RE-011", title: "Drawdown Recovery Strategy", status: complete, priority: P0, effort: M, blocked_by: ["RE-001"]}
+
+next_action:
+  phase: 5
+  goal: "Execute remaining issues: RE-002 (Trailing Stop), RE-004 (LMT), RE-006 (Fill Price), RE-008 (Partial Exits), RE-010 (ML Filter), NS-003 (Policy), NS-004 (Order Monitor), NS-005 (Preflight)"
+  deadline: null
+  blockers: []

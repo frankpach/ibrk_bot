@@ -1,15 +1,18 @@
 # app/db/database.py
 import sqlite3
 import json
+import logging
 from datetime import datetime
-from app.config.settings import DB_PATH, ALLOWED_SYMBOLS
+from app.config.settings import ALLOWED_SYMBOLS
 from app.db.models import Signal, Trade, Pattern, Decision
 
+logger = logging.getLogger(__name__)
 
-def get_connection() -> sqlite3.Connection:
+
+def get_connection():
+    from app.config.settings import DB_PATH
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
@@ -86,6 +89,23 @@ def _migrate_symbol_config(conn) -> None:
     _add_column_if_missing(conn, "symbol_config", "market_key",   "TEXT DEFAULT 'STK_US'")
 
 
+def _migrate_trades_state_machine(conn) -> None:
+    """Migrate trades table for state machine + fill tracking."""
+    _add_column_if_missing(conn, "trades", "trade_status", "TEXT DEFAULT 'PENDING'")
+    _add_column_if_missing(conn, "trades", "entry_fill_price", "REAL")
+    _add_column_if_missing(conn, "trades", "exit_fill_price", "REAL")
+    _add_column_if_missing(conn, "trades", "close_order_id", "TEXT")
+    _add_column_if_missing(conn, "trades", "partial_exit_done", "INTEGER DEFAULT 0")
+    _add_column_if_missing(conn, "trades", "remaining_quantity", "REAL")
+    # Backfill: existing OPEN trades -> trade_status='OPEN', CLOSED -> 'CLOSED'
+    try:
+        conn.execute("UPDATE trades SET trade_status='OPEN' WHERE status='OPEN' AND (trade_status IS NULL OR trade_status='PENDING')")
+        conn.execute("UPDATE trades SET trade_status='CLOSED' WHERE status='CLOSED' AND (trade_status IS NULL OR trade_status='PENDING')")
+        conn.commit()
+    except Exception:
+        pass
+
+
 def _seed_symbol_universe(conn) -> None:
     from datetime import timezone
     now = datetime.now(timezone.utc).isoformat()
@@ -131,7 +151,12 @@ def init_db():
                 status TEXT NOT NULL DEFAULT 'OPEN',
                 exit_price REAL, exit_reason TEXT,
                 pnl_usd REAL, pnl_pct REAL,
-                opened_at TEXT NOT NULL, closed_at TEXT, order_id TEXT
+                opened_at TEXT NOT NULL, closed_at TEXT, order_id TEXT,
+                trade_status TEXT DEFAULT 'PENDING',
+                entry_fill_price REAL, exit_fill_price REAL,
+                close_order_id TEXT,
+                partial_exit_done INTEGER DEFAULT 0,
+                remaining_quantity REAL
             );
             CREATE TABLE IF NOT EXISTS patterns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +180,7 @@ def init_db():
             );
         """)
         _migrate_symbol_config(conn)
+        _migrate_trades_state_machine(conn)
         _seed_symbol_universe(conn)
     finally:
         conn.close()
@@ -328,12 +354,15 @@ def insert_trade(trade: Trade) -> int:
     cur = conn.execute(
         """INSERT INTO trades
            (symbol,action,quantity,entry_price,stop_loss_price,take_profit_price,
-            stop_loss_pct,take_profit_pct,signal_strength,llm_justification,status,opened_at,order_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            stop_loss_pct,take_profit_pct,signal_strength,llm_justification,status,opened_at,order_id,
+            trade_status,entry_fill_price,exit_fill_price,close_order_id,partial_exit_done,remaining_quantity)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (trade.symbol, trade.action, trade.quantity, trade.entry_price,
          trade.stop_loss_price, trade.take_profit_price, trade.stop_loss_pct,
          trade.take_profit_pct, trade.signal_strength, trade.llm_justification,
-         trade.status, trade.opened_at.isoformat(), trade.order_id)
+         trade.status, trade.opened_at.isoformat(), trade.order_id,
+         trade.trade_status, trade.entry_fill_price, trade.exit_fill_price,
+         trade.close_order_id, int(trade.partial_exit_done), trade.remaining_quantity)
     )
     conn.commit()
     row_id = cur.lastrowid
@@ -341,11 +370,9 @@ def insert_trade(trade: Trade) -> int:
     return row_id
 
 
-def get_open_trades() -> list:
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM trades WHERE status='OPEN'").fetchall()
-    conn.close()
-    return [Trade(
+def _row_to_trade(r) -> Trade:
+    """Convert a DB row to Trade dataclass."""
+    return Trade(
         id=r["id"], symbol=r["symbol"], action=r["action"],
         quantity=r["quantity"], entry_price=r["entry_price"],
         stop_loss_price=r["stop_loss_price"], take_profit_price=r["take_profit_price"],
@@ -356,14 +383,76 @@ def get_open_trades() -> list:
         opened_at=datetime.fromisoformat(r["opened_at"]),
         closed_at=datetime.fromisoformat(r["closed_at"]) if r["closed_at"] else None,
         order_id=r["order_id"],
-    ) for r in rows]
+        trade_status=r["trade_status"] or "PENDING",
+        entry_fill_price=r["entry_fill_price"],
+        exit_fill_price=r["exit_fill_price"],
+        close_order_id=r["close_order_id"],
+        partial_exit_done=bool(r["partial_exit_done"]),
+        remaining_quantity=r["remaining_quantity"],
+    )
 
 
-def close_trade(trade_id: int, exit_price: float, exit_reason: str, pnl_usd: float, pnl_pct: float):
+def get_open_trades() -> list:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM trades WHERE status='OPEN'").fetchall()
+    conn.close()
+    return [_row_to_trade(r) for r in rows]
+
+
+def get_trades_by_status(trade_status: str) -> list:
+    """Get trades by trade_status (state machine)."""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM trades WHERE trade_status=?", (trade_status,)).fetchall()
+    conn.close()
+    return [_row_to_trade(r) for r in rows]
+
+
+def update_trade_status(trade_id: int, trade_status: str = None, order_id: str = None, fill_price: float = None, stop_loss_price: float = None, remaining_quantity: float = None):
+    """Update trade status and optionally fill price / order_id / stop_loss / remaining_quantity."""
+    conn = get_connection()
+    fields = []
+    params = []
+    if trade_status is not None:
+        fields.append("trade_status=?")
+        params.append(trade_status)
+    if order_id is not None:
+        fields.append("order_id=COALESCE(?,order_id)")
+        params.append(order_id)
+    if fill_price is not None:
+        fields.append("entry_fill_price=COALESCE(?,entry_fill_price)")
+        params.append(fill_price)
+    if stop_loss_price is not None:
+        fields.append("stop_loss_price=?")
+        params.append(stop_loss_price)
+    if remaining_quantity is not None:
+        fields.append("remaining_quantity=?")
+        params.append(remaining_quantity)
+    if not fields:
+        conn.close()
+        return
+    params.append(trade_id)
+    sql = f"UPDATE trades SET {','.join(fields)} WHERE id=?"
+    conn.execute(sql, params)
+    conn.commit()
+    conn.close()
+
+
+def update_trade_close_fill(trade_id: int, close_order_id: str, exit_fill_price: float):
+    """Update close order ID and exit fill price."""
     conn = get_connection()
     conn.execute(
-        "UPDATE trades SET status='CLOSED',exit_price=?,exit_reason=?,pnl_usd=?,pnl_pct=?,closed_at=? WHERE id=?",
-        (exit_price, exit_reason, pnl_usd, pnl_pct, datetime.utcnow().isoformat(), trade_id)
+        "UPDATE trades SET close_order_id=?, exit_fill_price=? WHERE id=?",
+        (close_order_id, exit_fill_price, trade_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def close_trade(trade_id: int, exit_price: float, exit_reason: str, pnl_usd: float, pnl_pct: float, exit_fill_price: float = None):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE trades SET status='CLOSED',trade_status='CLOSED',exit_price=?,exit_fill_price=?,exit_reason=?,pnl_usd=?,pnl_pct=?,closed_at=? WHERE id=?",
+        (exit_price, exit_fill_price, exit_reason, pnl_usd, pnl_pct, datetime.utcnow().isoformat(), trade_id)
     )
     conn.commit()
     conn.close()

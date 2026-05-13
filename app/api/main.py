@@ -1,4 +1,5 @@
 # app/api/main.py
+import logging
 from datetime import datetime
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,7 @@ from app.ibkr.client import get_client
 from app.risk.validator import validate_order
 from app.db.database import get_pending_signals, get_open_trades, get_patterns_for_symbol, init_db
 
+logger = logging.getLogger(__name__)
 app = FastAPI(title="IBKR AI Trader API")
 client = get_client()
 
@@ -274,38 +276,69 @@ def orders_place(req: OrderPreviewRequest):
                 "reasons": ["Order rejected or timed out waiting for human approval"],
             })
 
+    # Use LMT for entries to avoid slippage
+    entry_order_type = req.order_type.upper()
+    limit_price = req.limit_price
+    if entry_order_type == "MKT":
+        from app.risk.lmt_orders import calculate_limit_price
+        limit_price = calculate_limit_price(current_price, req.action)
+        entry_order_type = "LMT"
+
+    # Pre-flight checks
+    from app.ibkr.dedup import PreflightChecker, get_deduplicator
+    preflight = PreflightChecker(client).check(symbol, req.action, units, entry_order_type, limit_price)
+    if not preflight.ok:
+        raise HTTPException(status_code=403, detail={"approved": False, "reasons": [preflight.reason]})
+
+    # Deduplication
+    dedup = get_deduplicator()
+    if dedup.is_duplicate(symbol, req.action):
+        raise HTTPException(status_code=429, detail={"approved": False, "reasons": ["Duplicate order blocked (within 30s window)"]})
+
     if not PAPER_TRADING_ONLY:
         raise HTTPException(status_code=500, detail="Neither paper nor approval mode configured")
 
-    try:
-        order_result = client.place_order(
-            symbol=symbol,
-            action=req.action,
-            quantity=units,
-            order_type=req.order_type,
-            limit_price=req.limit_price,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Order placement failed: {exc}")
+    # Place and monitor order
+    from app.notifications.order_monitor import OrderExecutionMonitor
+    monitor = OrderExecutionMonitor(client)
+    order_result = monitor.place_and_monitor(
+        symbol=symbol,
+        action=req.action,
+        quantity=units,
+        order_type=entry_order_type,
+        limit_price=limit_price,
+    )
+
+    if not order_result.success:
+        raise HTTPException(status_code=500, detail=f"Order placement failed: {order_result.reason}")
+
+    dedup.record(symbol, req.action)
+
+    # Use real fill price if available
+    fill_price = order_result.fill_price or current_price
 
     from app.db.database import insert_trade
     from app.db.models import Trade
     from datetime import datetime as dt
+    price_for_sl = fill_price or current_price
     if req.action == "BUY":
-        stop_loss_price = round(current_price * (1 - req.stop_loss_pct), 2)
-        take_profit_price = round(current_price * (1 + req.take_profit_pct), 2)
+        stop_loss_price = round(price_for_sl * (1 - req.stop_loss_pct), 2)
+        take_profit_price = round(price_for_sl * (1 + req.take_profit_pct), 2)
     else:  # SELL
-        stop_loss_price = round(current_price * (1 + req.stop_loss_pct), 2)
-        take_profit_price = round(current_price * (1 - req.take_profit_pct), 2)
+        stop_loss_price = round(price_for_sl * (1 + req.stop_loss_pct), 2)
+        take_profit_price = round(price_for_sl * (1 - req.take_profit_pct), 2)
     insert_trade(Trade(
         id=None, symbol=symbol, action=req.action, quantity=units,
-        entry_price=current_price, stop_loss_price=stop_loss_price,
+        entry_price=price_for_sl, stop_loss_price=stop_loss_price,
         take_profit_price=take_profit_price, stop_loss_pct=req.stop_loss_pct,
         take_profit_pct=req.take_profit_pct, signal_strength="MANUAL",
         llm_justification="Placed via MCP", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
         opened_at=dt.utcnow(), closed_at=None,
-        order_id=order_result.get("order_id"),
+        order_id=order_result.order_id,
+        trade_status="FILLED",
+        entry_fill_price=fill_price,
+        remaining_quantity=units,
     ))
 
     return {
@@ -313,10 +346,11 @@ def orders_place(req: OrderPreviewRequest):
         "symbol": symbol,
         "action": req.action,
         "units": units,
-        "entry_price": current_price,
+        "entry_price": price_for_sl,
+        "fill_price": fill_price,
         "stop_loss_price": stop_loss_price,
         "take_profit_price": take_profit_price,
-        "order_id": order_result.get("order_id"),
+        "order_id": order_result.order_id,
     }
 
 
@@ -432,27 +466,41 @@ def close_position(symbol: str):
     
     # 1) Enviar orden de cierre REAL a IBKR
     close_action = "SELL" if trade.action == "BUY" else "BUY"
+    from app.ibkr.dedup import get_deduplicator, PreflightChecker
+    dedup = get_deduplicator()
+    if dedup.is_duplicate(trade.symbol, close_action):
+        raise HTTPException(status_code=429, detail="Duplicate close order blocked")
+    preflight = PreflightChecker(client).check(trade.symbol, close_action, trade.quantity, "MKT")
+    if not preflight.ok:
+        raise HTTPException(status_code=403, detail=preflight.reason)
+
     try:
-        client.place_order(
+        from app.ibkr.fill_tracker import get_fill_price_fallback
+        order_result = client.place_order(
             symbol=trade.symbol,
             action=close_action,
             quantity=trade.quantity,
             order_type="MKT",
         )
         logger.info(f"IBKR close order sent: {close_action} {trade.quantity} {trade.symbol}")
+        dedup.record(trade.symbol, close_action)
+        try:
+            fill_price = get_fill_price_fallback(client, order_result.get("order_id", ""), trade.symbol)
+        except Exception:
+            fill_price = current_price
     except Exception as e:
         logger.error(f"Failed to send IBKR close order for {trade.symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"IBKR close order failed: {e}")
-    
+
     # 2) Actualizar base de datos local
-    pnl_pct = (current_price - trade.entry_price) / trade.entry_price
+    pnl_pct = (fill_price - trade.entry_price) / trade.entry_price
     if trade.action == "SELL":
         pnl_pct = -pnl_pct
     pnl_usd = pnl_pct * trade.entry_price * trade.quantity
-    close_trade(trade.id, current_price, "MANUAL_CLOSE", round(pnl_usd, 2), round(pnl_pct, 4))
+    close_trade(trade.id, fill_price, "MANUAL_CLOSE", round(pnl_usd, 2), round(pnl_pct, 4), exit_fill_price=fill_price)
     return {
         "status": "closed", "symbol": symbol,
-        "exit_price": current_price,
+        "exit_price": fill_price,
         "pnl_usd": round(pnl_usd, 2),
         "pnl_pct": round(pnl_pct * 100, 2),
     }
@@ -466,6 +514,9 @@ def close_all_positions():
         return {"status": "ok", "closed": 0}
     closed = []
     failed = []
+    from app.ibkr.dedup import get_deduplicator, PreflightChecker
+    from app.ibkr.fill_tracker import get_fill_price_fallback
+    dedup = get_deduplicator()
     for trade in trades:
         try:
             price_data = client.get_stock_price(trade.symbol)
@@ -473,31 +524,42 @@ def close_all_positions():
             
             # Enviar orden de cierre REAL a IBKR
             close_action = "SELL" if trade.action == "BUY" else "BUY"
+            if dedup.is_duplicate(trade.symbol, close_action):
+                failed.append({"symbol": trade.symbol, "error": "Duplicate close blocked"})
+                continue
+            preflight = PreflightChecker(client).check(trade.symbol, close_action, trade.quantity, "MKT")
+            if not preflight.ok:
+                failed.append({"symbol": trade.symbol, "error": preflight.reason})
+                continue
             try:
-                client.place_order(
+                order_result = client.place_order(
                     symbol=trade.symbol,
                     action=close_action,
                     quantity=trade.quantity,
                     order_type="MKT",
                 )
                 logger.info(f"IBKR close order sent: {close_action} {trade.quantity} {trade.symbol}")
+                dedup.record(trade.symbol, close_action)
+                try:
+                    fill_price = get_fill_price_fallback(client, order_result.get("order_id", ""), trade.symbol)
+                except Exception:
+                    fill_price = current_price
             except Exception as e:
                 logger.error(f"Failed to send IBKR close order for {trade.symbol}: {e}")
                 failed.append({"symbol": trade.symbol, "error": str(e)})
                 continue
             
-            pnl_pct = (current_price - trade.entry_price) / trade.entry_price
+            pnl_pct = (fill_price - trade.entry_price) / trade.entry_price
             if trade.action == "SELL":
                 pnl_pct = -pnl_pct
             pnl_usd = pnl_pct * trade.entry_price * trade.quantity
-            close_trade(trade.id, current_price, "MANUAL_CLOSE_ALL", round(pnl_usd, 2), round(pnl_pct, 4))
+            close_trade(trade.id, fill_price, "MANUAL_CLOSE_ALL", round(pnl_usd, 2), round(pnl_pct, 4), exit_fill_price=fill_price)
             closed.append({"symbol": trade.symbol, "pnl_usd": round(pnl_usd, 2)})
         except Exception as e:
             logger.error(f"Could not close {trade.symbol}: {e}")
             failed.append({"symbol": trade.symbol, "error": str(e)})
     
     return {"status": "ok", "closed": len(closed), "failed": len(failed), "positions": closed}
-    return {"status": "ok", "closed": len(closed), "positions": closed}
 
 
 from fastapi.responses import HTMLResponse

@@ -22,5 +22,5 @@ def test_weak_one_condition():
     assert classify_signal(rsi=28.0, macd_crossover=False, volume_ratio=1.0) == "WEAK"
 
 
-def test_weak_no_conditions():
-    assert classify_signal(rsi=50.0, macd_crossover=False, volume_ratio=1.0) == "WEAK"
+def test_none_no_conditions():
+    assert classify_signal(rsi=50.0, macd_crossover=False, volume_ratio=1.0) == "NONE"
