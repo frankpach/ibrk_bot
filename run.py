@@ -381,6 +381,7 @@ def main():
     if data_layer:
         from app.analysis.admission import run_daily_discovery
         from app.analysis.evaluator import run_return_evaluator
+        from app.ml.cycle import run_learning_cycle
         scheduler.add_job(
             lambda: run_daily_discovery(data_layer),
             "cron", day_of_week="mon-fri", hour=8, minute=0,
@@ -390,6 +391,18 @@ def main():
             lambda: run_return_evaluator(data_layer),
             "cron", hour=6, minute=0,
             timezone=MARKET_TZ, id="return_evaluator",
+        )
+
+        def _run_learning_cycle():
+            try:
+                run_learning_cycle(_ib_client_ref["data_layer"])
+            except Exception as e:
+                logger.error(f"Learning cycle error: {e}")
+
+        scheduler.add_job(
+            _run_learning_cycle, "cron",
+            hour=17, minute=5, timezone=MARKET_TZ,
+            id="learning_cycle", replace_existing=True,
         )
 
     # Descubrir permisos de mercado diariamente a las 7:50am ET (antes de abrir US)
