@@ -1,0 +1,73 @@
+# Code Index: arch-refactor
+module: arch-refactor
+updated_at: "2026-05-14T00:00:00Z"
+
+models:
+  - path: app/db/models.py
+    entities: [Trade, Signal, Pattern, Decision, SymbolParameter, DailyWatchlist]
+  - path: app/config/settings.py
+    entities: [Settings — IB_HOST, IB_PORT, PAPER_TRADING_ONLY, MAX_POSITIONS, MAX_RISK_PCT, CAPITAL_CAP, API_BASE, OPENCODE_BIN, OPENCODE_MODEL, TELEGRAM_BOT_TOKEN]
+
+components:
+  - path: app/api/main.py
+    lines: 1311
+    role: FastAPI app — 40+ endpoints (mezcla query/command/dashboard/reports)
+    phase_target: split en 5 ficheros en interfaces/api/
+  - path: app/api/dashboard.py
+    lines: 1820
+    role: HTML rendering + queries directas
+    phase_target: split en dashboard_routes.py + read_models/ (Fase 5)
+  - path: app/db/database.py
+    lines: 1276
+    role: SQLite hub — schema + migraciones + 27+ funciones CRUD
+    phase_target: split en connection.py + migrations.py + repositories/* (Fases 2–3)
+  - path: run.py
+    lines: 628
+    role: APScheduler setup + IB watchdog + lógica de negocio pre-open
+    phase_target: split en scheduler/runner.py + scheduler/jobs.py (Fase 2)
+  - path: app/notifications/telegram_bot.py
+    lines: 800
+    role: Telegram bot command handlers
+    phase_target: mover a interfaces/telegram/bot_handlers.py (Fase 5)
+
+events:
+  - name: TradeOpened
+    phase: 3
+  - name: TradeClosed
+    phase: 3
+  - name: SignalGenerated
+    phase: 3
+  - name: ConfigChanged
+    phase: 3
+  - name: ModeChanged
+    phase: 3
+  - name: CircuitBreakerTripped
+    phase: 3
+
+services:
+  - name: ExecuteOrderUseCase
+    path: app/application/trading/execute_order.py
+    phase: 1
+    replaces: HTTP POST /orders/place desde llm/loop.py
+  - name: ClosePositionUseCase
+    path: app/application/trading/close_position.py
+    phase: 1
+    replaces: HTTP GET /price/free/ desde positions/manager.py
+  - name: SetTradingModeCommand
+    path: app/application/config/set_trading_mode.py
+    phase: 3
+    replaces: SystemController.set_mode() mutando settings global
+  - name: ControlPlaneQueryService
+    path: app/application/config/query_control_plane.py
+    phase: 4
+  - name: DashboardQueryService
+    path: app/infrastructure/db/read_models/dashboard_queries.py
+    phase: 5
+  - name: InProcessJobRunner
+    path: app/infrastructure/jobs/job_runner.py
+    phase: 6
+
+utilities:
+  - path: app/infrastructure/llm/opencode_adapter.py
+    phase: 0
+    replaces: [app/llm/agent.py::_call_opencode, app/llm/postmortem.py::_call_opencode, app/analysis/pipeline.py::_llm_interpret subprocess]

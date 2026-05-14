@@ -1,0 +1,79 @@
+version: "1.0"
+module: arch-refactor
+updated_at: "2026-05-14T00:00:00Z"
+
+objectives:
+  current: arch-refactor
+  status: phase_0_pending
+  phases:
+    phase_0: {status: pending, completed_at: null, artifacts: []}
+    phase_1: {status: pending, completed_at: null, artifacts: []}
+    phase_2: {status: pending, completed_at: null, artifacts: []}
+    phase_3: {status: pending, completed_at: null, artifacts: []}
+    phase_4: {status: pending, completed_at: null, artifacts: []}
+    phase_5: {status: pending, completed_at: null, issues_completed: 0, issues_total: 0}
+    phase_6: {status: pending, completed_at: null, artifact: null}
+    phase_7: {status: pending, completed_at: null, artifact: null}
+    phase_8: {status: pending, completed_at: null, artifact: null}
+
+personas: []
+
+constraints:
+  timeline: null
+  technical:
+    - "Sistema debe permanecer operativo en cada fase — no big-bang rewrites"
+    - "Rollback definido para cada fase antes de ejecutar"
+    - "Proceso único hoy — no cerrar puerta a workers separados"
+    - "SQLite en producción hasta Fase 7"
+    - "Acceso privado por Tailscale — sin exposición pública"
+  business:
+    - "Mínimo riesgo operacional en rutas de trading"
+    - "Paper mode como red de seguridad durante fases críticas"
+
+decisions:
+  - id: D-01
+    decision: "SQL plano + repositorios (no SQLAlchemy/SQLModel)"
+    rationale: "Más legible, revisable y debuggeable para trading; repositorios proveen indirección suficiente"
+  - id: D-02
+    decision: "InProcessJobRunner con asyncio (no Celery/ARQ todavía)"
+    rationale: "Proceso único hoy; interfaz swappable para workers futuros"
+  - id: D-03
+    decision: "X-Control-Key auth (no JWT/OAuth) para control plane inicial"
+    rationale: "Tailscale reduce radio de exposición; JWT agrega complejidad sin ganancia proporcional"
+  - id: D-04
+    decision: "No DDD puro — use cases + ports + adapters es suficiente"
+    rationale: "Pragmático; no hay Aggregates complejos en este dominio"
+
+open_questions: []
+assumptions:
+  - "database.py es importado por 27+ módulos"
+  - "llm/loop.py llama /orders/place via httpx (HTTP interno)"
+  - "SystemController.set_mode() muta settings.PAPER_TRADING_ONLY"
+  - "3 implementaciones separadas de _call_opencode() con cwd hardcodeado"
+
+issues: []
+actions: []
+
+code_index:
+  models:
+    - "app/db/models.py — Trade, Signal, Pattern, Decision, SymbolParameter"
+    - "app/config/settings.py — Settings globales"
+  components:
+    - "app/api/main.py (1311 líneas) — FastAPI + 40+ endpoints"
+    - "app/api/dashboard.py (1820 líneas) — HTML rendering"
+    - "app/db/database.py (1276 líneas) — SQLite hub central"
+    - "run.py (628 líneas) — APScheduler + IB watchdog"
+  events: []
+  services:
+    - "app/system/controller.py — SystemController (pause/resume/mode)"
+    - "app/analysis/pipeline.py — AnalysisPipeline"
+    - "app/llm/loop.py — process_pending_signals()"
+    - "app/positions/manager.py — check_positions()"
+
+failed_attempts_summary: []
+
+next_action:
+  phase: 0
+  goal: "Ejecutar Fase 0 — Quick Wins: WAL mode, unificar subprocess LLM, auth endpoints críticos"
+  deadline: null
+  blockers: []

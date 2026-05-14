@@ -1,47 +1,37 @@
-# live-dashboard — Development Issues
+# arch-refactor — Development Issues
 
-**Module**: live-dashboard
-**Started**: 2026-05-13
-**Status**: Phase 5 — Execution ready
-**Spec**: docs/superpowers/specs/2026-05-13-live-dashboard-design.md
+**Module**: arch-refactor
+**Started**: 2026-05-14
+**Status**: planning — Fase 0 pending
+**Plan**: `C:\Users\be47\.claude\plans\para-el-promp-glowing-quasar.md`
 
 ## Objetivo
 
-Dashboard con datos reales de IBKR: balance vivo, P&L flotante por posición,
-equity curve 30 días, e interactividad futura (Fase 2).
+Refactor arquitectónico profundo e incremental: desacoplar HTTP interno, extraer ports/adapters/use-cases, persistir system state, control plane /control, SQLite→PostgreSQL.
 
 ## Issue List
 
-| Issue | Título | Effort | Bloqueado por | Estado |
-|-------|--------|--------|---------------|--------|
-| LD-001 | DB Foundation — 4 tablas + SymbolParameter fields | S | — | pending |
-| LD-002 | Data Collection Jobs — position/account/news/scanner | M | LD-001 | pending |
-| LD-003 | Enrich /dashboard/data endpoint | S | LD-001 | pending |
-| LD-004 | Dashboard Frontend A — header, stats, positions, charts | M | LD-003 | pending |
-| LD-005 | Dashboard Frontend B — symbol, news, trends, universo, controls | M | LD-004 | pending |
+[To be populated in Phase 4 — /150-planning]
 
 ## Dependency Graph
 
-```
-LD-001 (DB Foundation)
-  ├── LD-002 (Data Jobs)    — escribe a las tablas
-  └── LD-003 (API endpoint) — lee de las tablas
-        └── LD-004 (Frontend A) — consume endpoint
-              └── LD-005 (Frontend B) — extiende Frontend A
-```
+[To be populated in Phase 4]
 
 ## Parallelizable Groups
 
-- **Grupo A**: LD-001 solo (sin deps)
-- **Grupo B**: LD-002 + LD-003 en paralelo (después de LD-001)
-- **Grupo C**: LD-004 → LD-005 secuencial
+[To be populated in Phase 4]
 
-## Orden recomendado
+## Fases del Roadmap
 
-```
-1. LD-001  DB Foundation  (S, ~1h)
-2. LD-002  Data Jobs       (M, ~3h)  ← en paralelo con LD-003
-3. LD-003  API endpoint    (S, ~1.5h) ← en paralelo con LD-002
-4. LD-004  Frontend A      (M, ~3h)
-5. LD-005  Frontend B      (M, ~3h)
-```
+| Fase | Objetivo | Estado |
+|------|----------|--------|
+| 0 | Quick wins: WAL mode, subprocess unify, auth | pending |
+| 1 | Eliminar HTTP interno (loop.py → execute_order direct) | pending |
+| 2 | Extraer servicios: ports, use cases, scheduler split | pending |
+| 3 | Persistir system state (globals → DB), audit log, events | pending |
+| 4 | Control plane /control | pending |
+| 5 | Desacoplar dashboard/reportes → read models | pending |
+| 6 | Doble soporte SQLite/PostgreSQL | pending |
+| 7 | Migrar a PostgreSQL | pending |
+| 8 | Endurecimiento final (security, cleanup) | pending |
+| 9 | Paralelismo y workers separados (opcional) | future |
