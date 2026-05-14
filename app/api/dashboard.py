@@ -269,7 +269,7 @@ def render_dashboard_html() -> str:
     }
 
     /* Header */
-    function Header({ data, interval, onTick, onTogglePause }) {
+    function Header({ data, interval, onTick, onTogglePause, onRefresh }) {
       const st = data?.status || {};
       const isLive = (st.mode || 'paper').toUpperCase() === 'LIVE';
       const ibConnected = data?.ib_connected;
@@ -308,6 +308,17 @@ def render_dashboard_html() -> str:
               title={!ibConnected ? 'IB Gateway offline' : ''}
               onClick={onTogglePause}
             >⏸ Pausar</button>
+            <a href="/reports" style={{
+              fontFamily:'"Fira Code",monospace', fontSize:'.75rem',
+              color:'var(--blue)', textDecoration:'none',
+              padding:'4px 10px', borderRadius:5,
+              background:'var(--blue-bg)', border:'1px solid rgba(56,189,248,.25)'
+            }}>📊 Reportes</a>
+            <button onClick={onRefresh} style={{
+              background:'var(--surface2)', border:'1px solid var(--border)',
+              color:'var(--dim)', padding:'4px 8px', borderRadius:5,
+              fontFamily:'"Fira Code",monospace', fontSize:'.72rem', cursor:'pointer'
+            }}>↻</button>
             <button className="theme-btn" onClick={handleToggle}>
               <span>{isDark ? '☀️' : '🌙'}</span>
               <span>{isDark ? 'Claro' : 'Oscuro'}</span>
@@ -1130,6 +1141,12 @@ def render_dashboard_html() -> str:
         } catch(e) {}
       }
 
+      async function analyzeFromTrends(symbol) {
+        try {
+          await fetch('/analyze/' + symbol, {method:'POST'});
+        } catch(e) {}
+      }
+
       const rows = scanner[tab] || [];
 
       return (
@@ -1195,10 +1212,16 @@ def render_dashboard_html() -> str:
                         background:(vr ?? 0)>2?'var(--green-bg)':'var(--amber-bg)',
                         color:(vr ?? 0)>2?'var(--green)':'var(--amber)',
                         border:`1px solid ${(vr ?? 0)>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}`}}>{vr == null ? '—' : `${vr.toFixed(1)}×`}</span>
-                      <button onClick={()=>proposeSymbol(r.symbol)}
-                        style={{background:'var(--blue-bg)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',padding:'2px 7px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
-                        + añadir
-                      </button>
+                      <div style={{display:'flex',gap:4}}>
+                        <button onClick={()=>analyzeFromTrends(r.symbol)}
+                          style={{background:'rgba(56,189,248,.08)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',padding:'2px 6px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
+                          📊 Ver
+                        </button>
+                        <button onClick={()=>proposeSymbol(r.symbol)}
+                          style={{background:'var(--blue-bg)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',padding:'2px 6px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
+                          +
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1373,7 +1396,10 @@ def render_dashboard_html() -> str:
 
           <IbStatusBar ibConnected={ibConnected} />
 
-          <Header data={data} interval={interval} onTick={() => setTick(k => k+1)} onTogglePause={toggleScanner} />
+          <Header data={data} interval={interval} onTick={() => setTick(k => k+1)} onTogglePause={toggleScanner} onRefresh={async () => {
+            try { await fetch('/refresh', {method:'POST'}); } catch(e) {}
+            setTick(k => k+1);
+          }} />
 
           <div className="page">
 

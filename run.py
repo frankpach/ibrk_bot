@@ -384,7 +384,17 @@ def main():
         minutes=10,
         id="reconciler",
     )
+    def _is_market_hours_now() -> bool:
+        """Returns True if we're in US market hours (9:00-17:00 ET Mon-Fri)."""
+        from datetime import datetime
+        now = datetime.now(MARKET_TZ)
+        if now.weekday() >= 5:
+            return False
+        return 9 <= now.hour < 17
+
     def _run_news_fetch():
+        if not _is_market_hours_now():
+            return  # Skip outside market hours
         try:
             dl = _ib_client_ref.get("data_layer")
             if dl:
@@ -394,6 +404,8 @@ def main():
             logger.error(f"News fetch error: {e}")
 
     def _run_scanner_fetch():
+        if not _is_market_hours_now():
+            return  # Skip outside market hours
         try:
             dl = _ib_client_ref.get("data_layer")
             if dl:
@@ -435,11 +447,11 @@ def main():
         id="digest_job", replace_existing=True,
     )
     scheduler.add_job(
-        _run_news_fetch, "interval", minutes=10,
+        _run_news_fetch, "interval", minutes=30,
         id="news_fetch", replace_existing=True,
     )
     scheduler.add_job(
-        _run_scanner_fetch, "interval", minutes=5,
+        _run_scanner_fetch, "interval", minutes=15,
         id="scanner_fetch", replace_existing=True,
     )
 

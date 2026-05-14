@@ -1255,3 +1255,46 @@ def delete_report_endpoint(report_id: int):
     if not delete_report(report_id):
         raise HTTPException(status_code=404, detail="Report not found")
     return {"deleted": True, "id": report_id}
+
+
+@app.post("/analyze/{symbol}")
+def trigger_analysis(symbol: str):
+    """Trigger on-demand LLM analysis for any symbol (including market trend candidates)."""
+    from app.notifications.telegram import notify
+    sym = symbol.upper()
+    try:
+        notify(f"📊 Análisis solicitado desde dashboard: <b>{sym}</b>\nUsa /analizar {sym} para ver el resultado.")
+        return {"message": f"Análisis de {sym} en cola. Recibirás el resultado en Telegram.", "symbol": sym}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/refresh")
+def manual_refresh():
+    """Manually trigger news and scanner refresh (for dashboard button)."""
+    results = {}
+    try:
+        from app.scanner.news_fetcher import fetch_and_cache_news
+        dl = get_data_layer()
+        fetch_and_cache_news(dl)
+        results["news"] = "ok"
+    except Exception as e:
+        results["news"] = str(e)
+    try:
+        from app.scanner.market_scanner import fetch_and_cache_scanner, fetch_and_cache_sectors
+        dl = get_data_layer()
+        fetch_and_cache_scanner(dl)
+        fetch_and_cache_sectors(dl)
+        results["scanner"] = "ok"
+    except Exception as e:
+        results["scanner"] = str(e)
+    return {"refreshed": True, "results": results}
+
+
+def get_data_layer():
+    """Helper to retrieve the shared IBDataLayer instance."""
+    try:
+        from app.llm.agent import get_data_layer as _get_dl
+        return _get_dl()
+    except Exception:
+        return None
