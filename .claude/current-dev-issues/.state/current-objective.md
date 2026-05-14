@@ -1,6 +1,7 @@
 # Current Objective
 
-**Phase**: Phase 0 — Quick Wins (Fases del plan: 0–9)
+**Phase**: Phase 1 — Eliminar HTTP interno (Fases del plan: 0–9)
+**Fase 0**: ✅ Completa (2026-05-14) — WAL mode, OPENCODE_CWD, OpenCodeAdapter, X-Control-Key auth
 **Module**: arch-refactor
 **Started**: 2026-05-14
 

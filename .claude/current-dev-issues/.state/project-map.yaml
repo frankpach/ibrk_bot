@@ -4,9 +4,9 @@ updated_at: "2026-05-14T00:00:00Z"
 
 objectives:
   current: arch-refactor
-  status: phase_0_pending
+  status: phase_1_pending
   phases:
-    phase_0: {status: pending, completed_at: null, artifacts: []}
+    phase_0: {status: complete, completed_at: "2026-05-14", artifacts: [tests/test_arch_refactor_fase0.py, app/infrastructure/llm/opencode_adapter.py, app/api/auth.py]}
     phase_1: {status: pending, completed_at: null, artifacts: []}
     phase_2: {status: pending, completed_at: null, artifacts: []}
     phase_3: {status: pending, completed_at: null, artifacts: []}

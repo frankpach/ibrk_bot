@@ -3,30 +3,27 @@
 **Module**: arch-refactor
 **Last Updated**: 2026-05-14
 
+## ✅ Fase 0 — Completa (2026-05-14)
+
+WAL mode, OPENCODE_CWD, OpenCodeAdapter, X-Control-Key auth. 839/839 tests green.
+
 ## Current Focus
 
-**Phase**: Fase 0 — Quick Wins Seguros
-**Goal**: Reducir deuda sin tocar lógica de negocio; cambios seguros y reversibles
+**Phase**: Fase 1 — Eliminar HTTP interno
+**Goal**: Reemplazar `llm/loop.py → POST /orders/place` (httpx interno) con llamada directa a `ExecuteOrderUseCase`
 
 ## Next Action (Do This Now)
 
-Ejecutar Fase 0 del plan. Los 4 cambios son independientes y pueden hacerse en cualquier orden:
+1. **Crear `app/application/trading/execute_order.py`** — `ExecuteOrderUseCase`
+   - Extrae la lógica actual de `POST /orders/place` en `app/api/main.py`
+   - Parámetros: symbol, action, quantity, order_type, stop_loss_pct, take_profit_pct, limit_price (optional)
+   - Feature flag: `USE_DIRECT_CALLS=true` en `.env` para rollback sin revert de código (D-06)
 
-1. **WAL mode + busy_timeout** en `app/db/database.py`
-   - Añadir `PRAGMA journal_mode=WAL` y `PRAGMA busy_timeout=5000` en `init_db()` o `get_connection()`
+2. **Actualizar `app/llm/loop.py`**
+   - Reemplazar `httpx.post(f"{API_BASE}/orders/place", ...)` por `ExecuteOrderUseCase().execute(...)`
+   - Verificar que `app/positions/manager.py` también usa HTTP interno y migrar si aplica
 
-2. **Mover paths hardcodeados a settings.py**
-   - `cwd="/home/frankpach/ibkr-bot"` → `settings.OPENCODE_CWD`
-   - En: `app/llm/agent.py`, `app/llm/postmortem.py`, `app/analysis/pipeline.py`
-
-3. **Unificar `_call_opencode()`** en `app/infrastructure/llm/opencode_adapter.py`
-   - Crear módulo con `OpenCodeAdapter` que implementará `ILLMService` (Fase 2)
-   - Los 3 módulos actuales importan de ahí
-
-4. **Auth `X-Control-Key`** en endpoints de sistema
-   - `POST /system/pause`, `POST /system/resume`, `POST /system/mode/{mode}`
-   - `POST /orders/place`, `POST /orders/close*`, `POST /orders/close-all`
-   - `POST /symbols/approve/{symbol}`
+3. **Mantener `POST /orders/place` en main.py** — ahora solo llama `ExecuteOrderUseCase`; no eliminar el endpoint todavía
 
 ## Backlog
 
