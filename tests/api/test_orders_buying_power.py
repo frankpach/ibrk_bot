@@ -9,6 +9,9 @@ ET = ZoneInfo("America/New_York")
 MARKET_OPEN_DT = datetime(2026, 5, 5, 10, 0, 0, tzinfo=ET)  # Tuesday 10am
 
 
+_TEST_CONTROL_KEY = "test-control-key"
+
+
 def _fresh_test_client(mock_ibkr):
     """Return a TestClient using a freshly imported app (with IBKRClient patched)."""
     for mod in list(sys.modules.keys()):
@@ -16,7 +19,7 @@ def _fresh_test_client(mock_ibkr):
             del sys.modules[mod]
     from fastapi.testclient import TestClient
     from app.api.main import app
-    return TestClient(app)
+    return TestClient(app, headers={"X-Control-Key": _TEST_CONTROL_KEY})
 
 
 def _account(buying_power: float, net_liq: float = 500.0):

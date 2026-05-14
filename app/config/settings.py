@@ -36,9 +36,11 @@ LLM_MODEL = os.getenv("LLM_MODEL", "moonshot-v1-8k")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 OPENCODE_BIN = os.getenv("OPENCODE_BIN", "/home/frankpach/.opencode/bin/opencode")
 OPENCODE_MODEL = os.getenv("OPENCODE_MODEL", "opencode-go/qwen3.5-plus")
+OPENCODE_CWD = os.getenv("OPENCODE_CWD", "/home/frankpach/ibkr-bot")
 
 # --- Internal API ---
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8088")
+API_CONTROL_KEY = os.getenv("API_CONTROL_KEY", "")
 
 # --- Scheduler ---
 SCAN_INTERVAL_MINUTES = 15

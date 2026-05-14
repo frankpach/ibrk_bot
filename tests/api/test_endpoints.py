@@ -4,12 +4,15 @@ from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 
+_TEST_CONTROL_KEY = "test-control-key"
+
+
 def _fresh_client():
     for mod in list(sys.modules.keys()):
         if "app.api.main" in mod:
             del sys.modules[mod]
     from app.api.main import app
-    return TestClient(app)
+    return TestClient(app, headers={"X-Control-Key": _TEST_CONTROL_KEY})
 
 
 def test_health():

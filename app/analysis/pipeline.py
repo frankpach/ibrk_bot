@@ -278,10 +278,11 @@ class AnalysisPipeline:
             )
 
             import subprocess
+            from app.config.settings import OPENCODE_CWD
             result = subprocess.run(
                 [OPENCODE_BIN, "run", "--model", OPENCODE_MODEL, "--format", "json", prompt],
                 capture_output=True, text=True, timeout=60,
-                cwd="/home/frankpach/ibkr-bot",
+                cwd=OPENCODE_CWD,
             )
             text_parts = []
             for line in result.stdout.strip().splitlines():

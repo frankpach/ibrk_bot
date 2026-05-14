@@ -2,7 +2,8 @@
 import logging
 from datetime import datetime
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from app.api.auth import require_control_key
 
 from app.config.settings import MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 from app.api.capital import get_operating_capital
@@ -241,7 +242,7 @@ def get_patterns(symbol: str):
              "losses": p.loss_count} for p in get_patterns_for_symbol(symbol.upper())]
 
 
-@app.post("/orders/place")
+@app.post("/orders/place", dependencies=[Depends(require_control_key)])
 def orders_place(req: OrderPreviewRequest):
     from app.config.settings import REQUIRE_HUMAN_APPROVAL, PAPER_TRADING_ONLY
     symbol = req.symbol.upper()
@@ -392,7 +393,7 @@ def get_proposals():
     return get_pending_proposals()
 
 
-@app.post("/symbols/approve/{symbol}")
+@app.post("/symbols/approve/{symbol}", dependencies=[Depends(require_control_key)])
 def approve_symbol_endpoint(symbol: str):
     from app.db.database import approve_symbol
     symbol = symbol.upper()
@@ -453,14 +454,14 @@ def system_status():
     return payload
 
 
-@app.post("/system/pause")
+@app.post("/system/pause", dependencies=[Depends(require_control_key)])
 def system_pause():
     from app.system.controller import get_controller
     get_controller().pause()
     return {"status": "paused"}
 
 
-@app.post("/system/resume")
+@app.post("/system/resume", dependencies=[Depends(require_control_key)])
 def system_resume():
     from app.system.controller import get_controller
     get_controller().resume()
@@ -483,7 +484,7 @@ def set_notification_level(level: str):
     return {"status": "ok", "level": level, "mapped": mapped}
 
 
-@app.post("/system/mode/{mode}")
+@app.post("/system/mode/{mode}", dependencies=[Depends(require_control_key)])
 def system_mode(mode: str):
     from app.system.controller import get_controller
     try:
@@ -510,7 +511,7 @@ def get_closed_trades_endpoint(limit: int = 10):
     ]
 
 
-@app.post("/orders/close/id/{trade_id}")
+@app.post("/orders/close/id/{trade_id}", dependencies=[Depends(require_control_key)])
 def close_trade_by_id(trade_id: int):
     """Request to close a position by trade ID — sends Telegram confirmation."""
     from app.db.database import get_open_trades
@@ -531,7 +532,7 @@ def close_trade_by_id(trade_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/orders/close/{symbol}")
+@app.post("/orders/close/{symbol}", dependencies=[Depends(require_control_key)])
 def close_position(symbol: str):
     from app.db.database import get_open_trades, close_trade
     symbol = symbol.upper()
@@ -587,7 +588,7 @@ def close_position(symbol: str):
     }
 
 
-@app.post("/orders/close-all")
+@app.post("/orders/close-all", dependencies=[Depends(require_control_key)])
 def close_all_positions():
     from app.db.database import get_open_trades, close_trade
     trades = get_open_trades()
