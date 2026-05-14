@@ -804,6 +804,15 @@ def init_analysis_tables():
             extra_json TEXT DEFAULT '{}',
             fetched_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS analysis_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_type TEXT NOT NULL,
+            report_date TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content_md TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_reports_date ON analysis_reports(report_date, report_type);
     """)
     conn.commit()
     _add_column_if_missing(conn, "trades", "feature_snapshot_id", "INTEGER")
@@ -1148,3 +1157,56 @@ def get_scanner_results(scan_type: str) -> list:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# --- Analysis Reports CRUD ---
+
+def save_report(report_type: str, report_date: str, title: str, content_md: str) -> int:
+    """Save a report. Returns the new report id."""
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO analysis_reports (report_type, report_date, title, content_md, created_at)
+           VALUES (?,?,?,?,?)""",
+        (report_type, report_date, title, content_md, datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    row_id = cur.lastrowid
+    conn.close()
+    # Keep only last 3 days of reports (rolling retention)
+    _cleanup_old_reports(days=3)
+    return row_id
+
+
+def get_reports(limit: int = 20) -> list:
+    """Return recent reports, newest first."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, report_type, report_date, title, created_at FROM analysis_reports ORDER BY created_at DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_report_by_id(report_id: int) -> dict | None:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM analysis_reports WHERE id=?", (report_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_report(report_id: int) -> bool:
+    conn = get_connection()
+    cur = conn.execute("DELETE FROM analysis_reports WHERE id=?", (report_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def _cleanup_old_reports(days: int = 3) -> None:
+    from datetime import timedelta
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = get_connection()
+    conn.execute("DELETE FROM analysis_reports WHERE report_date < ?", (cutoff,))
+    conn.commit()
+    conn.close()

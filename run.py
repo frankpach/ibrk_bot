@@ -288,6 +288,45 @@ def main():
             if not client.ib.isConnected():
                 raise ConnectionError("IB Gateway desconectado")
             select_top_symbols(market_key, client, dl, session_date=session_date)
+            # After STK_US pre-open scan, generate pre-market report
+            if market_key == "STK_US":
+                try:
+                    from app.reports.generator import generate_pre_market_report
+                    from app.db.database import get_pending_signals
+                    signals = get_pending_signals(since_hours=2)
+                    symbols_data = [
+                        {
+                            "symbol": s.symbol,
+                            "score": None,
+                            "recommendation": s.strength,
+                            "narrative": (
+                                f"Señal {s.strength} detectada. "
+                                f"RSI: {s.rsi or '?'}, Vol: {s.volume_ratio or '?'}x"
+                            ),
+                            "rsi": s.rsi,
+                            "volume_ratio": s.volume_ratio,
+                            "weekly_trend": "NEUTRAL",
+                        }
+                        for s in signals[:10]
+                    ]
+                    if symbols_data:
+                        report_id = generate_pre_market_report(
+                            symbols_data, _ib_client_ref.get("client")
+                        )
+                        if report_id:
+                            try:
+                                from app.config.settings import API_BASE
+                                report_url = API_BASE.replace(
+                                    "127.0.0.1", "aiutox-pi.tail2a2cda.ts.net"
+                                )
+                                notify(
+                                    f"📊 Reporte pre-mercado listo\n"
+                                    f"→ {report_url}/reports/{report_id}"
+                                )
+                            except Exception:
+                                notify(f"📊 Reporte pre-mercado listo (id={report_id})")
+                except Exception as _rep_err:
+                    logger.error(f"Pre-market report generation failed: {_rep_err}")
         except Exception as e:
             logger.error(f"Pre-open scan {market_key} falló: {e}")
             _MISSING_SCAN_JOBS.append((market_key, session_date or date.today().isoformat()))

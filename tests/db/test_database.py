@@ -13,6 +13,7 @@ from app.db.database import (
     upsert_account_snapshot, get_account_history,
     insert_news_cache, get_news_cache,
     upsert_scanner_results, get_scanner_results,
+    save_report, get_reports, get_report_by_id, delete_report,
 )
 from app.db.models import Signal, Trade, Pattern, Decision
 
@@ -397,3 +398,91 @@ def test_symbol_parameter_has_new_fields():
     assert sp.backtest_calibrated == 0
     assert sp.backtest_calibrated_at is None
     assert sp.backtest_profit_factor is None
+
+
+# --- Analysis Reports tests ---
+
+def test_save_and_get_report():
+    """Save a report and retrieve it by id and in listing."""
+    report_id = save_report(
+        "pre_market",
+        "2026-05-13",
+        "Pre-Mercado 2026-05-13 — 5 simbolos",
+        "# Test\n\nContenido de prueba.",
+    )
+    assert report_id is not None
+    assert report_id > 0
+
+    # get_report_by_id returns all fields
+    report = get_report_by_id(report_id)
+    assert report is not None
+    assert report["id"] == report_id
+    assert report["report_type"] == "pre_market"
+    assert report["report_date"] == "2026-05-13"
+    assert "Test" in report["content_md"]
+
+    # get_reports includes the new report
+    listing = get_reports(limit=50)
+    ids = [r["id"] for r in listing]
+    assert report_id in ids
+
+
+def test_get_report_by_id_not_found():
+    """get_report_by_id returns None for a missing id."""
+    result = get_report_by_id(999999999)
+    assert result is None
+
+
+def test_delete_report():
+    """Save then delete a report; verify it's gone."""
+    report_id = save_report(
+        "daily_ops",
+        "2026-05-13",
+        "Operaciones 2026-05-13",
+        "## Resumen\n\nSin operaciones.",
+    )
+    deleted = delete_report(report_id)
+    assert deleted is True
+    assert get_report_by_id(report_id) is None
+
+    # Second delete returns False
+    assert delete_report(report_id) is False
+
+
+def test_cleanup_old_reports():
+    """Reports with report_date older than retention window are removed by save_report."""
+    from datetime import timedelta
+
+    # Insert a report dated 10 days ago directly (bypass cleanup)
+    from app.db.database import get_connection
+    from datetime import datetime as _dt
+    old_date = (_dt.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO analysis_reports (report_type, report_date, title, content_md, created_at) "
+        "VALUES (?,?,?,?,?)",
+        ("pre_market", old_date, "Old report", "content", _dt.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+    # Now save a fresh report, which triggers _cleanup_old_reports(days=3)
+    save_report("pre_market", _dt.utcnow().strftime("%Y-%m-%d"), "Fresh report", "content")
+
+    # The old report should no longer exist
+    listing = get_reports(limit=100)
+    dates = [r["report_date"] for r in listing]
+    assert old_date not in dates
+
+
+def test_analysis_reports_table_exists():
+    """Verify the analysis_reports table and index were created by init_analysis_tables."""
+    conn = get_connection()
+    tables = [
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='analysis_reports'"
+        ).fetchall()
+    ]
+    conn.close()
+    assert "analysis_reports" in tables
