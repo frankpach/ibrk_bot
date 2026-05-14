@@ -1232,6 +1232,47 @@ def render_dashboard_html() -> str:
       );
     }
 
+    /* Daily Watchlist — hourly opportunity candidates */
+    function DailyWatchlist({ data }) {
+      const items = data?.daily_watchlist || [];
+      if (!items.length) return null;
+
+      return (
+        <div className="card fade-up">
+          <div className="ch">
+            <span className="ct">🎯 Oportunidades del Día</span>
+            <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.67rem',color:'var(--dim)'}}>
+              {items.length} candidatos · actualiza cada hora
+            </span>
+          </div>
+          <div style={{padding:'0 12px'}}>
+            {items.slice(0,8).map((item, i) => {
+              const signalColor = item.signal_strength === 'STRONG' ? 'var(--green)' : 'var(--amber)';
+              const changePos = (item.change_pct || 0) >= 0;
+              return (
+                <div key={i} style={{display:'grid',gridTemplateColumns:'52px 1fr 55px 55px 55px 70px',
+                  alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)',
+                  gap:6,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
+                  <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.05rem',color:'var(--text)'}}>{item.symbol}</span>
+                  <span style={{color:'var(--dim)',fontSize:'.65rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.reason?.split(':')[0] || ''}</span>
+                  <span style={{color: changePos ? 'var(--green)' : 'var(--red)'}}>
+                    {(item.change_pct||0) >= 0 ? '+' : ''}{(item.change_pct||0).toFixed(1)}%
+                  </span>
+                  <span style={{color: signalColor, fontSize:'.65rem'}}>{item.signal_strength}</span>
+                  <span style={{color:'var(--blue)'}}>{(item.score||0).toFixed(0)}/100</span>
+                  <button onClick={() => window.open('/analyze-page/'+item.symbol,'_blank')}
+                    style={{background:'var(--blue-bg)',color:'var(--blue)',border:'1px solid rgba(56,189,248,.25)',
+                      padding:'2px 8px',borderRadius:3,fontSize:'.67rem',cursor:'pointer',fontFamily:'"Fira Code",monospace'}}>
+                    📊 Analizar
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     /* Mi Universo table */
     function UniversoTable({ data }) {
       const syms = data?.symbols_universe || [];
@@ -1427,6 +1468,8 @@ def render_dashboard_html() -> str:
               <NewsCard data={data} />
               <MarketTrendsCard data={data} />
             </div>
+
+            <DailyWatchlist data={data} />
 
             <div className="row-2">
               <div className="card fade-up">

@@ -420,6 +420,23 @@ def main():
         except Exception as e:
             logger.error(f"Scanner fetch error: {e}")
 
+    def _run_opportunity_scan():
+        """Hourly proactive scan — scores top movers and alerts on strong candidates."""
+        if not _is_market_hours_now():
+            return
+        try:
+            dl = _ib_client_ref.get("data_layer")
+            if not dl:
+                return
+            from app.scanner.opportunity_scanner import run_opportunity_scan, notify_opportunities
+            opportunities = run_opportunity_scan(dl, _ib_client_ref.get("client"))
+            if opportunities:
+                from app.config.settings import API_BASE
+                notify_opportunities(opportunities, API_BASE)
+                logger.info(f"Opportunity scan found {len(opportunities)} new candidates")
+        except Exception as e:
+            logger.error(f"Opportunity scan error: {e}")
+
     def _send_digest():
         """Send periodic digest summary."""
         try:
@@ -453,6 +470,10 @@ def main():
     scheduler.add_job(
         _run_scanner_fetch, "interval", minutes=15,
         id="scanner_fetch", replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_opportunity_scan, "interval", minutes=60,
+        id="opportunity_scan", replace_existing=True,
     )
 
     if data_layer:

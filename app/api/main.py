@@ -889,6 +889,15 @@ def dashboard_data():
     except Exception as e:
         logger.warning(f"Symbols universe failed: {e}")
 
+    # Daily watchlist (dynamic opportunity candidates)
+    daily_watchlist = []
+    try:
+        from app.db.database import get_daily_watchlist
+        from datetime import datetime as _dt2
+        daily_watchlist = get_daily_watchlist(_dt2.utcnow().strftime("%Y-%m-%d"))
+    except Exception:
+        pass
+
     # --- 6. IB connection status ---
     ib_connected = False
     try:
@@ -926,6 +935,7 @@ def dashboard_data():
         "symbols_universe": symbols_universe,
         "ib_connected": ib_connected,
         "earnings_warnings": earnings_warnings,
+        "daily_watchlist": daily_watchlist,
     }
 
 

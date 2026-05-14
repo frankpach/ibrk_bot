@@ -813,6 +813,19 @@ def init_analysis_tables():
             created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_reports_date ON analysis_reports(report_date, report_type);
+        CREATE TABLE IF NOT EXISTS daily_watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            score REAL,
+            signal_strength TEXT,
+            change_pct REAL,
+            volume_ratio REAL,
+            reason TEXT,
+            alerted INTEGER DEFAULT 0,
+            added_at TEXT NOT NULL,
+            UNIQUE(date, symbol)
+        );
     """)
     conn.commit()
     _add_column_if_missing(conn, "trades", "feature_snapshot_id", "INTEGER")
@@ -1208,5 +1221,55 @@ def _cleanup_old_reports(days: int = 3) -> None:
     cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.execute("DELETE FROM analysis_reports WHERE report_date < ?", (cutoff,))
+    conn.commit()
+    conn.close()
+
+
+# --- Daily Watchlist CRUD ---
+
+def upsert_daily_watchlist(date: str, symbol: str, score: float, signal_strength: str,
+                            change_pct: float, volume_ratio: float, reason: str) -> bool:
+    """Add or update a symbol in today's watchlist. Returns True if it's new."""
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM daily_watchlist WHERE date=? AND symbol=?", (date, symbol)
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """UPDATE daily_watchlist SET score=?, signal_strength=?, change_pct=?,
+               volume_ratio=?, reason=? WHERE date=? AND symbol=?""",
+            (score, signal_strength, change_pct, volume_ratio, reason, date, symbol)
+        )
+        conn.commit()
+        conn.close()
+        return False  # not new
+    conn.execute(
+        """INSERT INTO daily_watchlist (date, symbol, score, signal_strength,
+           change_pct, volume_ratio, reason, alerted, added_at)
+           VALUES (?,?,?,?,?,?,?,0,?)""",
+        (date, symbol, score, signal_strength, change_pct, volume_ratio, reason,
+         datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+    return True  # new entry
+
+
+def get_daily_watchlist(date: str = None) -> list:
+    """Get today's watchlist (or specific date), ordered by score desc."""
+    from datetime import datetime as _dt
+    target_date = date or _dt.utcnow().strftime("%Y-%m-%d")
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM daily_watchlist WHERE date=? ORDER BY score DESC",
+        (target_date,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_watchlist_alerted(symbol: str, date: str) -> None:
+    conn = get_connection()
+    conn.execute("UPDATE daily_watchlist SET alerted=1 WHERE symbol=? AND date=?", (symbol, date))
     conn.commit()
     conn.close()
