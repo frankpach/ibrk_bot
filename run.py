@@ -421,19 +421,43 @@ def main():
             logger.error(f"Scanner fetch error: {e}")
 
     def _run_opportunity_scan():
-        """Hourly proactive scan — scores top movers and alerts on strong candidates."""
+        """Hourly proactive scan — scores top movers, news triggers, and correlation lags."""
         if not _is_market_hours_now():
             return
         try:
             dl = _ib_client_ref.get("data_layer")
             if not dl:
                 return
-            from app.scanner.opportunity_scanner import run_opportunity_scan, notify_opportunities
-            opportunities = run_opportunity_scan(dl, _ib_client_ref.get("client"))
-            if opportunities:
+            from app.scanner.opportunity_scanner import (
+                run_opportunity_scan, scan_news_triggered_opportunities,
+                scan_correlation_lags, notify_opportunities,
+            )
+
+            # 1. Top movers with sector rotation boost
+            movers = run_opportunity_scan(dl, _ib_client_ref.get("client"))
+
+            # 2. News-triggered immediate analysis
+            news_opps = scan_news_triggered_opportunities(dl)
+
+            # 3. Correlation lag detector
+            lag_opps = scan_correlation_lags(dl)
+
+            # Combine all, deduplicate by symbol (keep highest score)
+            all_opps: dict = {}
+            for opp in movers + news_opps + lag_opps:
+                sym = opp["symbol"]
+                if sym not in all_opps or opp["score"] > all_opps[sym]["score"]:
+                    all_opps[sym] = opp
+
+            new_opportunities = list(all_opps.values())
+
+            if new_opportunities:
                 from app.config.settings import API_BASE
-                notify_opportunities(opportunities, API_BASE)
-                logger.info(f"Opportunity scan found {len(opportunities)} new candidates")
+                notify_opportunities(new_opportunities, API_BASE)
+                logger.info(
+                    f"Opportunity scan: {len(new_opportunities)} new candidates "
+                    f"({len(movers)} movers, {len(news_opps)} news, {len(lag_opps)} lags)"
+                )
         except Exception as e:
             logger.error(f"Opportunity scan error: {e}")
 
