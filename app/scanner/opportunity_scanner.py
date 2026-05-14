@@ -97,6 +97,17 @@ def scan_correlation_lags(data_layer) -> list:
         if sym in existing:
             continue
 
+        # Skip if earnings in next 3 days
+        try:
+            earnings_date = data_layer.get_earnings_date(sym)
+            if earnings_date:
+                days_to_earnings = (earnings_date - datetime.utcnow()).days
+                if 0 <= days_to_earnings <= 3:
+                    logger.info(f"[lag] Skipping {sym}: earnings in {days_to_earnings}d")
+                    continue
+        except Exception:
+            pass
+
         sector_pct = sector_perf.get(etf, 0)
         if sector_pct < 0.5:
             continue  # sector not strong enough to matter
@@ -192,6 +203,16 @@ def scan_news_triggered_opportunities(data_layer) -> list:
 
     for sym in strong_news[:5]:
         try:
+            # Skip if earnings in next 3 days
+            earnings_date = data_layer.get_earnings_date(sym)
+            if earnings_date:
+                days_to_earnings = (datetime.utcnow() - earnings_date).days * -1
+                if 0 <= days_to_earnings <= 3:
+                    logger.info(f"[news] Skipping {sym}: earnings in {days_to_earnings}d")
+                    continue
+        except Exception:
+            pass
+        try:
             df = data_layer.get_ohlcv(sym, "5 D", "1 day", "scanner")
             if df is None or len(df) < 15:
                 continue
@@ -277,6 +298,17 @@ def run_opportunity_scan(data_layer, ib_client=None) -> list:
         # Quick pre-filter: skip if not interesting enough
         if change_pct < MIN_CHANGE_PCT and vol_ratio < MIN_VOLUME_RATIO:
             continue
+
+        # Capa 5: Earnings awareness — skip if earnings in next 3 days
+        try:
+            earnings_date = data_layer.get_earnings_date(sym)
+            if earnings_date:
+                days_to_earnings = (earnings_date - datetime.now()).days
+                if 0 <= days_to_earnings <= 3:
+                    logger.info(f"Skipping {sym}: earnings in {days_to_earnings}d (too risky)")
+                    continue
+        except Exception:
+            pass  # if we can't check, continue anyway
 
         try:
             # Fetch OHLCV for scoring
