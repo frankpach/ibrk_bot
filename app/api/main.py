@@ -932,6 +932,7 @@ def dashboard_data():
 @app.get("/dashboard/symbol/{symbol}")
 def dashboard_symbol_data(symbol: str, period: str = "intraday"):
     """Lazy-loaded symbol data for dashboard chart. Uses IBDataLayer cache."""
+    import pandas as pd
     try:
         from app.llm.agent import get_data_layer
         data_layer = get_data_layer()
@@ -942,20 +943,55 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
             df = data_layer.get_ohlcv(symbol, "30 D", "1 day", "dashboard_chart")
         if df is not None and len(df) > 0:
             result["bars"] = [
-                {"close": round(float(r["close"]), 4),
-                 "volume": int(r.get("volume", 0))}
-                for _, r in df.iterrows()
+                {
+                    "time": i,
+                    "open": round(float(r.get("open", r["close"])), 4),
+                    "high": round(float(r.get("high", r["close"])), 4),
+                    "low": round(float(r.get("low", r["close"])), 4),
+                    "close": round(float(r["close"]), 4),
+                    "volume": int(r.get("volume", 0)),
+                }
+                for i, (_, r) in enumerate(df.iterrows())
             ]
-        if period == "indicators":
-            from app.analysis.indicators import compute_features
-            if df is not None and len(df) >= 15:
-                fs = compute_features(symbol, df)
-                result.update({
-                    "rsi_14": fs.rsi_14,
-                    "macd_line": fs.macd_line,
-                    "bollinger_position": fs.bollinger_position,
-                    "volume_ratio_20d": fs.volume_ratio_20d,
+        if period in ("intraday", "daily", "indicators") and df is not None and len(df) >= 15:
+            from app.analysis.indicators import _compute_rsi
+            # RSI series
+            rsi_series = []
+            for i in range(14, len(df)):
+                slice_df = df.iloc[:i + 1]
+                rsi = _compute_rsi(slice_df)
+                if rsi is not None:
+                    rsi_series.append({"time": i, "value": round(rsi, 2)})
+            result["rsi_series"] = rsi_series
+
+            # MACD series
+            ema12 = df["close"].ewm(span=12).mean()
+            ema26 = df["close"].ewm(span=26).mean()
+            macd_line = ema12 - ema26
+            signal_line = macd_line.ewm(span=9).mean()
+            macd_series = []
+            for i in range(26, len(df)):
+                macd_series.append({
+                    "time": i,
+                    "macd": round(float(macd_line.iloc[i]), 4),
+                    "signal": round(float(signal_line.iloc[i]), 4),
+                    "histogram": round(float(macd_line.iloc[i] - signal_line.iloc[i]), 4),
                 })
+            result["macd_series"] = macd_series
+
+            # Bollinger Bands
+            sma20 = df["close"].rolling(20).mean()
+            std20 = df["close"].rolling(20).std()
+            boll_series = []
+            for i in range(20, len(df)):
+                if not pd.isna(sma20.iloc[i]):
+                    boll_series.append({
+                        "time": i,
+                        "upper": round(float(sma20.iloc[i] + 2 * std20.iloc[i]), 4),
+                        "middle": round(float(sma20.iloc[i]), 4),
+                        "lower": round(float(sma20.iloc[i] - 2 * std20.iloc[i]), 4),
+                    })
+            result["boll_series"] = boll_series
         return result
     except Exception as e:
         logger.error(f"dashboard_symbol_data({symbol}): {e}")
@@ -1068,3 +1104,154 @@ def get_market_permissions_endpoint(refresh: bool = False):
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=503, detail=str(e))
+
+
+# --- Reports endpoints ---
+
+@app.get("/reports/list")
+def list_reports_json(limit: int = 20):
+    """JSON list of recent reports."""
+    from app.db.database import get_reports
+    return {"reports": get_reports(limit=limit)}
+
+
+@app.get("/reports", response_class=HTMLResponse)
+def reports_page():
+    """HTML reports index page."""
+    from app.db.database import get_reports
+    reports = get_reports(limit=30)
+    rows = ""
+    for r in reports:
+        type_badge = "Pre-mercado" if r["report_type"] == "pre_market" else "Operaciones"
+        rows += f"""
+        <tr>
+          <td>{type_badge}</td>
+          <td>{r['report_date']}</td>
+          <td><a href="/reports/{r['id']}">{r['title']}</a></td>
+          <td>{r['created_at'][:16]}</td>
+          <td><button onclick="delReport({r['id']})" style="background:rgba(244,63,94,.15);color:#F43F5E;border:1px solid rgba(244,63,94,.3);padding:2px 8px;border-radius:3px;cursor:pointer;font-size:.75rem">Borrar</button></td>
+        </tr>"""
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reportes — IBKR AI Trader</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Barlow+Condensed:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body{{background:#06090F;color:#E2E8F0;font-family:"Barlow Condensed",sans-serif;max-width:1000px;margin:0 auto;padding:20px}}
+h1{{color:#38BDF8;font-size:1.6rem;border-bottom:1px solid #1E2D42;padding-bottom:8px}}
+table{{width:100%;border-collapse:collapse;font-family:"Fira Code",monospace;font-size:.82rem;margin-top:16px}}
+th{{color:#64748B;text-align:left;padding:6px 10px;border-bottom:1px solid #1E2D42;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase}}
+td{{padding:8px 10px;border-bottom:1px solid rgba(30,45,66,.5)}}
+a{{color:#38BDF8;text-decoration:none}}a:hover{{text-decoration:underline}}
+.nav{{display:flex;gap:12px;margin-bottom:20px;font-family:"Fira Code",monospace;font-size:.8rem}}
+.nav a{{color:#38BDF8}}
+.empty{{color:#334155;font-family:"Fira Code",monospace;padding:40px;text-align:center}}
+</style>
+</head><body>
+<div class="nav"><a href="/dashboard">&larr; Dashboard</a></div>
+<h1>Reportes de Analisis</h1>
+{'<table><thead><tr><th>Tipo</th><th>Fecha</th><th>Titulo</th><th>Creado</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' if reports else '<div class="empty">// Sin reportes aun — se generan automaticamente antes de apertura de mercado</div>'}
+<script>
+async function delReport(id){{
+  if(!confirm('Borrar este reporte?'))return;
+  await fetch('/reports/'+id,{{method:'DELETE'}});
+  location.reload();
+}}
+</script>
+</body></html>""")
+
+
+@app.get("/reports/{report_id}", response_class=HTMLResponse)
+def view_report(report_id: int):
+    """Render a single report as HTML."""
+    from app.db.database import get_report_by_id
+    report = get_report_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    import re
+    html_content = report["content_md"]
+    # Headers (process largest first to avoid partial replacement)
+    for i in range(6, 0, -1):
+        html_content = re.sub(
+            rf'^{"#" * i}\s+(.+)$', rf'<h{i}>\1</h{i}>', html_content, flags=re.MULTILINE
+        )
+    # Bold / italic
+    html_content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html_content)
+    html_content = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html_content)
+    # Inline code
+    html_content = re.sub(r'`(.+?)`', r'<code>\1</code>', html_content)
+    # Blockquote
+    html_content = re.sub(r'^> (.+)$', r'<blockquote>\1</blockquote>', html_content, flags=re.MULTILINE)
+    # Tables
+    lines = html_content.split('\n')
+    out_lines = []
+    in_table = False
+    for line in lines:
+        if '|' in line and line.strip().startswith('|'):
+            if not in_table:
+                out_lines.append('<table>')
+                in_table = True
+            if re.match(r'^\|[-|\s]+\|$', line.strip()):
+                continue  # skip separator row
+            cells = [c.strip() for c in line.strip().strip('|').split('|')]
+            row = ''.join(f'<td>{c}</td>' for c in cells)
+            out_lines.append(f'<tr>{row}</tr>')
+        else:
+            if in_table:
+                out_lines.append('</table>')
+                in_table = False
+            out_lines.append(line)
+    if in_table:
+        out_lines.append('</table>')
+    html_content = '\n'.join(out_lines)
+    # Lists
+    html_content = re.sub(r'^- (.+)$', r'<li>\1</li>', html_content, flags=re.MULTILINE)
+    html_content = re.sub(r'(<li>.*</li>\n?)+', r'<ul>\g<0></ul>', html_content, flags=re.DOTALL)
+    # HR
+    html_content = html_content.replace('---', '<hr>')
+    # Paragraphs
+    html_content = re.sub(r'\n\n', '</p><p>', html_content)
+
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{report['title']}</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Barlow+Condensed:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body{{background:#06090F;color:#E2E8F0;font-family:"Barlow Condensed",sans-serif;max-width:900px;margin:0 auto;padding:20px;line-height:1.6}}
+h1{{font-size:1.8rem;color:#38BDF8;border-bottom:1px solid #1E2D42;padding-bottom:8px}}
+h2{{font-size:1.3rem;color:#94A3B8;margin-top:24px}}
+h3{{font-size:1.1rem;color:#E2E8F0}}
+code{{font-family:"Fira Code",monospace;background:#111D2E;padding:2px 6px;border-radius:3px;color:#38BDF8}}
+blockquote{{border-left:3px solid #38BDF8;margin:0;padding:8px 16px;background:#0C1421;color:#94A3B8;font-style:italic}}
+table{{width:100%;border-collapse:collapse;margin:12px 0;font-family:"Fira Code",monospace;font-size:.82rem}}
+td{{padding:6px 10px;border:1px solid #1E2D42}}
+tr:nth-child(even){{background:#0C1421}}
+ul{{padding-left:20px}}
+li{{margin:4px 0}}
+hr{{border:none;border-top:1px solid #1E2D42;margin:20px 0}}
+em{{color:#94A3B8}}
+strong{{color:#FBBF24}}
+.nav{{display:flex;gap:12px;margin-bottom:20px;font-family:"Fira Code",monospace;font-size:.8rem}}
+.nav a{{color:#38BDF8;text-decoration:none}}
+</style>
+</head>
+<body>
+<div class="nav">
+  <a href="/reports">&larr; Todos los reportes</a>
+  <a href="/dashboard">Dashboard</a>
+</div>
+<p><em>Tipo: {report['report_type']} | Fecha: {report['report_date']} | Creado: {report['created_at'][:16]}</em></p>
+<div>{html_content}</div>
+</body>
+</html>""")
+
+
+@app.delete("/reports/{report_id}")
+def delete_report_endpoint(report_id: int):
+    from app.db.database import delete_report
+    if not delete_report(report_id):
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"deleted": True, "id": report_id}

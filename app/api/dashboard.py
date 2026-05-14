@@ -17,6 +17,7 @@ def render_dashboard_html() -> str:
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     /* ─── Reset & Tokens ─────────────────────────────── */
     *{box-sizing:border-box;margin:0;padding:0}
@@ -721,6 +722,205 @@ def render_dashboard_html() -> str:
       );
     }
 
+    /* ──────────────────── PART B COMPONENTS ──────────────────── */
+
+    /* Symbol Chart — TradingView Lightweight Charts (candlesticks) */
+    function SymbolChart({ data }) {
+      const [selected, setSelected] = React.useState(null);
+      const [chartData, setChartData] = React.useState(null);
+      const [tab, setTab] = React.useState('intraday');
+      const [loading, setLoading] = React.useState(false);
+      const [indicators, setIndicators] = React.useState({rsi: false, macd: false, boll: false, volume: true});
+      const chartRef = React.useRef(null);
+      const tvChartRef = React.useRef(null);
+      const seriesRef = React.useRef({});
+
+      const chips = React.useMemo(() => {
+        const syms = [
+          ...(data?.open_trades || []).map(t => t.symbol),
+          ...(data?.signals || []).slice(0,4).map(s => s.symbol),
+        ];
+        return [...new Set(syms)].slice(0,8);
+      }, [data]);
+
+      async function loadChart(sym, period) {
+        setLoading(true);
+        try {
+          const res = await fetch(`/dashboard/symbol/${sym}?period=${period}`);
+          const d = await res.json();
+          setChartData(d);
+        } catch(e) { setChartData(null); }
+        setLoading(false);
+      }
+
+      function selectSym(sym) {
+        setSelected(sym);
+        loadChart(sym, tab);
+      }
+
+      function switchTab(t) {
+        setTab(t);
+        if (selected) loadChart(selected, t);
+      }
+
+      // Build/rebuild TradingView chart when data or indicator toggles change
+      React.useEffect(() => {
+        if (!chartRef.current || !chartData?.bars?.length || typeof LightweightCharts === 'undefined') return;
+
+        // Destroy previous chart
+        if (tvChartRef.current) {
+          try { tvChartRef.current.remove(); } catch(e) {}
+          tvChartRef.current = null;
+          seriesRef.current = {};
+        }
+
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        const bg = isDark ? '#0C1421' : '#FFFFFF';
+        const text = isDark ? '#94A3B8' : '#475569';
+        const grid = isDark ? '#1E2D42' : '#E2E8F0';
+
+        const chart = LightweightCharts.createChart(chartRef.current, {
+          layout: { background: { color: bg }, textColor: text },
+          grid: { vertLines: { color: grid }, horzLines: { color: grid } },
+          crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+          rightPriceScale: { borderColor: grid },
+          timeScale: { borderColor: grid, timeVisible: false },
+          width: chartRef.current.clientWidth,
+          height: 200,
+        });
+        tvChartRef.current = chart;
+
+        // Main candlestick series
+        const bars = chartData.bars;
+        const candleSeries = chart.addCandlestickSeries({
+          upColor: '#10B981', downColor: '#F43F5E',
+          borderUpColor: '#10B981', borderDownColor: '#F43F5E',
+          wickUpColor: '#10B981', wickDownColor: '#F43F5E',
+        });
+        candleSeries.setData(bars.map(b => ({
+          time: b.time, open: b.open, high: b.high, low: b.low, close: b.close
+        })));
+        seriesRef.current.candle = candleSeries;
+
+        // Entry/SL/TP lines for open positions
+        const trade = data?.open_trades?.find(t => t.symbol === selected);
+        if (trade && bars.length > 0) {
+          const entryLine = chart.addLineSeries({ color: '#FBBF24', lineWidth: 1, lineStyle: 2 });
+          entryLine.setData(bars.map(b => ({ time: b.time, value: trade.entry_price })));
+          const slLine = chart.addLineSeries({ color: '#F43F5E', lineWidth: 1, lineStyle: 2 });
+          slLine.setData(bars.map(b => ({ time: b.time, value: trade.stop_loss_price })));
+          const tpLine = chart.addLineSeries({ color: '#10B981', lineWidth: 1, lineStyle: 2 });
+          tpLine.setData(bars.map(b => ({ time: b.time, value: trade.take_profit_price })));
+        }
+
+        // Volume histogram
+        if (indicators.volume) {
+          const volSeries = chart.addHistogramSeries({
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'vol',
+            color: '#38BDF840',
+          });
+          chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+          volSeries.setData(bars.map(b => ({
+            time: b.time, value: b.volume,
+            color: b.close >= b.open ? '#10B98140' : '#F43F5E40'
+          })));
+          seriesRef.current.volume = volSeries;
+        }
+
+        // Bollinger Bands
+        if (indicators.boll && chartData.boll_series?.length) {
+          const bollU = chart.addLineSeries({ color: '#A78BFA50', lineWidth: 1 });
+          const bollM = chart.addLineSeries({ color: '#A78BFA80', lineWidth: 1, lineStyle: 2 });
+          const bollL = chart.addLineSeries({ color: '#A78BFA50', lineWidth: 1 });
+          bollU.setData(chartData.boll_series.map(b => ({ time: b.time, value: b.upper })));
+          bollM.setData(chartData.boll_series.map(b => ({ time: b.time, value: b.middle })));
+          bollL.setData(chartData.boll_series.map(b => ({ time: b.time, value: b.lower })));
+        }
+
+        chart.timeScale().fitContent();
+
+        // Resize observer
+        const ro = new ResizeObserver(() => {
+          if (chartRef.current) chart.applyOptions({ width: chartRef.current.clientWidth });
+        });
+        ro.observe(chartRef.current);
+        return () => ro.disconnect();
+      }, [chartData, indicators]);
+
+      if (!chips.length) return null;
+
+      const toggleIndicator = (key) => setIndicators(prev => ({ ...prev, [key]: !prev[key] }));
+
+      return (
+        <div className="card fade-up">
+          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',padding:'8px 12px',background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}>
+            <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.67rem',color:'var(--dim)'}}>SYM:</span>
+            {chips.map(sym => (
+              <button key={sym} onClick={() => selectSym(sym)}
+                style={{padding:'3px 10px',borderRadius:12,fontFamily:'"Fira Code",monospace',fontSize:'.68rem',cursor:'pointer',
+                  border:'1px solid '+(selected===sym?'rgba(56,189,248,.35)':'var(--border)'),
+                  background:selected===sym?'var(--blue-bg)':'transparent',
+                  color:selected===sym?'var(--blue)':'var(--muted)'}}>
+                {sym}
+              </button>
+            ))}
+          </div>
+
+          <div className="ch">
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span className="ct">{selected||'Símbolo'}</span>
+              {selected && ['volume','boll','rsi','macd'].map(ind => (
+                <button key={ind} onClick={() => toggleIndicator(ind)}
+                  style={{padding:'2px 7px',borderRadius:3,fontFamily:'"Fira Code",monospace',fontSize:'.63rem',cursor:'pointer',
+                    background:indicators[ind]?'var(--blue-bg)':'transparent',
+                    color:indicators[ind]?'var(--blue)':'var(--dim)',
+                    border:`1px solid ${indicators[ind]?'rgba(56,189,248,.3)':'var(--border)'}`}}>
+                  {ind.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div className="tabs">
+              {[['intraday','Hoy 5min'],['daily','30D'],['indicators','Indicadores']].map(([t,l])=>(
+                <button key={t} className={`tab${tab===t?' on':''}`} onClick={()=>switchTab(t)}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="cb" style={{padding:'8px 12px',minHeight:220}}>
+            {loading && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>cargando...</span>}
+            {!loading && !chartData && selected && (
+              <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>// sin datos para {selected}</span>
+            )}
+            {!loading && !selected && (
+              <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>// selecciona un símbolo</span>
+            )}
+            <div ref={chartRef} style={{width:'100%',display: chartData?.bars?.length && !loading ? 'block':'none'}} />
+
+            {/* RSI panel */}
+            {indicators.rsi && chartData?.rsi_series?.length && !loading && (
+              <div style={{marginTop:8,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
+                <span style={{color:'var(--dim)'}}>RSI(14): </span>
+                <span style={{color: chartData.rsi_series.at(-1).value > 70 ? 'var(--red)' : chartData.rsi_series.at(-1).value < 30 ? 'var(--green)' : 'var(--text)'}}>
+                  {chartData.rsi_series.at(-1).value.toFixed(1)}
+                </span>
+              </div>
+            )}
+
+            {/* MACD panel */}
+            {indicators.macd && chartData?.macd_series?.length && !loading && (
+              <div style={{marginTop:4,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
+                <span style={{color:'var(--dim)'}}>MACD: </span>
+                <span style={{color: chartData.macd_series.at(-1).histogram > 0 ? 'var(--green)' : 'var(--red)'}}>
+                  {chartData.macd_series.at(-1).macd.toFixed(3)} / Signal: {chartData.macd_series.at(-1).signal.toFixed(3)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     /* Legacy lower panels */
     function Badge({ s }) {
       const clsMap = {STRONG:'str-s',MEDIUM:'str-m',WEAK:'str-w'};
@@ -856,114 +1056,6 @@ def render_dashboard_html() -> str:
             </div>
           )}
           {!hasRates && <div className="empty">// win rates disponibles con 3+ trades por símbolo</div>}
-        </div>
-      );
-    }
-
-    /* ──────────────────── PART B COMPONENTS ──────────────────── */
-
-    /* Symbol Chart (lazy, 3 tabs) */
-    function SymbolChart({ data }) {
-      const [selected, setSelected] = React.useState(null);
-      const [chartData, setChartData] = React.useState(null);
-      const [tab, setTab] = React.useState('intraday');
-      const [loading, setLoading] = React.useState(false);
-
-      const chips = React.useMemo(() => {
-        const syms = [
-          ...(data?.open_trades || []).map(t => t.symbol),
-          ...(data?.signals || []).slice(0,4).map(s => s.symbol),
-        ];
-        return [...new Set(syms)].slice(0,8);
-      }, [data]);
-
-      async function loadChart(sym, period) {
-        setLoading(true);
-        try {
-          const res = await fetch(`/dashboard/symbol/${sym}?period=${period}`);
-          setChartData(await res.json());
-        } catch(e) { setChartData(null); }
-        setLoading(false);
-      }
-
-      function selectSym(sym) {
-        setSelected(sym);
-        loadChart(sym, tab);
-      }
-
-      function switchTab(t) {
-        setTab(t);
-        if (selected) loadChart(selected, t);
-      }
-
-      const trade = data?.open_trades?.find(t => t.symbol === selected);
-
-      function LineChart({ bars, sl, tp, entryPrice, action }) {
-        if (!bars?.length) return <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>// sin datos disponibles</span>;
-        const closes = bars.map(b => b.close);
-        const min = Math.min(...closes), max = Math.max(...closes);
-        const range = max - min || 1;
-        const W = 420, H = 120;
-        const pts = closes.map((c,i) => `${(i/(closes.length-1))*W},${H - ((c-min)/range)*(H-10) - 5}`).join(' ');
-        const first = parseFloat(closes[0]), last = parseFloat(closes[closes.length-1]);
-        const color = last >= first ? 'var(--green)' : 'var(--red)';
-        const slY = sl ? H - ((sl - min)/range)*(H-10) - 5 : null;
-        const tpY = tp ? H - ((tp - min)/range)*(H-10) - 5 : null;
-        const entY = entryPrice ? H - ((entryPrice - min)/range)*(H-10) - 5 : null;
-        return (
-          <svg width="100%" height={H+20} viewBox={`0 0 ${W} ${H+20}`} preserveAspectRatio="none" style={{overflow:'visible'}}>
-            {slY !== null && <line x1="0" y1={slY} x2={W} y2={slY} stroke="var(--red)" strokeWidth="1" strokeDasharray="4,3" opacity=".7"/>}
-            {tpY !== null && <line x1="0" y1={tpY} x2={W} y2={tpY} stroke="var(--green)" strokeWidth="1" strokeDasharray="4,3" opacity=".6"/>}
-            {entY !== null && <line x1="0" y1={entY} x2={W} y2={entY} stroke="var(--amber)" strokeWidth="1" strokeDasharray="3,3" opacity=".8"/>}
-            <polyline points={pts} fill="none" stroke={color} strokeWidth="2"/>
-            {slY !== null && <text x="3" y={slY-3} fill="var(--red)" fontSize="8" fontFamily="monospace">SL</text>}
-            {tpY !== null && <text x="3" y={tpY-3} fill="var(--green)" fontSize="8" fontFamily="monospace">TP</text>}
-          </svg>
-        );
-      }
-
-      if (!chips.length) return null;
-
-      return (
-        <div className="card fade-up">
-          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',padding:'8px 12px',background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}>
-            <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.67rem',color:'var(--dim)'}}>SYM:</span>
-            {chips.map(sym => (
-              <button key={sym} onClick={() => selectSym(sym)}
-                style={{padding:'3px 10px',borderRadius:12,fontFamily:'"Fira Code",monospace',fontSize:'.68rem',cursor:'pointer',
-                  border:'1px solid '+(selected===sym ? 'rgba(56,189,248,.35)':'var(--border)'),
-                  background:selected===sym ? 'var(--blue-bg)':'transparent',
-                  color:selected===sym ? 'var(--blue)':'var(--muted)'}}>
-                {sym}
-              </button>
-            ))}
-            {!selected && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.64rem',color:'var(--dimmer)',marginLeft:4}}>selecciona un símbolo</span>}
-          </div>
-          <div className="ch">
-            <span className="ct">{selected || 'Símbolo'} {chartData?.bars?.length ? `· ${chartData.bars.length} barras` : ''}</span>
-            <div className="tabs">
-              {['intraday','daily','indicators'].map(t => (
-                <button key={t} className={`tab${tab===t?' on':''}`} onClick={() => switchTab(t)}>
-                  {t==='intraday' ? 'Hoy 5min' : t==='daily' ? '30D diario' : 'Indicadores'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="cb" style={{padding:'8px 12px',minHeight:140}}>
-            {loading && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>cargando...</span>}
-            {!loading && tab !== 'indicators' && (
-              <LineChart bars={chartData?.bars} sl={trade?.stop_loss_price} tp={trade?.take_profit_price} entryPrice={trade?.entry_price} action={trade?.action}/>
-            )}
-            {!loading && tab === 'indicators' && chartData && (
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
-                {chartData.rsi_14 != null && <div><span style={{color:'var(--dim)'}}>RSI </span><span style={{color:chartData.rsi_14<30||chartData.rsi_14>70?'var(--amber)':'var(--text)'}}>{f.n(chartData.rsi_14)}</span></div>}
-                {chartData.bollinger_position != null && <div><span style={{color:'var(--dim)'}}>BOLL </span><span style={{color:'var(--text)'}}>{f.n(chartData.bollinger_position,3)}</span></div>}
-                {chartData.volume_ratio_20d != null && <div><span style={{color:'var(--dim)'}}>VOL </span><span style={{color:chartData.volume_ratio_20d>1.5?'var(--green)':'var(--text)'}}>{f.n(chartData.volume_ratio_20d,1)}×</span></div>}
-                {chartData.macd_line != null && <div><span style={{color:'var(--dim)'}}>MACD </span><span style={{color:'var(--text)'}}>{f.n(chartData.macd_line,4)}</span></div>}
-              </div>
-            )}
-            {!loading && !chartData && selected && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>// sin datos para {selected}</span>}
-          </div>
         </div>
       );
     }
