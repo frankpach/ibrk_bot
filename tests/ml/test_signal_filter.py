@@ -54,14 +54,20 @@ def test_extract_features_from_object():
     f.rsi_1h = 55.0
     f.volume_ratio_1h = 1.3
     result = sf._extract_features(f)
-    assert result == [30, 1.5, 2.5, 1.2, 0.6, 0.03, 2, 14, 55.0, 1.3]
+    # 12 features: rsi, macd, atr, vol_ratio, boll, rs_spy, dow, hour,
+    #              rsi_1h, vol_1h, vol_regime, vwap_dev
+    assert len(result) == 12
+    assert result[:10] == [30, 1.5, 2.5, 1.2, 0.6, 0.03, 2, 14, 55.0, 1.3]
+    assert result[10] == 1   # vol_regime: atr=2.5 → moderate (1)
+    assert abs(result[11] - 0.2) < 0.01  # vwap_dev: (0.6-0.5)*2 = 0.2
 
 
 def test_extract_features_defaults():
     sf = SignalFilter(model_path="/nonexistent")
     f = MagicMock(spec=[])  # Missing attributes should use defaults
     result = sf._extract_features(f)
-    assert result == [50, 0, 2.0, 1.0, 0.5, 0, 0, 10, 50, 1.0]
+    assert len(result) == 12
+    assert result[:10] == [50, 0, 2.0, 1.0, 0.5, 0, 0, 10, 50, 1.0]
 
 
 # ---------- predict / should_ignore ----------

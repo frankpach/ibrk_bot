@@ -138,7 +138,7 @@ def test_extract_features_returns_10_elements():
     fs.rsi_1h = 60.0
     fs.volume_ratio_1h = 1.1
     result = sf._extract_features(fs)
-    assert len(result) == 10
+    assert len(result) == 12  # 10 original + vol_regime + vwap_dev
 
 
 def test_extract_features_new_fields_from_featureset():
@@ -175,6 +175,6 @@ def test_extract_features_new_fields_from_dict():
         "rsi_1h": 70.0, "volume_ratio_1h": 2.0,
     }
     result = sf._extract_features(snap)
-    assert len(result) == 10
+    assert len(result) == 12  # 10 original + vol_regime + vwap_dev
     assert result[8] == 70.0
     assert result[9] == 2.0

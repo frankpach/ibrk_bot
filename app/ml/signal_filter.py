@@ -59,17 +59,31 @@ class SignalFilter:
                 return features.get(key, default) or default
             return getattr(features, key, default) or default
 
+        # Volatility regime encoding:
+        # ATR low (<1.5%) = 0, moderate (1.5-4%) = 1, high (>4%) = 2
+        atr = _get('atr_pct', 2.0)
+        vol_regime = 0 if atr < 1.5 else (1 if atr <= 4.0 else 2)
+
+        # VWAP deviation as % (price above/below VWAP)
+        vwap = _get('vwap', 0) or 0
+        rsi = _get('rsi_14', 50)
+        # Approximate VWAP deviation from bollinger position
+        boll = _get('bollinger_position', 0.5)
+        vwap_dev = (boll - 0.5) * 2  # -1 to +1, center=0
+
         return [
-            _get('rsi_14', 50),
+            rsi,
             _get('macd_line', 0),
-            _get('atr_pct', 2.0),
+            atr,
             _get('volume_ratio_20d', 1.0),
-            _get('bollinger_position', 0.5),
+            boll,
             _get('rs_vs_spy_30d', 0),
             _get('day_of_week', 0),
             _get('hour', 10),
-            _get('rsi_1h', 50),            # NEW: hourly RSI
-            _get('volume_ratio_1h', 1.0),  # NEW: hourly volume ratio
+            _get('rsi_1h', 50),
+            _get('volume_ratio_1h', 1.0),
+            vol_regime,           # NEW: volatility regime (0=low, 1=mid, 2=high)
+            vwap_dev,             # NEW: price position relative to VWAP proxy
         ]
 
     def predict(self, features) -> float:
@@ -140,8 +154,9 @@ class SignalFilter:
             for trade in trades:
                 # Support both dict (from JOIN query) and Trade objects
                 if isinstance(trade, dict):
-                    snap = trade  # dict has all snapshot fields
+                    snap = trade
                     pnl = trade.get("pnl_pct", 0) or 0
+                    exit_reason = trade.get("exit_reason", "") or ""
                 else:
                     snap_id = getattr(trade, "feature_snapshot_id", None)
                     if not snap_id:
@@ -152,9 +167,27 @@ class SignalFilter:
                         continue
                     snap = snap_or_none
                     pnl = getattr(trade, "pnl_pct", 0) or 0
+                    exit_reason = getattr(trade, "exit_reason", "") or ""
+
+                # Triple-barrier labeling (better than raw pnl > 0):
+                # - Skip "noise" trades: |pnl| < 0.5% — signal is ambiguous
+                # - WIN = exited via TP or trailing stop with positive PnL
+                # - LOSS = exited via SL (clear failure)
+                # - Skip END_OF_DATA and MIN_PROFIT exits (ambiguous)
+                if abs(pnl) < 0.005:
+                    continue  # too small to learn from
+                win_exits = {"TAKE_PROFIT", "TRAILING_STOP", "MIN_PROFIT_MEDIUM"}
+                loss_exits = {"STOP_LOSS"}
+                if exit_reason in win_exits and pnl > 0:
+                    label = 1
+                elif exit_reason in loss_exits:
+                    label = 0
+                else:
+                    # Fallback for unlabeled exits: use pnl direction
+                    label = 1 if pnl > 0.005 else 0
 
                 X.append(self._extract_features(snap))
-                y.append(1 if pnl > 0 else 0)
+                y.append(label)
 
             if len(X) < 10:
                 logger.warning(f"Not enough data to retrain: {len(X)} samples")

@@ -61,18 +61,23 @@ def simulate_trades(
     take_profit_pct: float,
     capital: float,
     max_positions: int = 1,
+    commission_per_trade: float = 1.0,
+    slippage_pct: float = 0.001,
 ) -> list:
     """
     Simula trades sobre el DataFrame con señales.
     Entra en BUY cuando signal == STRONG o MEDIUM.
     Sale al tocar stop-loss, take-profit, o fin de datos.
+
+    commission_per_trade: IBKR cobra mínimo $1 por lado ($2 roundtrip).
+    slippage_pct: 0.1% de slippage por lado es conservador para acciones líquidas.
     """
     from app.config.settings import MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 
     trades = []
     in_trade = False
     entry_price = 0.0
-    entry_units = 0
+    entry_units = 0.0
     entry_idx = 0
     stop_price = 0.0
     take_price = 0.0
@@ -84,11 +89,14 @@ def simulate_trades(
         if not in_trade and signal in ("STRONG", "MEDIUM"):
             max_risk = max(capital * MAX_RISK_PCT, MIN_RISK_USD)
             max_pos_usd = min(max_risk / stop_loss_pct, MAX_POSITION_USD)
-            units = int(max_pos_usd / price)
-            if units < 1:
+            # Support fractional shares (realistic for small capital)
+            units = max_pos_usd / price
+            if units * price < 1.0:
                 continue
+            # Apply entry slippage (pay slightly more to enter)
+            effective_entry = price * (1 + slippage_pct)
             in_trade = True
-            entry_price = price
+            entry_price = effective_entry
             entry_units = units
             entry_idx = i
             stop_price = round(price * (1 - stop_loss_pct), 4)
@@ -101,23 +109,34 @@ def simulate_trades(
 
             if price <= stop_price:
                 exit_reason = "STOP_LOSS"
+                # Slippage is worse on stop-loss (gap through stop)
+                exit_price = price * (1 - slippage_pct * 1.5)
             elif price >= take_price:
                 exit_reason = "TAKE_PROFIT"
+                exit_price = price * (1 - slippage_pct)
             elif i == df.index[-1]:
                 exit_reason = "END_OF_DATA"
+                exit_price = price * (1 - slippage_pct)
 
             if exit_reason:
-                pnl_pct = (exit_price - entry_price) / entry_price
-                pnl_usd = pnl_pct * entry_price * entry_units
+                gross_pnl_usd = (exit_price - entry_price) * entry_units
+                # Deduct roundtrip commission (entry + exit)
+                total_commission = 2 * max(commission_per_trade,
+                                           0.005 * entry_units)  # $0.005/share IBKR min
+                net_pnl_usd = gross_pnl_usd - total_commission
+                position_value = entry_price * entry_units
+                net_pnl_pct = net_pnl_usd / position_value if position_value > 0 else 0.0
                 trades.append({
-                    "entry_price": entry_price,
-                    "exit_price": exit_price,
+                    "entry_price": round(entry_price, 4),
+                    "exit_price": round(exit_price, 4),
                     "entry_idx": entry_idx,
                     "exit_idx": i,
-                    "pnl_pct": round(pnl_pct, 4),
-                    "pnl_usd": round(pnl_usd, 2),
+                    "pnl_pct": round(net_pnl_pct, 4),
+                    "pnl_usd": round(net_pnl_usd, 2),
+                    "gross_pnl_usd": round(gross_pnl_usd, 2),
+                    "commission_usd": round(total_commission, 2),
                     "exit_reason": exit_reason,
-                    "units": entry_units,
+                    "units": round(entry_units, 4),
                 })
                 in_trade = False
 
@@ -156,7 +175,8 @@ def calculate_metrics(trades: list, capital: float) -> BacktestResult:
         if dd > max_dd:
             max_dd = dd
 
-    return BacktestResult(
+    total_commissions = sum(t.get("commission_usd", 0) for t in trades)
+    result = BacktestResult(
         symbol="", period_days=len(trades),
         total_trades=len(trades),
         wins=len(wins), losses=len(losses),
@@ -169,6 +189,9 @@ def calculate_metrics(trades: list, capital: float) -> BacktestResult:
         avg_loss_pct=round(avg_loss, 2),
         trades=trades,
     )
+    # Attach commission summary as extra attribute (backwards compatible)
+    result.__dict__["total_commissions_usd"] = round(total_commissions, 2)
+    return result
 
 
 def run_backtest(
