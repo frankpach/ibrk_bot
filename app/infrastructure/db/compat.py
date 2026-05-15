@@ -1356,7 +1356,7 @@ def init_control_settings() -> None:
             trading_mode = "paper" if s.PAPER_TRADING_ONLY else "live"
             is_paused = "1" if False else "0"
             conn.executemany(
-                "INSERT INTO control_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                "INSERT INTO control_settings (key, value, updated_at, is_secret, requires_restart) VALUES (?, ?, ?, 0, 0)",
                 [
                     ("trading_mode", trading_mode, now),
                     ("is_paused", is_paused, now),
