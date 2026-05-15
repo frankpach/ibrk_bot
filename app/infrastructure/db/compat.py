@@ -1706,3 +1706,33 @@ def update_control_setting_full(
         conn.commit()
     finally:
         conn.close()
+
+
+def get_control_setting_value(key: str, default: str = "") -> str:
+    """Return the value of a control setting, or default if not found."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT value FROM control_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+    finally:
+        conn.close()
+
+
+def seed_control_setting(key: str, value: str, is_secret: bool = False) -> None:
+    """Insert a control setting only if it does not exist yet (idempotent)."""
+    conn = get_connection()
+    try:
+        existing = conn.execute(
+            "SELECT key FROM control_settings WHERE key = ?", (key,)
+        ).fetchone()
+        if not existing:
+            conn.execute(
+                """INSERT INTO control_settings (key, value, is_secret, updated_at, updated_by)
+                   VALUES (?, ?, ?, datetime('now'), 'seed')""",
+                (key, value, 1 if is_secret else 0),
+            )
+            conn.commit()
+    finally:
+        conn.close()
