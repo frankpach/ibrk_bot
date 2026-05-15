@@ -4,7 +4,7 @@ Consulta IB Gateway para descubrir exchanges y tipos de producto operables.
 Resultados cacheados en DB, refrescados diariamente o bajo demanda.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ async def discover_permissions_async(ib) -> list[dict]:
             "sec_type": sec_type,
             "available": info is not None,
             "valid_exchanges": info["valid_exchanges"] if info else "",
-            "checked_at": datetime.utcnow().isoformat(),
+            "checked_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         })
         logger.debug(f"  {label}: {'OK' if info else 'no'}")
     return results

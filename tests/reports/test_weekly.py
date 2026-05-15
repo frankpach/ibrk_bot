@@ -1,6 +1,6 @@
 # tests/reports/test_weekly.py
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.reports.weekly import generate_weekly_report, get_closed_trades_since, send_weekly_report
 
 _DB = "app.infrastructure.db.compat"
@@ -62,12 +62,12 @@ def test_get_closed_trades_since(mock_get_conn):
             "stop_loss_pct": 0.02, "take_profit_pct": 0.06, "signal_strength": "STRONG",
             "llm_justification": "test", "status": "CLOSED", "exit_price": 105.0,
             "exit_reason": "TP", "pnl_usd": 50.0, "pnl_pct": 0.05,
-            "opened_at": datetime.utcnow().isoformat(), "closed_at": datetime.utcnow().isoformat(),
+            "opened_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "closed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "order_id": "1",
         }
     ]
     mock_get_conn.return_value = mock_conn
-    trades = get_closed_trades_since(datetime.utcnow() - timedelta(days=7))
+    trades = get_closed_trades_since(datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7))
     assert len(trades) == 1
     assert trades[0].symbol == "AAPL"
 

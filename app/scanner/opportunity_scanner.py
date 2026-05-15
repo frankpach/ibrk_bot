@@ -1,6 +1,6 @@
 """Proactive hourly opportunity scanner — scores top movers and alerts on strong candidates."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def scan_correlation_lags(data_layer) -> list:
         try:
             earnings_date = data_layer.get_earnings_date(sym)
             if earnings_date:
-                days_to_earnings = (earnings_date - datetime.utcnow()).days
+                days_to_earnings = (earnings_date - datetime.now(timezone.utc).replace(tzinfo=None)).days
                 if 0 <= days_to_earnings <= 3:
                     logger.info(f"[lag] Skipping {sym}: earnings in {days_to_earnings}d")
                     continue
@@ -173,7 +173,7 @@ def scan_news_triggered_opportunities(data_layer) -> list:
     from app.config.settings import MARKET_TZ
 
     today = datetime.now(MARKET_TZ).strftime("%Y-%m-%d")
-    cutoff = (datetime.utcnow() - timedelta(minutes=45)).isoformat()
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=45)).isoformat()
 
     # Get very recent news (last 45 min)
     recent_news = get_news_cache(limit=50)
@@ -206,7 +206,7 @@ def scan_news_triggered_opportunities(data_layer) -> list:
             # Skip if earnings in next 3 days
             earnings_date = data_layer.get_earnings_date(sym)
             if earnings_date:
-                days_to_earnings = (datetime.utcnow() - earnings_date).days * -1
+                days_to_earnings = (datetime.now(timezone.utc).replace(tzinfo=None) - earnings_date).days * -1
                 if 0 <= days_to_earnings <= 3:
                     logger.info(f"[news] Skipping {sym}: earnings in {days_to_earnings}d")
                     continue

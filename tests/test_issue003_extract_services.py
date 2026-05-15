@@ -133,7 +133,7 @@ def test_position_service_check_exit_conditions_stop_loss():
         entry_price=100.0, stop_loss_price=98.0, take_profit_price=110.0,
         stop_loss_pct=0.02, take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN", exit_price=None, exit_reason=None,
-        pnl_usd=None, pnl_pct=None, opened_at=__import__("datetime").datetime.utcnow(),
+        pnl_usd=None, pnl_pct=None, opened_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None),
         closed_at=None, order_id="1", trade_status="OPEN", entry_fill_price=100.0,
         remaining_quantity=10,
     )
@@ -151,7 +151,7 @@ def test_position_service_check_exit_conditions_take_profit():
         entry_price=100.0, stop_loss_price=98.0, take_profit_price=110.0,
         stop_loss_pct=0.02, take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN", exit_price=None, exit_reason=None,
-        pnl_usd=None, pnl_pct=None, opened_at=__import__("datetime").datetime.utcnow(),
+        pnl_usd=None, pnl_pct=None, opened_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None),
         closed_at=None, order_id="1", trade_status="OPEN", entry_fill_price=100.0,
         remaining_quantity=10,
     )

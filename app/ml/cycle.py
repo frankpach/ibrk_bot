@@ -2,7 +2,7 @@
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def run_learning_cycle(data_layer, ib_client=None) -> LearningReport:
     Daily learning cycle: evaluate returns → retrain → rollback check → report.
     Each step is independent; failures are captured in LearningReport.errors.
     """
-    report = LearningReport(date=datetime.utcnow().strftime("%Y-%m-%d"))
+    report = LearningReport(date=datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d"))
 
     # Step 1: evaluate pending returns
     try:
@@ -91,7 +91,7 @@ def run_learning_cycle(data_layer, ib_client=None) -> LearningReport:
             daily_pnl = get_daily_pnl()
             capital = float(account.get("net_liquidation") or 0.0)
             upsert_account_snapshot(
-                date=datetime.utcnow().strftime("%Y-%m-%d"),
+                date=datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d"),
                 net_liquidation=round(capital, 2),
                 buying_power=round(float(account.get("buying_power") or 0.0), 2),
                 daily_pnl_usd=round(daily_pnl, 2),

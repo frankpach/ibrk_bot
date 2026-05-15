@@ -2,7 +2,7 @@
 """Tests for MTE-006: df_hourly activation + new FeatureSet fields."""
 import pytest
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.analysis.indicators import FeatureSet, compute_features
 
@@ -34,25 +34,25 @@ def _make_hourly_df(n: int = 30) -> pd.DataFrame:
 # --- FeatureSet dataclass field tests ---
 
 def test_featureset_has_rsi_1h_field():
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     assert hasattr(fs, "rsi_1h")
     assert fs.rsi_1h is None
 
 
 def test_featureset_has_volume_ratio_1h_field():
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     assert hasattr(fs, "volume_ratio_1h")
     assert fs.volume_ratio_1h is None
 
 
 def test_featureset_has_weekly_trend_field():
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     assert hasattr(fs, "weekly_trend")
     assert fs.weekly_trend is None
 
 
 def test_featureset_to_dict_includes_new_fields():
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     fs.rsi_1h = 55.5
     fs.volume_ratio_1h = 1.2
     fs.weekly_trend = "BULLISH"
@@ -128,7 +128,7 @@ def test_extract_features_returns_10_elements():
     """_extract_features should return a list of 10 elements after MTE-006."""
     from app.ml.signal_filter import SignalFilter
     sf = SignalFilter(model_path="/nonexistent")
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     fs.rsi_14 = 55.0
     fs.macd_line = 0.1
     fs.atr_pct = 2.0
@@ -145,7 +145,7 @@ def test_extract_features_new_fields_from_featureset():
     """rsi_1h and volume_ratio_1h are correctly extracted from FeatureSet."""
     from app.ml.signal_filter import SignalFilter
     sf = SignalFilter(model_path="/nonexistent")
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     fs.rsi_1h = 65.0
     fs.volume_ratio_1h = 1.5
     result = sf._extract_features(fs)
@@ -157,7 +157,7 @@ def test_extract_features_new_fields_default_when_none():
     """When rsi_1h/volume_ratio_1h are None, defaults (50, 1.0) are used."""
     from app.ml.signal_filter import SignalFilter
     sf = SignalFilter(model_path="/nonexistent")
-    fs = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
     # rsi_1h and volume_ratio_1h are None by default
     result = sf._extract_features(fs)
     assert result[8] == 50     # default rsi_1h

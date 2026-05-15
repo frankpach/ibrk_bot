@@ -1,6 +1,6 @@
 # tests/system/test_reconciler.py
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 from app.system.reconciler import reconcile_positions
 from app.db.models import Trade
 
@@ -13,7 +13,7 @@ def test_reconcile_closes_orphan_db_trades():
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
     )
     with patch("app.system.reconciler.get_open_trades", return_value=[trade]), \
          patch("app.system.reconciler.close_trade") as mock_close, \
@@ -54,7 +54,7 @@ def test_reconcile_refreshes_snapshot_for_existing_trade():
         take_profit_pct=0.06, signal_strength="MANUAL_RECONCILED",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
     )
     with patch("app.system.reconciler.get_open_trades", return_value=[trade]), \
          patch("app.system.reconciler.close_trade") as mock_close, \
@@ -88,7 +88,7 @@ def test_reconcile_no_changes():
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
     )
     with patch("app.system.reconciler.get_open_trades", return_value=[trade]), \
          patch("app.system.reconciler.close_trade") as mock_close, \

@@ -4,7 +4,7 @@ import re
 import sqlite3
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db.models import Signal, Trade, Pattern, Decision
 from app.infrastructure.db.base import Base
@@ -733,7 +733,7 @@ def close_trade(trade_id: int, exit_price: float, exit_reason: str, pnl_usd: flo
     conn = get_connection()
     conn.execute(
         "UPDATE trades SET status='CLOSED',trade_status='CLOSED',exit_price=?,exit_fill_price=?,exit_reason=?,pnl_usd=?,pnl_pct=?,closed_at=? WHERE id=?",
-        (exit_price, exit_fill_price, exit_reason, pnl_usd, pnl_pct, datetime.utcnow().isoformat(), trade_id)
+        (exit_price, exit_fill_price, exit_reason, pnl_usd, pnl_pct, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), trade_id)
     )
     conn.commit()
     conn.close()
@@ -834,7 +834,7 @@ def insert_decision(decision: Decision) -> int:
 def save_symbol_proposal(symbol: str, reason: str):
     """Guarda un simbolo propuesto pendiente de aprobacion."""
     conn = get_connection()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn.execute(
         "INSERT OR IGNORE INTO symbol_config (symbol, approved, proposed_by, created_at) VALUES (?,0,'llm',?)",
         (symbol.upper(), now)
@@ -859,7 +859,7 @@ def approve_symbol(symbol: str, ib_client=None) -> None:
            (symbol, extra_indicators, approved, proposed_by, created_at,
             sec_type, exchange, currency, market_key)
            VALUES (?, '[]', 0, 'dashboard', ?, 'STK', 'SMART', 'USD', 'STK_US')""",
-        (sym, datetime.utcnow().isoformat())
+        (sym, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.execute("UPDATE symbol_config SET approved=1 WHERE symbol=?", (sym,))
     conn.commit()
@@ -942,7 +942,7 @@ def insert_alert(symbol: str, threshold_pct: float) -> int:
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO alerts (symbol, threshold_pct, created_at) VALUES (?,?,?)",
-        (symbol.upper(), threshold_pct, datetime.utcnow().isoformat())
+        (symbol.upper(), threshold_pct, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.commit()
     row_id = cur.lastrowid
@@ -964,7 +964,7 @@ def mark_alert_triggered(alert_id: int):
     conn = get_connection()
     conn.execute(
         "UPDATE alerts SET triggered_at=? WHERE id=?",
-        (datetime.utcnow().isoformat(), alert_id)
+        (datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), alert_id)
     )
     conn.commit()
     conn.close()
@@ -1186,7 +1186,7 @@ def insert_candidate_decision(symbol: str, decision: str, price: float, score: f
            (symbol, decision_date, decision, price_at_decision, quant_score,
             feature_snapshot_id, llm_summary)
            VALUES (?,?,?,?,?,?,?)""",
-        (symbol, datetime.utcnow().isoformat(), decision, price, score,
+        (symbol, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), decision, price, score,
          feature_snapshot_id, llm_summary)
     )
     conn.commit()
@@ -1198,8 +1198,8 @@ def insert_candidate_decision(symbol: str, decision: str, price: float, score: f
 def get_candidate_decisions_for_evaluation(days_ago: int) -> list:
     from app.db.models import CandidateDecision
     conn = get_connection()
-    cutoff = (datetime.utcnow() - __import__("datetime").timedelta(days=days_ago + 1)).isoformat()
-    end = (datetime.utcnow() - __import__("datetime").timedelta(days=days_ago - 1)).isoformat()
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - __import__("datetime").timedelta(days=days_ago + 1)).isoformat()
+    end = (datetime.now(timezone.utc).replace(tzinfo=None) - __import__("datetime").timedelta(days=days_ago - 1)).isoformat()
     field = "future_return_7d" if days_ago <= 10 else "future_return_30d"
     rows = conn.execute(
         f"SELECT * FROM candidate_decisions WHERE {field} IS NULL AND decision_date BETWEEN ? AND ?",
@@ -1234,7 +1234,7 @@ def get_or_create_symbol_parameters(symbol: str):
         )
     # Create default
     conn = get_connection()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn.execute(
         """INSERT OR IGNORE INTO symbol_parameters
            (symbol, updated_at) VALUES (?,?)""",
@@ -1249,7 +1249,7 @@ def get_or_create_symbol_parameters(symbol: str):
 
 def update_symbol_parameters(symbol: str, **kwargs):
     conn = get_connection()
-    kwargs["updated_at"] = datetime.utcnow().isoformat()
+    kwargs["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     sets = ", ".join(f"{k}=?" for k in kwargs)
     vals = list(kwargs.values()) + [symbol.upper()]
     conn.execute(f"UPDATE symbol_parameters SET {sets} WHERE symbol=?", vals)
@@ -1259,7 +1259,7 @@ def update_symbol_parameters(symbol: str, **kwargs):
 
 def upsert_watchlist_score(symbol: str, **scores):
     conn = get_connection()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     scores["last_updated"] = now
     fields = list(scores.keys())
     vals = list(scores.values())
@@ -1330,9 +1330,8 @@ def get_market_permissions_age_hours() -> float | None:
     conn.close()
     if not row:
         return None
-    from datetime import timezone
     last = datetime.fromisoformat(row["checked_at"])
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     return (now - last).total_seconds() / 3600
 
 
@@ -1345,7 +1344,7 @@ def upsert_position_snapshot(trade_id: int, symbol: str, current_price: float,
         """INSERT OR REPLACE INTO position_snapshots
            (trade_id, symbol, current_price, pnl_usd, pnl_pct, updated_at)
            VALUES (?,?,?,?,?,?)""",
-        (trade_id, symbol, current_price, pnl_usd, pnl_pct, datetime.utcnow().isoformat())
+        (trade_id, symbol, current_price, pnl_usd, pnl_pct, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.commit()
     conn.close()
@@ -1367,7 +1366,7 @@ def upsert_account_snapshot(date: str, net_liquidation: float, buying_power: flo
            (date, net_liquidation, buying_power, daily_pnl_usd, daily_pnl_pct, created_at)
            VALUES (?,?,?,?,?,?)""",
         (date, net_liquidation, buying_power, daily_pnl_usd, daily_pnl_pct,
-         datetime.utcnow().isoformat())
+         datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.commit()
     conn.close()
@@ -1391,7 +1390,7 @@ def insert_news_cache(symbol: str, headline: str, provider: str, sentiment: str,
            (symbol, headline, provider, sentiment, article_id, published_at, url, fetched_at)
            VALUES (?,?,?,?,?,?,?,?)""",
         (symbol, headline, provider, sentiment, article_id, published_at, url,
-         datetime.utcnow().isoformat())
+         datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.commit()
     conn.close()
@@ -1417,7 +1416,7 @@ def get_news_cache(symbols: list = None, limit: int = 20) -> list:
 
 def clear_news_cache_older_than(hours: int = 24) -> None:
     from datetime import timedelta
-    cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)).isoformat()
     conn = get_connection()
     conn.execute("DELETE FROM news_cache WHERE fetched_at < ?", (cutoff,))
     conn.commit()
@@ -1428,7 +1427,7 @@ def upsert_scanner_results(scan_type: str, results: list) -> None:
     """Replace all results for a scan_type with fresh data."""
     conn = get_connection()
     conn.execute("DELETE FROM scanner_results WHERE scan_type=?", (scan_type,))
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     for r in results:
         conn.execute(
             """INSERT INTO scanner_results
@@ -1460,7 +1459,7 @@ def save_report(report_type: str, report_date: str, title: str, content_md: str)
     cur = conn.execute(
         """INSERT INTO analysis_reports (report_type, report_date, title, content_md, created_at)
            VALUES (?,?,?,?,?)""",
-        (report_type, report_date, title, content_md, datetime.utcnow().isoformat())
+        (report_type, report_date, title, content_md, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.commit()
     row_id = cur.lastrowid
@@ -1510,7 +1509,7 @@ def cleanup_inactive_symbols(days: int = 90) -> list[str]:
     """
     from datetime import timedelta
     PROTECTED = {"SPY", "QQQ"}
-    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).isoformat()
     conn = get_connection()
     try:
         approved = [r["symbol"] for r in
@@ -1548,7 +1547,7 @@ def cleanup_inactive_symbols(days: int = 90) -> list[str]:
 
 def _cleanup_old_reports(days: int = 3) -> None:
     from datetime import timedelta
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.execute("DELETE FROM analysis_reports WHERE report_date < ?", (cutoff,))
     conn.commit()
@@ -1578,7 +1577,7 @@ def upsert_daily_watchlist(date: str, symbol: str, score: float, signal_strength
            change_pct, volume_ratio, reason, alerted, added_at)
            VALUES (?,?,?,?,?,?,?,0,?)""",
         (date, symbol, score, signal_strength, change_pct, volume_ratio, reason,
-         datetime.utcnow().isoformat())
+         datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
     )
     conn.commit()
     conn.close()
@@ -1587,8 +1586,8 @@ def upsert_daily_watchlist(date: str, symbol: str, score: float, signal_strength
 
 def get_daily_watchlist(date: str = None) -> list:
     """Get today's watchlist (or specific date), ordered by score desc."""
-    from datetime import datetime as _dt
-    target_date = date or _dt.utcnow().strftime("%Y-%m-%d")
+    from datetime import datetime as _dt, timezone as _tz
+    target_date = date or _dt.now(_tz.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     conn = get_connection()
     rows = conn.execute(
         "SELECT * FROM daily_watchlist WHERE date=? ORDER BY score DESC",
@@ -1614,7 +1613,7 @@ def init_control_settings() -> None:
     try:
         row = conn.execute("SELECT COUNT(*) FROM control_settings").fetchone()
         if row[0] == 0:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             trading_mode = "paper" if s.PAPER_TRADING_ONLY else "live"
             is_paused = "1" if False else "0"
             conn.executemany(
@@ -1669,7 +1668,7 @@ def update_control_setting(key: str, value: str) -> None:
     """Upsert a control setting value."""
     conn = get_connection()
     try:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
             "INSERT INTO control_settings (key, value, updated_at) VALUES (?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
@@ -1690,7 +1689,7 @@ def update_control_setting_full(
     """Upsert a control setting value with full metadata."""
     conn = get_connection()
     try:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
             """
             INSERT INTO control_settings (key, value, updated_at, updated_by, is_secret, requires_restart)

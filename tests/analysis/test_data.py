@@ -114,7 +114,7 @@ def test_get_ohlcv_exception(mock_build):
 @patch("app.analysis.indicators.compute_features")
 def test_get_indicators_success(mock_features, mock_ohlcv):
     from app.analysis.indicators import FeatureSet
-    fs = FeatureSet(symbol="AAPL", timestamp=__import__("datetime").datetime.utcnow())
+    fs = FeatureSet(symbol="AAPL", timestamp=__import__("datetime").datetime.now(__import__("datetime").timezone.utc))
     fs.rsi_14 = 55.0
     fs.volume_ratio_20d = 1.5
     fs.macd_crossover = True

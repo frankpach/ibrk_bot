@@ -2,7 +2,7 @@
 import pytest
 from app.risk.trailing_stop import TrailingStopManager, StopUpdateResult
 from app.db.models import Trade
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def _trade(action="BUY", entry=100.0, sl_pct=0.02, current_sl=98.0):
@@ -13,7 +13,7 @@ def _trade(action="BUY", entry=100.0, sl_pct=0.02, current_sl=98.0):
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
         trade_status="OPEN", entry_fill_price=entry,
         remaining_quantity=10,
     )

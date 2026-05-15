@@ -84,6 +84,7 @@ def test_place_rejects_when_zero_units():
          patch("app.ibkr.dedup.PreflightChecker.check",
                return_value=MagicMock(ok=True, reason=None)), \
          patch("app.ibkr.dedup.get_deduplicator", return_value=OrderDeduplicator()), \
+         patch("app.config.settings.MAX_POSITION_USD", 0), \
          patch("app.api.main.MAX_POSITION_USD", 0):
         mock_dt.now.return_value = MARKET_OPEN_DT
         tc = _fresh_app()

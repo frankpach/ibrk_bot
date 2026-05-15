@@ -4,7 +4,7 @@ Reconcilia posiciones abiertas en IB Gateway vs las registradas en la DB.
 Se ejecuta al arrancar el sistema para detectar desincronizaciones.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from app.infrastructure.db.compat import (
     approve_symbol,
     close_trade,
@@ -92,7 +92,7 @@ def reconcile_positions(ib_client) -> dict:
             logger.warning(
                 f"Position {symbol} found in IB but not in DB — creating local trade"
             )
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             new_trade = Trade(
                 id=None,
                 symbol=symbol,

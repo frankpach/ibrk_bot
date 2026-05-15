@@ -6,7 +6,7 @@ Migrates classify_signal and classify_multitimeframe from preprocessor.py.
 """
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Optional
 
 import pandas as pd
@@ -189,7 +189,7 @@ def compute_features(
     qqq_df: Optional[pd.DataFrame] = None,
 ) -> FeatureSet:
     """Compute all available indicators. Returns FeatureSet with None for unavailable data."""
-    fs = FeatureSet(symbol=symbol, timestamp=datetime.utcnow())
+    fs = FeatureSet(symbol=symbol, timestamp=datetime.now(timezone.utc))
 
     if df_daily is None or len(df_daily) < 15:
         return fs  # all None

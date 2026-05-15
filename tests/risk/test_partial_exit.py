@@ -2,7 +2,7 @@
 import pytest
 from app.risk.partial_exit import PartialExitManager
 from app.db.models import Trade
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def _trade(qty=10, remaining=None, partial_done=False):
@@ -13,7 +13,7 @@ def _trade(qty=10, remaining=None, partial_done=False):
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
         trade_status="OPEN", entry_fill_price=100.0,
         partial_exit_done=partial_done,
         remaining_quantity=remaining if remaining is not None else qty,

@@ -2,7 +2,7 @@
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def _run_calibration_safe(symbol: str, ib_client) -> None:
             stop_loss_pct=best_sl,
             take_profit_pct=best_tp,
             backtest_calibrated=1,
-            backtest_calibrated_at=datetime.utcnow().isoformat(),
+            backtest_calibrated_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         )
 
         if best_result:

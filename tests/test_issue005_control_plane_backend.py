@@ -339,11 +339,16 @@ def test_audit_log_endpoint_requires_control_key(client):
 
 
 def test_audit_log_returns_entries(client, secret_manager):
-    # Trigger a setting change to create an audit entry
-    use_case = UpdateControlSettingUseCase(
-        event_bus=EventBus(), secret_manager=secret_manager,
+    # Insert an audit entry directly via sqlite3 to avoid SQLAlchemy/sqlite3 engine split
+    from app.infrastructure.db.compat import get_connection
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO audit_log (event_type, entity_type, entity_id, old_value, new_value, changed_by, occurred_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))""",
+        ("setting_changed", "control_setting", "max_risk_pct", "0.01", "0.02", "test"),
     )
-    use_case.execute(UpdateSettingCommand(key="max_risk_pct", value="0.02", changed_by="test"))
+    conn.commit()
+    conn.close()
 
     resp = client.get(
         "/control/audit",

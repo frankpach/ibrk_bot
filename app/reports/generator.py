@@ -1,6 +1,6 @@
 """Pre-market and daily operations report generator."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +15,8 @@ def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None
         from app.infrastructure.db.compat import save_report, get_news_cache, get_scanner_results
         from app.infrastructure.db.compat import get_account_history
 
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        now_str = datetime.utcnow().strftime("%H:%M UTC")
+        today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+        now_str = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%H:%M UTC")
 
         # Account snapshot for context
         account_hist = get_account_history(days=1)
@@ -144,8 +144,8 @@ def generate_daily_ops_report(trades_today: list) -> int | None:
     try:
         from app.infrastructure.db.compat import save_report, get_account_history
 
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        now_str = datetime.utcnow().strftime("%H:%M UTC")
+        today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+        now_str = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%H:%M UTC")
 
         wins = [t for t in trades_today if (t.pnl_usd or 0) > 0]
         losses = [t for t in trades_today if (t.pnl_usd or 0) <= 0]

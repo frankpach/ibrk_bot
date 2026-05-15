@@ -45,12 +45,29 @@ from app.infrastructure.db.compat import init_db, get_connection
 def _mock_notifications():
     """Prevent any test from hitting Telegram or starting the notification thread."""
     import app.notifications.queue as nq_mod
+
+    # Stop any running singleton before the test
+    old_instance = nq_mod._queue_instance
+    if old_instance is not None:
+        try:
+            old_instance.stop()
+        except Exception:
+            pass
+    nq_mod._queue_instance = None
+
     with patch("app.notifications.queue.enqueue_notification"), \
-         patch("app.notifications.queue.get_notification_queue"):
-        old_instance = nq_mod._queue_instance
-        nq_mod._queue_instance = None
+         patch("app.notifications.queue.get_notification_queue"), \
+         patch("app.notifications.telegram.notify"), \
+         patch("app.notifications.telegram.request_approval", return_value=True):
         yield
-        nq_mod._queue_instance = old_instance
+
+    # Stop any instance the test may have created
+    if nq_mod._queue_instance is not None:
+        try:
+            nq_mod._queue_instance.stop()
+        except Exception:
+            pass
+    nq_mod._queue_instance = old_instance
 
 
 @pytest.fixture(autouse=True)

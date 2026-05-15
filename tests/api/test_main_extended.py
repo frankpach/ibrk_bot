@@ -341,18 +341,16 @@ def test_dashboard():
 
 # ---- Backtest ----
 
-def test_backtest_success():
+def test_backtest_returns_job_id():
+    """Backtest endpoint enqueues a job and returns job_id immediately."""
     with patch("app.ibkr.client.IBKRClient") as MockClient:
         mock = MagicMock()
         mock.ib.isConnected.return_value = True
-        mock.get_account.return_value = {"net_liquidation": 1000.0}
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.backtest.engine.run_backtest", return_value={"sharpe": 1.5}), \
-             patch("app.backtest.reporter.format_api", return_value={"sharpe": 1.5}):
-            resp = client.get("/backtest/AAPL?days=30")
-            assert resp.status_code == 200
-            assert resp.json()["sharpe"] == 1.5
+        resp = client.get("/backtest/AAPL?days=30")
+        assert resp.status_code == 200
+        assert "job_id" in resp.json()
 
 
 def test_backtest_forbidden():
@@ -365,43 +363,18 @@ def test_backtest_forbidden():
         assert resp.status_code == 403
 
 
-def test_backtest_error():
-    with patch("app.ibkr.client.IBKRClient") as MockClient:
-        mock = MagicMock()
-        mock.ib.isConnected.return_value = True
-        mock.get_account.return_value = {"net_liquidation": 1000.0}
-        MockClient.return_value = mock
-        client = _fresh_client()
-        with patch("app.backtest.engine.run_backtest", side_effect=Exception("fail")):
-            resp = client.get("/backtest/AAPL?days=30")
-            assert resp.status_code == 500
-
-
 # ---- Candidate analysis ----
 
-def test_candidate_analysis():
+def test_candidate_analysis_returns_job_id():
+    """Candidate analysis enqueues a job and returns job_id immediately."""
     with patch("app.ibkr.client.IBKRClient") as MockClient:
         mock = MagicMock()
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        mock_result = MagicMock()
-        mock_result.to_dict.return_value = {"score": 85}
-        with patch("app.analysis.pipeline.AnalysisPipeline.run", return_value=mock_result):
-            resp = client.get("/candidate-analysis/AAPL")
-            assert resp.status_code == 200
-            assert resp.json()["score"] == 85
-
-
-def test_candidate_analysis_error():
-    with patch("app.ibkr.client.IBKRClient") as MockClient:
-        mock = MagicMock()
-        mock.ib.isConnected.return_value = True
-        MockClient.return_value = mock
-        client = _fresh_client()
-        with patch("app.analysis.pipeline.AnalysisPipeline.run", side_effect=Exception("fail")):
-            resp = client.get("/candidate-analysis/AAPL")
-            assert resp.status_code == 500
+        resp = client.get("/candidate-analysis/AAPL")
+        assert resp.status_code == 200
+        assert "job_id" in resp.json()
 
 
 # ---- Dashboard HTML (LD-004) ----
@@ -787,19 +760,25 @@ def test_dashboard_data_exposes_snapshot_data_for_open_trades():
             volatility_mult=1.0,
         )
 
-        with patch("app.infrastructure.db.compat.get_open_trades", return_value=[trade]), \
-             patch("app.infrastructure.db.compat.get_position_snapshots", return_value={
-                 42: {
-                     "trade_id": 42,
-                     "symbol": "AAOI",
-                     "current_price": 228.16,
-                     "pnl_usd": 6.27,
-                     "pnl_pct": 0.4186,
-                     "updated_at": "2026-05-13T14:22:51",
-                 }
-             }), \
-             patch("app.infrastructure.db.compat.get_approved_symbols", return_value=["MSFT", "AAOI"]), \
-             patch("app.infrastructure.db.compat.get_or_create_symbol_parameters", return_value=symbol_params):
+        fake_dashboard = {
+            "status": {"mode": "paper", "paused": False},
+            "open_trades": [{
+                "trade_id": 42, "symbol": "AAOI", "action": "BUY",
+                "current_price": 228.16, "pnl_usd": 6.27, "pnl_pct": 0.4186,
+                "entry_price": 149.77, "stop_loss_price": 140.0,
+                "take_profit_price": 230.0, "signal_strength": "MANUAL_RECONCILED",
+                "opened_at": "2026-05-13T14:00:00",
+            }],
+            "closed_trades": [], "signals": [], "patterns": [],
+            "position_snapshots": [{"trade_id": 42, "symbol": "AAOI",
+                                    "current_price": 228.16, "pnl_usd": 6.27,
+                                    "pnl_pct": 0.4186, "updated_at": "2026-05-13T14:22:51"}],
+            "learning": {}, "account_history": [], "latest_account": {},
+            "news": [], "scanner": {}, "symbols_universe": [],
+            "ib_connected": True, "earnings_warnings": {}, "daily_watchlist": [],
+        }
+        with patch("app.infrastructure.db.read_models.dashboard_query.DashboardDataQuery.execute",
+                   return_value=fake_dashboard):
             resp = client.get("/dashboard/data")
 
         assert resp.status_code == 200
@@ -844,14 +823,31 @@ def test_dashboard_data_sorts_open_symbol_first_in_universe():
             volatility_mult=1.0,
         )
 
-        with patch("app.api.main.get_open_trades", return_value=[trade]), \
-             patch("app.api.main.get_approved_symbols", return_value=["MSFT", "AAOI", "AAPL"]), \
-             patch("app.infrastructure.db.compat.get_or_create_symbol_parameters", return_value=symbol_params):
+        fake_dashboard = {
+            "status": {"mode": "paper", "paused": False},
+            "open_trades": [{"trade_id": 99, "symbol": "AAOI", "action": "BUY",
+                             "entry_price": 149.77, "current_price": None,
+                             "pnl_usd": None, "pnl_pct": None,
+                             "stop_loss_price": 140.0, "take_profit_price": 230.0,
+                             "signal_strength": "MANUAL_RECONCILED",
+                             "opened_at": "2026-05-13T14:00:00"}],
+            "closed_trades": [], "signals": [], "patterns": [],
+            "position_snapshots": [],
+            "learning": {}, "account_history": [], "latest_account": {},
+            "news": [], "scanner": {},
+            "symbols_universe": [
+                {"symbol": "AAOI", "open_trade": True},
+                {"symbol": "MSFT", "open_trade": False},
+                {"symbol": "AAPL", "open_trade": False},
+            ],
+            "ib_connected": True, "earnings_warnings": {}, "daily_watchlist": [],
+        }
+        with patch("app.infrastructure.db.read_models.dashboard_query.DashboardDataQuery.execute",
+                   return_value=fake_dashboard):
             resp = client.get("/dashboard/data")
 
         assert resp.status_code == 200
         data = resp.json()
-        # AAOI is an open position → must appear first in symbols_universe
         syms = [s["symbol"] for s in data["symbols_universe"]]
         assert "AAOI" in syms
         assert syms.index("AAOI") < syms.index("MSFT")

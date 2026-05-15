@@ -31,7 +31,7 @@ def test_policy_invalid_level_raises():
 
 def test_digest_generator():
     from app.db.models import Trade
-    from datetime import datetime
+    from datetime import datetime, timezone
     dg = DigestGenerator()
     trade = Trade(
         id=1, symbol="AAPL", action="BUY", quantity=10,
@@ -40,7 +40,7 @@ def test_digest_generator():
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=50.0, pnl_pct=0.05,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
     )
     msg = dg.generate_digest([trade], daily_pnl=50.0, signals_processed=5, system_status="OK")
     assert "AAPL" in msg

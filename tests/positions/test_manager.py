@@ -1,6 +1,6 @@
 # tests/positions/test_manager.py
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from app.positions.manager import check_positions, set_broker
 from app.db.models import Trade
@@ -15,7 +15,7 @@ def _open_trade(symbol="AAPL", action="BUY", entry=100.0, sl=98.0, tp=110.0, qty
         take_profit_pct=0.06, signal_strength=signal_strength,
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
         trade_status="OPEN", entry_fill_price=entry,
         partial_exit_done=partial_done,
         remaining_quantity=remaining if remaining is not None else qty,

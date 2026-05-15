@@ -1,7 +1,7 @@
 # app/analysis/evaluator.py
 """ReturnEvaluator — computes actual returns vs SPY for past candidate decisions."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +49,13 @@ def _evaluate_at(data_layer, days_ago: int):
                 conn.execute(
                     "UPDATE candidate_decisions SET future_return_7d=?, alpha_vs_spy_7d=?, evaluated_7d_at=? WHERE id=?",
                     (round(return_pct, 4), round(alpha, 4) if alpha is not None else None,
-                     datetime.utcnow().isoformat(), dec.id)
+                     datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), dec.id)
                 )
             else:
                 conn.execute(
                     "UPDATE candidate_decisions SET future_return_30d=?, alpha_vs_spy_30d=?, evaluated_30d_at=? WHERE id=?",
                     (round(return_pct, 4), round(alpha, 4) if alpha is not None else None,
-                     datetime.utcnow().isoformat(), dec.id)
+                     datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), dec.id)
                 )
             conn.commit()
             conn.close()

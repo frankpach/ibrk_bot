@@ -1,6 +1,6 @@
 # tests/db/test_database.py
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from app.infrastructure.db.compat import (
     get_connection, init_db,
     insert_signal, get_pending_signals, mark_signal_processed,
@@ -22,7 +22,7 @@ def test_insert_and_get_signal():
     sig = Signal(
         id=None, symbol="AAPL", strength="STRONG",
         rsi=30.0, macd=-0.1, volume_ratio=1.5,
-        extra_indicators="{}", created_at=datetime.utcnow(),
+        extra_indicators="{}", created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     sid = insert_signal(sig)
     pending = get_pending_signals()
@@ -33,7 +33,7 @@ def test_mark_signal_processed():
     sig = Signal(
         id=None, symbol="MSFT", strength="MEDIUM",
         rsi=50.0, macd=0.0, volume_ratio=1.0,
-        extra_indicators="{}", created_at=datetime.utcnow(),
+        extra_indicators="{}", created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     sid = insert_signal(sig)
     mark_signal_processed(sid)
@@ -49,7 +49,7 @@ def test_insert_and_get_trade():
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="1",
     )
     tid = insert_trade(trade)
     open_trades = get_open_trades()
@@ -64,7 +64,7 @@ def test_close_trade():
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="2",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="2",
     )
     tid = insert_trade(trade)
     close_trade(tid, 105.0, "TAKE_PROFIT", 25.0, 0.05, exit_fill_price=105.0)
@@ -80,7 +80,7 @@ def test_update_trade_status():
         take_profit_pct=0.06, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="3",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="3",
     )
     tid = insert_trade(trade)
     update_trade_status(tid, trade_status="FILLED", stop_loss_price=295.0)
@@ -92,7 +92,7 @@ def test_insert_and_get_pattern():
     pat = Pattern(
         id=None, symbol="AAPL", pattern_text="test pattern",
         win_count=5, loss_count=2,
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     pid = insert_pattern(pat)
     patterns = get_patterns_for_symbol("AAPL")
@@ -104,7 +104,7 @@ def test_insert_decision():
         id=None, signal_id=1, symbol="AAPL",
         llm_model="gpt-4", prompt_summary="test", response="BUY",
         action="BUY", stop_loss_pct=0.02, take_profit_pct=0.06,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     did = insert_decision(dec)
     assert did > 0
@@ -148,7 +148,7 @@ def test_get_feature_snapshot_by_id_found():
     """Insert a snapshot and retrieve it by id."""
     snap_id = insert_feature_snapshot({
         "symbol": "AAPL",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "context": "test",
         "rsi_14": 42.0,
         "macd_line": 0.5,
@@ -195,7 +195,7 @@ def test_get_closed_trades_by_symbol_returns_trades():
         take_profit_pct=0.04, signal_strength="STRONG",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="goog1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="goog1",
     )
     tid = insert_trade(trade)
     close_trade(tid, 155.0, "TAKE_PROFIT", 25.0, 0.033, exit_fill_price=155.0)
@@ -219,7 +219,7 @@ def test_get_closed_trades_by_symbol_respects_limit():
             take_profit_pct=0.04, signal_strength="MEDIUM",
             llm_justification="test", status="OPEN",
             exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-            opened_at=datetime.utcnow(), closed_at=None, order_id=f"amzn{i}",
+            opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id=f"amzn{i}",
         )
         tid = insert_trade(trade)
         close_trade(tid, 206.0 + i, "TAKE_PROFIT", 12.0, 0.03, exit_fill_price=206.0 + i)
@@ -239,7 +239,7 @@ def test_get_closed_trades_by_symbol_case_insensitive():
         take_profit_pct=0.03, signal_strength="WEAK",
         llm_justification="test", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=datetime.utcnow(), closed_at=None, order_id="jpm1",
+        opened_at=datetime.now(timezone.utc).replace(tzinfo=None), closed_at=None, order_id="jpm1",
     )
     tid = insert_trade(trade)
     close_trade(tid, 175.0, "TAKE_PROFIT", 50.0, 0.028, exit_fill_price=175.0)
@@ -261,7 +261,7 @@ def test_get_patterns_for_symbol_returns_patterns():
     pat = Pattern(
         id=None, symbol="TSLA", pattern_text="bullish divergence",
         win_count=3, loss_count=1,
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     pid = insert_pattern(pat)
 
@@ -279,7 +279,7 @@ def test_get_patterns_for_symbol_respects_limit():
         pat = Pattern(
             id=None, symbol="SPY", pattern_text=f"pattern_{i}",
             win_count=i, loss_count=i // 2,
-            created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         insert_pattern(pat)
 
@@ -296,7 +296,7 @@ def test_get_patterns_for_symbol_no_limit():
         pat = Pattern(
             id=None, symbol="QQQ", pattern_text=f"pattern_{i}",
             win_count=i, loss_count=0,
-            created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None), updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         insert_pattern(pat)
 
@@ -455,19 +455,19 @@ def test_cleanup_old_reports():
 
     # Insert a report dated 10 days ago directly (bypass cleanup)
     from app.infrastructure.db.compat import get_connection
-    from datetime import datetime as _dt
-    old_date = (_dt.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")
+    from datetime import datetime as _dt, timezone as _tz
+    old_date = (_dt.now(_tz.utc).replace(tzinfo=None) - timedelta(days=10)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.execute(
         "INSERT INTO analysis_reports (report_type, report_date, title, content_md, created_at) "
         "VALUES (?,?,?,?,?)",
-        ("pre_market", old_date, "Old report", "content", _dt.utcnow().isoformat()),
+        ("pre_market", old_date, "Old report", "content", _dt.now(_tz.utc).replace(tzinfo=None).isoformat()),
     )
     conn.commit()
     conn.close()
 
     # Now save a fresh report, which triggers _cleanup_old_reports(days=3)
-    save_report("pre_market", _dt.utcnow().strftime("%Y-%m-%d"), "Fresh report", "content")
+    save_report("pre_market", _dt.now(_tz.utc).replace(tzinfo=None).strftime("%Y-%m-%d"), "Fresh report", "content")
 
     # The old report should no longer exist
     listing = get_reports(limit=100)

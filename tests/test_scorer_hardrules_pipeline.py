@@ -1,6 +1,6 @@
 # tests/test_scorer_hardrules_pipeline.py
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
 
@@ -8,7 +8,7 @@ import pandas as pd
 def make_features(rsi=28.0, macd_cross=True, vol_ratio=1.8, sma20=285.0, sma50=280.0, sma200=270.0):
     from app.analysis.indicators import FeatureSet
     return FeatureSet(
-        symbol="AAPL", timestamp=datetime.utcnow(),
+        symbol="AAPL", timestamp=datetime.now(timezone.utc),
         rsi_14=rsi, macd_line=-0.12, macd_signal=-0.15, macd_crossover=macd_cross,
         atr_pct=2.5, sma20=sma20, sma50=sma50, sma200=sma200,
         bollinger_upper=295.0, bollinger_lower=275.0, bollinger_position=0.65,
@@ -27,7 +27,7 @@ class TestQuantScorer:
     def test_neutral_signal_scores_medium(self):
         from app.analysis.scorer import compute_score
         from app.analysis.indicators import FeatureSet
-        features = FeatureSet(symbol="AAPL", timestamp=datetime.utcnow())
+        features = FeatureSet(symbol="AAPL", timestamp=datetime.now(timezone.utc))
         score = compute_score(features, "AAPL", [])
         assert 5 <= score.total <= 60
 
@@ -119,7 +119,7 @@ class TestDBAnalysisTables:
         from app.infrastructure.db.compat import insert_feature_snapshot, init_analysis_tables
         init_analysis_tables()
         fs_dict = {
-            "symbol": "AAPL", "timestamp": datetime.utcnow().isoformat(),
+            "symbol": "AAPL", "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "context": "on_demand", "rsi_14": 28.5, "macd_crossover": True,
             "volume_ratio_20d": 1.8,
         }
