@@ -12,7 +12,7 @@ from datetime import datetime
 import httpx
 
 from app.config.settings import MARKET_TZ
-from app.db.database import get_patterns_for_symbol, insert_decision
+from app.infrastructure.db.compat import get_patterns_for_symbol, insert_decision
 from app.db.models import Decision
 from app.scanner.news import get_news_summary
 
@@ -70,34 +70,6 @@ class LLMDecision:
     confidence: str       # HIGH | MEDIUM | LOW
 
 
-def _call_opencode(prompt: str) -> str:
-    """Llama a opencode run y extrae el texto de la respuesta."""
-    from app.config.settings import OPENCODE_CWD
-    try:
-        result = subprocess.run(
-            [OPENCODE_BIN, "run", "--model", OPENCODE_MODEL, "--format", "json", prompt],
-            capture_output=True, text=True, timeout=60,
-            cwd=OPENCODE_CWD,
-        )
-        text_parts = []
-        for line in result.stdout.strip().splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-                if event.get("type") == "text":
-                    text_parts.append(event["part"]["text"])
-            except json.JSONDecodeError:
-                continue
-        return "".join(text_parts).strip()
-    except subprocess.TimeoutExpired:
-        logger.error("opencode run timed out")
-        return ""
-    except Exception as e:
-        logger.error(f"opencode run failed: {e}")
-        return ""
-
-
 # --- Data Layer singleton ---
 
 _data_layer_instance = None
@@ -131,10 +103,13 @@ def analyze_signal(
     try:
         from app.analysis.pipeline import AnalysisPipeline, AnalysisContext
         from app.notifications.telegram import notify
+        from app.container import get_container
 
         data_layer = get_data_layer()
         context = AnalysisContext(mode="auto_signal")
-        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=notify)
+        _c = get_container()
+        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=notify,
+                                    broker=_c.broker, event_bus=_c.event_bus)
         result = pipeline.run()
 
         # Map AnalysisResult recommendation to LLMDecision for backwards compat
@@ -145,7 +120,7 @@ def analyze_signal(
 
         # Get SL/TP from symbol parameters or defaults
         try:
-            from app.db.database import get_or_create_symbol_parameters
+            from app.infrastructure.db.compat import get_or_create_symbol_parameters
             params = get_or_create_symbol_parameters(symbol)
             sl = params.stop_loss_pct if params else 0.025
             tp = params.take_profit_pct if params else 0.06

@@ -73,11 +73,15 @@ class AnalysisPipeline:
         data_layer,
         context: AnalysisContext,
         notify_fn: Optional[Callable] = None,
+        broker=None,     # IBrokerPort | None — injected for portfolio fetch
+        event_bus=None,  # EventBus | None — injected for SystemPaused subscription
     ):
         self.symbol = symbol.upper()
         self._data_layer = data_layer
         self._context = context
         self._notify_fn = notify_fn
+        self._broker = broker
+        self._event_bus = event_bus
         self.current_step = "init"
         self._result = AnalysisResult(symbol=self.symbol)
         self._start_time = 0.0
@@ -199,18 +203,16 @@ class AnalysisPipeline:
     def _score(self):
         self.current_step = "score"
         from app.analysis.scorer import compute_score
-        portfolio = []
-        try:
-            import httpx
-            from app.config.settings import API_BASE
-            r = httpx.get(f"{API_BASE}/portfolio", timeout=5)
-            portfolio = r.json() if r.status_code == 200 else []
-        except Exception:
-            pass
+        portfolio: list = []
+        if self._broker is not None:
+            try:
+                portfolio = self._broker.get_portfolio()
+            except Exception:
+                logger.warning("get_portfolio failed, scoring with empty portfolio", exc_info=True)
         self._result.score = compute_score(
             self._result.features, self.symbol, portfolio, self._news
         )
-        from app.db.database import get_approved_symbols
+        from app.infrastructure.db.compat import get_approved_symbols
         self._result.in_universe = self.symbol in set(get_approved_symbols())
 
     def _check_hard_rules(self):
@@ -231,7 +233,7 @@ class AnalysisPipeline:
         try:
             from app.config.settings import OPENCODE_BIN, OPENCODE_MODEL
             from app.llm.agent import get_symbol_category, get_strategy_context
-            from app.db.database import get_patterns_for_symbol
+            from app.infrastructure.db.compat import get_patterns_for_symbol
 
             category = get_symbol_category(self.symbol)
             strategy = get_strategy_context(category)
@@ -277,24 +279,8 @@ class AnalysisPipeline:
                 '"key_risks": ["risk1"], "recommendation": "BUY|SELL|IGNORE|WATCHLIST|PROPOSE"}}'
             )
 
-            import subprocess
-            from app.config.settings import OPENCODE_CWD
-            result = subprocess.run(
-                [OPENCODE_BIN, "run", "--model", OPENCODE_MODEL, "--format", "json", prompt],
-                capture_output=True, text=True, timeout=60,
-                cwd=OPENCODE_CWD,
-            )
-            text_parts = []
-            for line in result.stdout.strip().splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    event = json.loads(line)
-                    if event.get("type") == "text":
-                        text_parts.append(event["part"]["text"])
-                except json.JSONDecodeError:
-                    continue
-            response = "".join(text_parts).strip()
+            from app.infrastructure.llm.opencode_adapter import OpenCodeAdapter
+            response = OpenCodeAdapter().analyze_signal(self.symbol, prompt, timeout=60)
 
             if response:
                 try:
@@ -321,7 +307,7 @@ class AnalysisPipeline:
     def _persist(self):
         self.current_step = "persist"
         try:
-            from app.db.database import insert_feature_snapshot, insert_candidate_decision
+            from app.infrastructure.db.compat import insert_feature_snapshot, insert_candidate_decision
             if self._result.features:
                 fs_dict = self._result.features.to_dict()
                 fs_dict["context"] = self._context.mode

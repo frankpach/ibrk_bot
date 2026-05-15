@@ -34,32 +34,6 @@ def _api(method: str, path: str, **kwargs) -> dict:
         return {"error": str(e)}
 
 
-def _call_opencode(prompt: str) -> str:
-    """Llama a OpenCode y retorna la respuesta en texto."""
-    from app.config.settings import OPENCODE_CWD
-    try:
-        result = subprocess.run(
-            [OPENCODE_BIN, "run", "--model", OPENCODE_MODEL, "--format", "json", prompt],
-            capture_output=True, text=True, timeout=150,
-            cwd=OPENCODE_CWD,
-        )
-        text_parts = []
-        for line in result.stdout.strip().splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-                if event.get("type") == "text":
-                    text_parts.append(event["part"]["text"])
-            except json.JSONDecodeError:
-                continue
-        return "".join(text_parts).strip() or "Sin respuesta del LLM."
-    except subprocess.TimeoutExpired:
-        return "El LLM tardo demasiado. Intenta de nuevo."
-    except Exception as e:
-        return f"Error al llamar al LLM: {e}"
-
-
 def _only_owner(func):
     """Decorator: solo responde al chat_id configurado."""
     async def wrapper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -371,7 +345,7 @@ async def cmd_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if alert is None:
         await update.message.reply_text(f"Formato invalido. Usa: /alerta {symbol} 5%")
         return
-    from app.db.database import init_alerts_table, insert_alert
+    from app.infrastructure.db.compat import init_alerts_table, insert_alert
     init_alerts_table()
     alert_id = insert_alert(alert.symbol, alert.threshold_pct)
     await update.message.reply_text(
@@ -382,7 +356,7 @@ async def cmd_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_only_owner
 async def cmd_alertas(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    from app.db.database import get_active_alerts, init_alerts_table
+    from app.infrastructure.db.compat import get_active_alerts, init_alerts_table
     init_alerts_table()
     alerts = get_active_alerts()
     if not alerts:
@@ -399,7 +373,7 @@ async def cmd_eliminar_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     try:
         alert_id = int(ctx.args[0])
-        from app.db.database import delete_alert, init_alerts_table
+        from app.infrastructure.db.compat import delete_alert, init_alerts_table
         init_alerts_table()
         delete_alert(alert_id)
         await update.message.reply_text(f"Alerta {alert_id} eliminada.")
@@ -409,7 +383,7 @@ async def cmd_eliminar_alerta(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_only_owner
 async def cmd_diagnostico(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    from app.db.database import get_connection
+    from app.infrastructure.db.compat import get_connection
     from app.config.settings import CAPITAL_CAP
     from datetime import datetime, timezone
 
@@ -577,10 +551,13 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     def run_pipeline():
         from app.analysis.pipeline import AnalysisPipeline, AnalysisContext
         from app.llm.agent import get_data_layer
+        from app.container import get_container
 
         data_layer = get_data_layer()
         context = AnalysisContext(mode="on_demand")
-        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=None)  # use None to avoid duplicate notifications
+        _c = get_container()
+        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=None,  # use None to avoid duplicate notifications
+                                    broker=_c.broker, event_bus=_c.event_bus)
         return pipeline.run()
 
     result = await loop.run_in_executor(None, run_pipeline)
@@ -672,7 +649,10 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Si el usuario pide ejecutar una operacion, indicale que use comandos explicitos del bot."
     )
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, _call_opencode, prompt)
+    def _run_llm():
+        from app.infrastructure.llm.opencode_adapter import OpenCodeAdapter
+        return OpenCodeAdapter().call(prompt, timeout=150) or "Sin respuesta del LLM."
+    response = await loop.run_in_executor(None, _run_llm)
     await update.message.reply_text(response[:4000])
 
 

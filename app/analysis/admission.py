@@ -29,7 +29,7 @@ def run_daily_discovery(data_layer):
             logger.error(f"Scanner {scan_code} failed: {e}")
 
     # Filter: exclude already active symbols
-    from app.db.database import get_approved_symbols
+    from app.infrastructure.db.compat import get_approved_symbols
     active = set(get_approved_symbols())
     new_candidates = [s for s in candidates if s not in active][:20]
 
@@ -41,10 +41,13 @@ def run_daily_discovery(data_layer):
 
     # Evaluate each candidate
     context = AnalysisContext(mode="daily_discovery")
+    from app.container import get_container
+    _c = get_container()
     scored = []
     for symbol in new_candidates:
         try:
-            pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=None)
+            pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=None,
+                                        broker=_c.broker, event_bus=_c.event_bus)
             result = pipeline.run()
             if result.score:
                 scored.append((symbol, result.score.total))
@@ -59,7 +62,7 @@ def run_daily_discovery(data_layer):
 
 def _rotate_universe(scored_candidates: list):
     """Rotate universe if a candidate scores higher than the weakest current member."""
-    from app.db.database import get_approved_symbols, get_connection
+    from app.infrastructure.db.compat import get_approved_symbols, get_connection
 
     # Get current watchlist scores
     conn = get_connection()
@@ -91,8 +94,8 @@ def _rotate_universe(scored_candidates: list):
         logger.info(f"Universe rotation: {sym} IN, {weakest_sym} OUT")
 
         # Update DB
-        from app.db.database import approve_symbol
-        from app.db.database import get_connection as gc
+        from app.infrastructure.db.compat import approve_symbol
+        from app.infrastructure.db.compat import get_connection as gc
         conn = gc()
         conn.execute("UPDATE symbol_config SET approved=0 WHERE symbol=?", (weakest_sym,))
         conn.commit()
