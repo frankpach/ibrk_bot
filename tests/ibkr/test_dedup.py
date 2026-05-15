@@ -2,7 +2,7 @@
 import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
-from app.ibkr.dedup import OrderDeduplicator, PreflightChecker, get_deduplicator
+from app.ibkr.dedup import OrderDeduplicator, PreflightChecker
 
 
 def test_is_duplicate_within_window():
@@ -86,7 +86,10 @@ def test_preflight_weekend(mock_dt):
     assert "weekend" in r.reason
 
 
-def test_get_deduplicator_singleton():
-    d1 = get_deduplicator()
-    d2 = get_deduplicator()
-    assert d1 is d2
+def test_order_deduplicator_in_container():
+    """Container must expose a single OrderDeduplicator instance."""
+    from app.container import test_container
+    c = test_container()
+    assert isinstance(c.order_deduplicator, OrderDeduplicator)
+    # Same container always returns the same instance
+    assert c.order_deduplicator is c.order_deduplicator

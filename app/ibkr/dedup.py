@@ -89,7 +89,7 @@ class PreflightChecker:
 
     def _check_symbol_tradable(self, symbol, action, quantity, order_type, limit_price):
         # Basic check — symbol must be in allowed list
-        from app.db.database import get_approved_symbols
+        from app.infrastructure.db.compat import get_approved_symbols
         if symbol.upper() not in set(get_approved_symbols()):
             return PreflightResult(ok=False, reason=f"Symbol {symbol} not in allowed universe")
         return PreflightResult(ok=True, reason=None)
@@ -147,11 +147,7 @@ class PreflightChecker:
         return PreflightResult(ok=True, reason=None)
 
 
-# Singletons
-_dedup_instance = None
-
 def get_deduplicator() -> OrderDeduplicator:
-    global _dedup_instance
-    if _dedup_instance is None:
-        _dedup_instance = OrderDeduplicator()
-    return _dedup_instance
+    """Return the Container-managed OrderDeduplicator instance."""
+    from app.container import get_container
+    return get_container().order_deduplicator

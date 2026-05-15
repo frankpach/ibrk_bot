@@ -241,9 +241,8 @@ class LLMSignalProcessor:
 def process_pending_signals() -> None:
     """APScheduler entry point. Delegates to Container-wired processor."""
     from app.container import get_container
-    from app.ibkr.dedup import get_deduplicator
     c = get_container()
-    dedup = getattr(c, 'order_deduplicator', None) or get_deduplicator()
+    dedup = c.order_deduplicator
     LLMSignalProcessor(
         broker=c.broker,
         notifier=c.notifier,

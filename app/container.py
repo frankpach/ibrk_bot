@@ -40,6 +40,8 @@ class Container:
         self.position_service = PositionService()
         from app.alerts.manager import AlertManager
         self.alert_manager = AlertManager(broker=self.broker)
+        from app.ibkr.dedup import OrderDeduplicator
+        self.order_deduplicator = OrderDeduplicator()
         self.secret_manager = self._init_secret_manager()
         self.engine = engine or get_engine()
         self.place_order_use_case = PlaceOrderUseCase(
