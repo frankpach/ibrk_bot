@@ -65,6 +65,63 @@ jobs:
           name: coverage-xml
           path: coverage.xml
 
+  live:
+    name: Live tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-3.13-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.13-
+            pip-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations (PostgreSQL)
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+        run: alembic upgrade head
+
+      - name: Run live tests against PostgreSQL
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+          TEST_PG_URL: postgresql://ci:ci@localhost:5432/ci_test
+          CONTROL_KEY: ci-test-key
+          ADMIN_KEY: ci-test-admin-key
+        run: |
+          pytest tests/ \
+            --tb=short \
+            -q \
+            --timeout=60
+
   deploy:
     name: Deploy to aiutox-pi
     runs-on: ubuntu-latest
