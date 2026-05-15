@@ -128,10 +128,18 @@ jobs:
     name: Deploy to aiutox-pi
     runs-on: ubuntu-latest
     needs: test
+    environment: AIUTOX_PI_HOST
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Connect Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
 
       - name: Configure SSH
         run: |
@@ -144,8 +152,9 @@ jobs:
         run: |
           cat >> ~/.ssh/config <<EOF
           Host aiutox-pi
-            HostName ${{ secrets.AIUTOX_PI_HOST }}
+            HostName aiutox-pi
             User frankpach
+            Port 2222
             IdentityFile ~/.ssh/id_ed25519
             StrictHostKeyChecking yes
           EOF

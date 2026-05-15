@@ -41,19 +41,28 @@ from app.infrastructure.db.compat import init_db, get_connection
 
 
 @pytest.fixture(autouse=True)
-def _init_test_db(tmp_path):
+def _init_test_db(tmp_path, monkeypatch):
     """
-    Every test gets a fresh in-memory SQLite DB with all tables.
-    We temporarily override DB_PATH so the real file is never touched.
+    Every test gets a fresh isolated SQLite DB.
+    DATABASE_URL is overridden via monkeypatch so get_database_url() and
+    get_connection() both see the per-test path, even under pytest-xdist.
+    The engine singleton is reset before and after so workers don't share it.
     """
     import app.infrastructure.db.compat as db_mod
+    import app.infrastructure.db.engine as engine_mod
     import app.config.settings as settings_mod
 
-    old_db_path = getattr(db_mod, "DB_PATH", None)
     test_db = str(tmp_path / "test.db")
+    test_url = f"sqlite:///{test_db}"
 
-    db_mod.DB_PATH = test_db
-    settings_mod.DB_PATH = test_db
+    # Override every path the code uses to resolve the DB
+    monkeypatch.setenv("DATABASE_URL", test_url)
+    monkeypatch.setattr(db_mod, "DB_PATH", test_db, raising=False)
+    monkeypatch.setattr(settings_mod, "DB_PATH", test_db, raising=False)
+    monkeypatch.setattr(engine_mod, "DB_PATH", test_db, raising=False)
+
+    # Reset the cached engine so this worker gets a fresh one for this test
+    engine_mod.reset_engine()
 
     init_db()
 
@@ -69,7 +78,4 @@ def _init_test_db(tmp_path):
 
     yield
 
-    # teardown: restore original path
-    if old_db_path is not None:
-        db_mod.DB_PATH = old_db_path
-        settings_mod.DB_PATH = old_db_path
+    engine_mod.reset_engine()
