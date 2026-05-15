@@ -397,7 +397,7 @@ def orders_place(req: OrderPreviewRequest):
 
     from app.infrastructure.db.compat import insert_trade
     from app.db.models import Trade
-    from datetime import datetime as dt
+    from datetime import datetime as dt, timezone as _tz
     price_for_sl = fill_price or current_price
     if req.action == "BUY":
         stop_loss_price = round(price_for_sl * (1 - req.stop_loss_pct), 2)
@@ -412,7 +412,7 @@ def orders_place(req: OrderPreviewRequest):
         take_profit_pct=req.take_profit_pct, signal_strength="MANUAL",
         llm_justification="Placed via MCP", status="OPEN",
         exit_price=None, exit_reason=None, pnl_usd=None, pnl_pct=None,
-        opened_at=dt.utcnow(), closed_at=None,
+        opened_at=dt.now(_tz.utc).replace(tzinfo=None), closed_at=None,
         order_id=order_result.order_id,
         trade_status="FILLED",
         entry_fill_price=fill_price,

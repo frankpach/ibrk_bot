@@ -196,13 +196,13 @@ class TestBackgroundJobRunner:
 
     def test_list_jobs_filters(self):
         runner = BackgroundJobRunner(max_workers=2)
-        jid1 = runner.submit("llm-analysis", lambda: {"ok": True})
-        jid2 = runner.submit("backtest", lambda: {"ok": True})
-        time.sleep(0.1)
+        jid1 = runner.submit("llm-analysis", lambda: {"ok": True}, timeout_seconds=5)
+        jid2 = runner.submit("backtest", lambda: {"ok": True}, timeout_seconds=5)
+        time.sleep(0.2)
         jobs = runner.list_jobs(job_type="llm-analysis")
         assert len(jobs) >= 1
         assert all(j["job_type"] == "llm-analysis" for j in jobs)
-        runner.shutdown(wait=True)
+        runner.shutdown(wait=False)
 
 
 # ---------------------------------------------------------------------------
