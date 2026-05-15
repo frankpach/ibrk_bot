@@ -108,6 +108,41 @@ def dashboard_data():
 
 ---
 
+## Anti-Pattern: Patching internals in tests (avoid)
+
+Tests that patch module-level globals or private methods are brittle — they break silently when the implementation is refactored. Prefer patching at the port/adapter boundary.
+
+```python
+# AVOID — patches internal implementation, breaks on refactor
+with patch("app.llm.loop._get_broker") as mock:
+    process_pending_signals()
+
+# PREFER — construct the class directly with a mock port
+processor = LLMSignalProcessor(broker=MockBrokerAdapter(), notifier=MockNotificationAdapter(), dedup=OrderDeduplicator())
+processor.process_pending_signals()
+```
+
+## Anti-Pattern: Subscribing event handlers inside a per-call scope (avoid)
+
+Subscribing inside `run()`, `execute()`, or any per-request scope creates a permanent handler that is never cleaned up. EventBus has no `unsubscribe()`.
+
+```python
+# AVOID — leaks one handler per pipeline run
+def run(self) -> AnalysisResult:
+    self._event_bus.subscribe(SystemPaused, lambda e: self._aborted.set())  # NEVER UNSUBSCRIBED
+
+# CORRECT — register once in Container._register_event_handlers()
+self.event_bus.subscribe(SystemPaused, self._on_system_paused)
+```
+
+## Anti-Pattern: Local import in Container to "avoid circular import"
+
+Before adding a local import inside `Container.__init__`, verify the circular import actually exists:
+```bash
+python -c "from app.alerts.manager import AlertManager"  # if this works, no circular
+```
+Only use local imports inside module-level shim functions (where `container.py` would be imported at module load time by the shim's own module).
+
 ## Pattern: Optional ib_client injection (learning cycle)
 
 Pass `ib_client=None` to modules that optionally need the IB connection, rather than importing the global singleton.

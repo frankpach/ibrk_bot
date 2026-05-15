@@ -27,6 +27,15 @@ If a handler is registered inside a per-request or per-pipeline scope (e.g., ins
 `app/ibkr/dedup.py:get_deduplicator()` calls `get_container()`. If called before container initializes (import-time side effect), it bootstraps a production container unexpectedly.
 **Mitigation**: Only called from `LLMSignalProcessor._execute_order()` at runtime — safe today. Migrate remaining call sites to `container.order_deduplicator` directly.
 
+## Test patch targets coupled to implementation (process risk)
+Tests that patch internal symbols (`app.llm.loop._get_broker`, `app.llm.loop._execute_order`) couple tests to implementation details. When the implementation is refactored, these tests silently stop covering the real code path. **In arch-refactor Sprint 1, 5 tests needed manual migration because they patched removed module globals.**
+**Rule**: When deleting or renaming a module-level symbol, update all tests that patch it in the same commit. Never defer.
+**Detection**: `grep -rn "patch.*app\.llm\.loop\._\|patch.*app\.alerts\.manager\._" tests/`
+
+## Rewriting data-fetch methods without tracing the old source (process risk)
+When rewriting a method that fetches data (e.g., `get_price_and_prev_close`), the new implementation may silently return wrong values if the old data source is not traced first. **In Sprint 1, `prev_close` was changed from a real IBKR field to `(price, price)` — alerts never fired in production for the entire sprint until caught by code review.**
+**Rule**: Before rewriting a data-fetch method, document "Old source: X, New source: Y, are these equivalent?" in the plan.
+
 ## SQLite Write Locks Under Concurrency
 APScheduler runs 15+ concurrent jobs. Multiple writers to SQLite can cause "database is locked" errors.
 **Mitigation**: WAL mode (`PRAGMA journal_mode=WAL`) and `PRAGMA busy_timeout=5000`. Planned for arch-refactor Fase 0.

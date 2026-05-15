@@ -63,6 +63,18 @@ Semi-autonomous IBKR trading bot running on Raspberry Pi (aiutox-pi). Single-use
 4. **Always** use `test_container()` in tests, not `get_container()`
 5. **Always** run `alembic upgrade head` after schema changes
 
+## Process Lessons (from arch-refactor retro)
+
+1. **Delete stale tests at the same commit as the deleted module.** Do not defer. Stale tests that patch removed symbols cost 3× more to fix later than if fixed immediately.
+
+2. **Trace old data sources before rewriting fetch methods.** Document "old source → new source, equivalent?" in the plan. The `prev_close` regression (alerts silently broken) was caused by this omission.
+
+3. **Architecture review phase (`/230`) is not optional polish.** It caught 4 production correctness bugs that tests missed (mock-patching hid them).
+
+4. **EventBus subscriptions have no cleanup.** Register ALL handlers in `Container._register_event_handlers()`. Never subscribe inside a per-call scope (per-request, per-pipeline).
+
+5. **Two-stage subagent review (spec then quality) catches different things.** Spec reviewer catches missing/extra scope. Quality reviewer catches logic bugs that tests don't cover. Both are needed.
+
 ## Cross-References
 
 - Architecture details: `docs/04-modules/refactor/ARCHITECTURE.md`
