@@ -747,10 +747,19 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
         data_layer = get_data_layer()
         result: dict = {"symbol": symbol.upper(), "period": period, "bars": []}
         df = None
-        if period == "intraday":
-            df = data_layer.get_ohlcv(symbol, "1 D", "5 mins", "dashboard_chart")
-        else:
-            df = data_layer.get_ohlcv(symbol, "30 D", "1 day", "dashboard_chart")
+        PERIOD_CONFIG = {
+            "intraday": ("1 D",   "5 mins"),
+            "1h":       ("5 D",   "1 hour"),
+            "4h":       ("20 D",  "4 hours"),
+            "daily":    ("30 D",  "1 day"),
+            "weekly":   ("180 D", "1 week"),
+            "monthly":  ("730 D", "1 month"),
+        }
+        try:
+            duration, bar_size = PERIOD_CONFIG.get(period, PERIOD_CONFIG["daily"])
+            df = data_layer.get_ohlcv(symbol, duration, bar_size, "dashboard_chart")
+        except Exception:
+            df = None
         if df is not None and len(df) > 0:
             result["bars"] = [
                 {
