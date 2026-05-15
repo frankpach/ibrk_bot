@@ -37,7 +37,20 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 import pytest
+from unittest.mock import patch
 from app.infrastructure.db.compat import init_db, get_connection
+
+
+@pytest.fixture(autouse=True)
+def _mock_notifications():
+    """Prevent any test from hitting Telegram or starting the notification thread."""
+    import app.notifications.queue as nq_mod
+    with patch("app.notifications.queue.enqueue_notification"), \
+         patch("app.notifications.queue.get_notification_queue"):
+        old_instance = nq_mod._queue_instance
+        nq_mod._queue_instance = None
+        yield
+        nq_mod._queue_instance = old_instance
 
 
 @pytest.fixture(autouse=True)
