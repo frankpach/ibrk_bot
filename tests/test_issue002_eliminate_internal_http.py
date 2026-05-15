@@ -91,26 +91,28 @@ def test_execute_order_with_mock_broker():
     from tests.mocks.mock_broker import MockBrokerAdapter
     from tests.mocks.mock_notifications import MockNotificationAdapter
     from app.llm.agent import LLMDecision
-    from app.llm.loop import _execute_order, set_broker, set_notifier
+    from app.llm.loop import LLMSignalProcessor
 
     broker = MockBrokerAdapter(prices={"AAPL": Decimal("150.0")})
     notifier = MockNotificationAdapter()
-    set_broker(broker)
-    set_notifier(notifier)
+    mock_dedup = MagicMock()
+    mock_dedup.is_duplicate.return_value = False
+    processor = LLMSignalProcessor(broker=broker, notifier=notifier, dedup=mock_dedup)
 
     # Patch market-hours validation so test passes regardless of local time
     with patch("app.risk.validator.validate_order", return_value=MagicMock(approved=True, reasons=[])), \
          patch("app.ibkr.dedup.PreflightChecker") as mock_preflight, \
-         patch("app.ibkr.dedup.get_deduplicator") as mock_dedup, \
-         patch("app.notifications.order_monitor.OrderExecutionMonitor") as mock_monitor:
+         patch("app.ibkr.dedup.get_deduplicator") as mock_dedup_patch, \
+         patch("app.notifications.order_monitor.OrderExecutionMonitor") as mock_monitor, \
+         patch("app.ibkr.client.get_client"):
         mock_preflight.return_value.check.return_value = MagicMock(ok=True)
-        mock_dedup.return_value.is_duplicate.return_value = False
+        mock_dedup_patch.return_value.is_duplicate.return_value = False
         mock_monitor.return_value.place_and_monitor.return_value = MagicMock(
             success=True, order_id="mock-123", fill_price=150.0, reason=None
         )
         decision = LLMDecision(action="BUY", stop_loss_pct=0.025, take_profit_pct=0.06,
                                justification="test", confidence="HIGH")
-        result = _execute_order("AAPL", decision)
+        result = processor._execute_order("AAPL", decision)
         assert result is True
         mock_monitor.return_value.place_and_monitor.assert_called_once()
 

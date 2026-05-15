@@ -53,31 +53,29 @@ def test_get_data_layer_returns_ibdatalayer():
 
 def test_loop_still_works():
     from app.llm.agent import LLMDecision
-    with patch("app.llm.loop.get_pending_signals") as mock_sig, \
-         patch("app.llm.loop.analyze_signal") as mock_analyze, \
-         patch("app.llm.loop.mark_signal_processed") as mock_mark, \
-         patch("app.llm.loop.httpx") as mock_http, \
-         patch("app.llm.loop.notify"):
-        from app.db.models import Signal
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        sig = Signal(
-            id=1, symbol="AAPL", strength="STRONG", rsi=28.5, macd=-0.12,
-            volume_ratio=1.8, extra_indicators="{}",
-            created_at=datetime.now(ZoneInfo("America/New_York")),
-        )
-        mock_sig.return_value = [sig]
-        mock_analyze.return_value = LLMDecision("BUY", 0.025, 0.06, "test", "HIGH")
-        preview_resp = MagicMock()
-        preview_resp.status_code = 200
-        preview_resp.json.return_value = {"recommended_units": 10}
-        place_resp = MagicMock()
-        place_resp.status_code = 200
-        place_resp.json.return_value = {"status": "placed"}
-        mock_http.post.side_effect = [preview_resp, place_resp]
+    from app.llm.loop import LLMSignalProcessor
+    from unittest.mock import MagicMock
+    from app.db.models import Signal
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-        from app.llm.loop import process_pending_signals
-        process_pending_signals()
+    sig = Signal(
+        id=1, symbol="AAPL", strength="STRONG", rsi=28.5, macd=-0.12,
+        volume_ratio=1.8, extra_indicators="{}",
+        created_at=datetime.now(ZoneInfo("America/New_York")),
+    )
+
+    mock_broker = MagicMock()
+    mock_notifier = MagicMock()
+    mock_dedup = MagicMock()
+    processor = LLMSignalProcessor(broker=mock_broker, notifier=mock_notifier, dedup=mock_dedup)
+
+    with patch("app.llm.loop.get_pending_signals", return_value=[sig]) as mock_sig, \
+         patch("app.llm.loop.analyze_signal", return_value=LLMDecision("BUY", 0.025, 0.06, "test", "HIGH")), \
+         patch("app.llm.loop.mark_signal_processed") as mock_mark, \
+         patch.object(processor, "_execute_order", return_value=True) as mock_exec:
+        processor.process_pending_signals()
+        mock_exec.assert_called_once()
         mock_mark.assert_called_once_with(1)
 
 
