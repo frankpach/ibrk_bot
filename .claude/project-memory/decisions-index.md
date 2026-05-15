@@ -1,17 +1,25 @@
 # Decisions Index
 
-## arch-refactor (2026-05-14)
+## refactor / hexagonal-arch (2026-05-15)
 
-Full decisions: `docs/04-modules/arch-refactor/DECISIONS.md`
+Full decisions: `docs/04-modules/refactor/DECISIONS.md`
 
 | ID | Decision | Why |
 |----|----------|-----|
-| D-01 | SQL plano + repositorios (no ORM) | Legible, debuggeable para trading; repositorios dan indirección suficiente sin ORM overhead |
-| D-02 | InProcessJobRunner con asyncio (no Celery/ARQ) | Proceso único hoy; interfaz swappable para workers futuros |
-| D-03 | X-Control-Key auth (no JWT/OAuth) para control plane | Tailscale reduce exposición; JWT es complejidad sin ganancia para 1 usuario |
-| D-04 | No DDD puro — use cases + ports + adapters | Dominio de trading sin Aggregates complejos; separación suficiente para testabilidad |
-| D-05 | No CQRS full — read models separados para dashboard | Dashboard agrega 15+ fuentes; DashboardQueryService desacopla presentación sin event sourcing |
-| D-06 | Feature flags temporales USE_DIRECT_CALLS para Fases 1–2 | Ruta crítica de trading; flag permite rollback sin revert de código |
+| DEC-001 | SQLAlchemy ORM (not raw SQL) | Portable SQLite→PostgreSQL; 1277-line monolith eliminated |
+| DEC-002 | Alembic migrations | Versioned, reversible; `alembic upgrade head` at startup |
+| DEC-003 | Ports & Adapters (Hexagonal) | Use cases testable without IB Gateway or Telegram |
+| DEC-004 | Eliminate internal HTTP (httpx self-calls) | Circular dependency; coupled to FastAPI server being up |
+| DEC-005 | EventBus in-process synchronous | No Redis; predictable order; no `unsubscribe()` — register handlers once at container init ONLY |
+| DEC-006 | Persist state in `control_settings` DB | Restart preserves mode/pause |
+| DEC-007 | Control plane at `/control` (React SPA) | Browser config without SSH |
+| DEC-008 | Two-tier auth: Control-Key + Admin-Key | Prevent accidental live mode activation |
+| DEC-009 | ThreadPoolExecutor max_workers=3 for slow jobs | LLM analysis (150s+) must not block HTTP |
+| DEC-010 | Fernet encryption for secrets | API keys never in plain text |
+| DEC-011 | Dual-backend SQLite/PostgreSQL | Future migration path without code changes |
+| DEC-012 | Container as single wiring point | `get_container()` (singleton) + `test_container()` (fresh, mocked) |
+| DEC-013 | `compat.py` as migration bridge | 75 legacy functions — not to be extended; being replaced by Repositories |
+| DEC-014 | `get_deduplicator()` as thin Container delegate | Backward compat while call sites migrate to `container.order_deduplicator` |
 
 ## live-dashboard (2026-05-13)
 

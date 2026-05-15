@@ -22,9 +22,10 @@
 - **Artifacts**: `docs/dev/artifacts/risk-engine-v2/`
 - **Issues**: RE-001 through RE-011 — all complete
 
-## In Progress
-
-### arch-refactor — 🔄 Starting (2026-05-14)
-- **Plan**: `C:\Users\be47\.claude\plans\para-el-promp-glowing-quasar.md`
-- **Phases**: 0–9 (Fases 0–8 core, Fase 9 opcional)
-- **Key goal**: Desacoplar HTTP interno, extraer ports/adapters, persistir system state, control plane /control, SQLite→PostgreSQL path
+### arch-refactor — ✓ Complete (2026-05-15)
+- **Artifacts**: `docs/dev/artifacts/refactor/`, `docs/04-modules/refactor/`
+- **Issues**: 001–010 all complete + Sprint 1 DI fixes
+- **Key outcome**: Full Hexagonal Architecture — DI Container, EventBus, SQLAlchemy ORM (23 models), Alembic migrations, Ports/Adapters (IBrokerPort, INotificationPort, ILLMPort), use cases (PlaceOrder, ClosePosition, ChangeMode, PauseSystem, UpdateControlSetting), control plane `/control`, background job runner, two-tier auth, Fernet secrets, systemd hardening
+- **Sprint 1 extras**: `AlertManager` class-based DI; `LLMSignalProcessor` class-based DI; `OrderDeduplicator` into Container; `IBrokerPort.get_prev_close()`; `pipeline._score()` uses broker port (no httpx)
+- **CI/CD**: `.github/workflows/ci.yml` — pytest + alembic migrations on every push; deploy to aiutox-pi via `scripts/deploy.sh`
+- **Backlog**: `docs/04-modules/refactor/BACKLOG.md` — Sprint 2 (wire ILLMPort, replace notify() imports, analysis events, EventBus.unsubscribe)
