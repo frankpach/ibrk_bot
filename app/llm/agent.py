@@ -20,7 +20,23 @@ logger = logging.getLogger(__name__)
 
 from app.config.settings import API_BASE  # noqa: F401
 from app.config.settings import OPENCODE_BIN  # noqa: F401
-OPENCODE_MODEL = "opencode-go/qwen3.5-plus"
+from app.config.settings import OPENCODE_MODEL as _DEFAULT_OPENCODE_MODEL
+
+
+def get_llm_model_for_task(task: str = "analysis") -> str:
+    """Read per-task LLM model from control_settings DB, fallback to env/config default."""
+    key_map = {
+        "analysis":   "llm_model_analysis",
+        "signal":     "llm_model_signal",
+        "postmortem": "llm_model_postmortem",
+    }
+    key = key_map.get(task, "opencode_model")
+    try:
+        from app.infrastructure.db.compat import get_control_setting_value
+        val = get_control_setting_value(key, _DEFAULT_OPENCODE_MODEL)
+        return val if val else _DEFAULT_OPENCODE_MODEL
+    except Exception:
+        return _DEFAULT_OPENCODE_MODEL
 
 # Categorias de simbolos y sus estrategias
 SYMBOL_CATEGORIES = {
@@ -150,7 +166,7 @@ def analyze_signal(
         # Log to decisions table for backwards compat
         insert_decision(Decision(
             id=None, signal_id=signal_id, symbol=symbol,
-            llm_model=OPENCODE_MODEL,
+            llm_model=get_llm_model_for_task("analysis"),
             prompt_summary=f"Pipeline mode=auto_signal score={result.score.total if result.score else 0:.0f}",
             response=str(result.to_dict())[:500],
             action=decision.action,

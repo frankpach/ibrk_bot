@@ -37,12 +37,14 @@ class OpenCodeAdapter:
                 f"must match {self.SAFE_SYMBOL_RE.pattern}"
             )
 
-    def call(self, prompt: str, timeout: int = 60) -> str:
-        from app.config.settings import OPENCODE_BIN, OPENCODE_MODEL, OPENCODE_CWD
+    def call(self, prompt: str, timeout: int = 60, task: str = "analysis") -> str:
+        from app.config.settings import OPENCODE_BIN, OPENCODE_CWD
+        from app.llm.agent import get_llm_model_for_task
+        model = get_llm_model_for_task(task)
         try:
             result = subprocess.run(
                 [
-                    OPENCODE_BIN, "run", "--model", OPENCODE_MODEL,
+                    OPENCODE_BIN, "run", "--model", model,
                     "--format", "json", prompt,
                 ],
                 capture_output=True,
