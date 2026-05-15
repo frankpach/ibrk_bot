@@ -1318,10 +1318,29 @@ def render_dashboard_html() -> str:
       );
     }
 
-    /* Mi Universo table */
+    /* Mi Universo table — paginada, con filtros */
     function UniversoTable({ data }) {
-      const syms = data?.symbols_universe || [];
-      if (!syms.length) return null;
+      const PAGE_SIZE = 20;
+      const allSyms = data?.symbols_universe || [];
+      const [search, setSearch] = React.useState('');
+      const [filterCal, setFilterCal] = React.useState('all'); // 'all' | 'calibrated' | 'defaults'
+      const [page, setPage] = React.useState(0);
+
+      // Reset page when filters change
+      React.useEffect(() => { setPage(0); }, [search, filterCal]);
+
+      const filtered = allSyms.filter(s => {
+        const matchSearch = !search || s.symbol.toUpperCase().includes(search.toUpperCase());
+        const matchCal = filterCal === 'all' ||
+          (filterCal === 'calibrated' && s.backtest_calibrated) ||
+          (filterCal === 'defaults' && !s.backtest_calibrated);
+        return matchSearch && matchCal;
+      });
+
+      const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+      const pageSyms = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+      if (!allSyms.length) return null;
 
       async function recalibrate(symbol) {
         try {
@@ -1330,9 +1349,37 @@ def render_dashboard_html() -> str:
         } catch(e) {}
       }
 
+      const btnStyle = (active) => ({
+        background: active ? 'var(--blue-bg)' : 'transparent',
+        color: active ? 'var(--blue)' : 'var(--dim)',
+        border: `1px solid ${active ? 'rgba(56,189,248,.3)' : 'var(--border)'}`,
+        padding:'2px 10px', borderRadius:3, fontSize:'.67rem',
+        cursor:'pointer', fontFamily:'"Fira Code",monospace',
+      });
+
       return (
         <div className="card fade-up">
-          <div className="ch"><span className="ct">Mi Universo — Entrenamiento y Backtesting</span></div>
+          <div className="ch" style={{gap:8,flexWrap:'wrap'}}>
+            <span className="ct">Mi Universo — Entrenamiento y Backtesting</span>
+            <span style={{fontSize:'.68rem',color:'var(--dim)',marginLeft:'auto'}}>
+              {filtered.length} de {allSyms.length} símbolo{allSyms.length!==1?'s':''}
+            </span>
+          </div>
+
+          {/* Filters row */}
+          <div style={{display:'flex',gap:8,padding:'6px 12px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center'}}>
+            <input
+              value={search}
+              onChange={e=>setSearch(e.target.value)}
+              placeholder="Buscar símbolo…"
+              style={{background:'var(--surface)',color:'var(--text)',border:'1px solid var(--border)',
+                borderRadius:4,padding:'3px 8px',fontSize:'.72rem',fontFamily:'"Fira Code",monospace',width:140}}
+            />
+            <button style={btnStyle(filterCal==='all')} onClick={()=>setFilterCal('all')}>Todos</button>
+            <button style={btnStyle(filterCal==='calibrated')} onClick={()=>setFilterCal('calibrated')}>✓ Calibrados</button>
+            <button style={btnStyle(filterCal==='defaults')} onClick={()=>setFilterCal('defaults')}>Defaults</button>
+          </div>
+
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'"Fira Code",monospace',fontSize:'.72rem'}}>
               <thead>
@@ -1343,20 +1390,15 @@ def render_dashboard_html() -> str:
                 </tr>
               </thead>
               <tbody>
-                {syms.map(s=>(
+                {pageSyms.length === 0
+                  ? <tr><td colSpan={10} style={{padding:'16px 8px',color:'var(--dim)',textAlign:'center'}}>Sin resultados</td></tr>
+                  : pageSyms.map(s=>(
                   <tr key={s.symbol} style={{borderBottom:'1px solid var(--border)'}}>
                     <td style={{padding:'5px 8px',color:'var(--text)',fontWeight:500}}>
                       {s.symbol}
                       {s.is_open && (
-                        <span style={{
-                          marginLeft: 6,
-                          background:'var(--green-bg)',
-                          color:'var(--green)',
-                          border:'1px solid rgba(16,185,129,.3)',
-                          padding:'1px 6px',
-                          borderRadius:3,
-                          fontSize:'.63rem'
-                        }}>OPEN</span>
+                        <span style={{marginLeft:6,background:'var(--green-bg)',color:'var(--green)',
+                          border:'1px solid rgba(16,185,129,.3)',padding:'1px 6px',borderRadius:3,fontSize:'.63rem'}}>OPEN</span>
                       )}
                     </td>
                     <td style={{padding:'5px 8px'}}>
@@ -1391,6 +1433,23 @@ def render_dashboard_html() -> str:
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{display:'flex',gap:6,padding:'8px 12px',borderTop:'1px solid var(--border)',alignItems:'center',justifyContent:'flex-end'}}>
+              <span style={{fontSize:'.68rem',color:'var(--dim)',marginRight:'auto'}}>
+                Página {page+1} de {totalPages}
+              </span>
+              <button onClick={()=>setPage(0)} disabled={page===0}
+                style={{...btnStyle(false),opacity:page===0?.4:1}}>«</button>
+              <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+                style={{...btnStyle(false),opacity:page===0?.4:1}}>‹</button>
+              <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page===totalPages-1}
+                style={{...btnStyle(false),opacity:page===totalPages-1?.4:1}}>›</button>
+              <button onClick={()=>setPage(totalPages-1)} disabled={page===totalPages-1}
+                style={{...btnStyle(false),opacity:page===totalPages-1?.4:1}}>»</button>
+            </div>
+          )}
         </div>
       );
     }
@@ -1557,13 +1616,31 @@ def render_dashboard_html() -> str:
 
           </div>
 
-          <div className="footer">
-            {data
-              ? (data.open_trades?.length||0) + ' posiciones · ' +
-                (data.closed_trades?.length||0) + ' trades cerrados · ' +
-                (data.patterns?.length||0) + ' patrones'
-              : 'cargando...'}
-            &nbsp;·&nbsp;:8088/dashboard
+          <div className="footer" style={{display:'flex',flexWrap:'wrap',gap:'6px 16px',alignItems:'center',justifyContent:'space-between'}}>
+            <span>
+              {data
+                ? (data.open_trades?.length||0) + ' posiciones · ' +
+                  (data.closed_trades?.length||0) + ' trades cerrados · ' +
+                  (data.patterns?.length||0) + ' patrones'
+                : 'cargando...'}
+            </span>
+            <span style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+              {[
+                ['/dashboard','Dashboard'],
+                ['/control','Control'],
+                ['/reports','Reportes'],
+                ['/reports/list','Lista Reportes'],
+                ['/logs','Logs'],
+                ['/docs','API Docs'],
+              ].map(([href,label])=>(
+                <a key={href} href={href}
+                  style={{color:'var(--blue)',textDecoration:'none',fontSize:'.68rem',opacity:window.location.pathname===href?1:.6}}
+                  onMouseOver={e=>e.target.style.opacity=1}
+                  onMouseOut={e=>e.target.style.opacity=window.location.pathname===href?1:.6}>
+                  {label}
+                </a>
+              ))}
+            </span>
           </div>
 
         </div>

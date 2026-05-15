@@ -24,22 +24,5 @@ def reports_list():
     return get_reports(limit=20)
 
 
-@router.get("/reports", response_class=HTMLResponse)
-def reports_html():
-    return "<html><body>Reports placeholder</body></html>"
-
-
-@router.get("/reports/{report_id}", response_class=HTMLResponse)
-def report_by_id(report_id: int):
-    from app.infrastructure.db.compat import get_report_by_id
-    report = get_report_by_id(report_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    return f"<html><body><h1>{report['title']}</h1><pre>{report['content_md']}</pre></body></html>"
-
-
-@router.delete("/reports/{report_id}")
-def delete_report(report_id: int):
-    from app.infrastructure.db.compat import delete_report
-    ok = delete_report(report_id)
-    return {"deleted": ok}
+# /reports, /reports/{id}, DELETE /reports/{id} are handled by app/api/main.py
+# to avoid duplicate route conflicts — do not add them here.
