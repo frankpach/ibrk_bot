@@ -133,8 +133,8 @@ def test_get_current_price_with_mock_broker():
 def test_get_price_and_prev_close_with_mock_broker():
     from tests.mocks.mock_broker import MockBrokerAdapter
     from app.alerts.manager import AlertManager
-    broker = MockBrokerAdapter(prices={"AAPL": Decimal("160.00")})
+    broker = MockBrokerAdapter(prices={"AAPL": Decimal("160.00")}, prev_closes={"AAPL": Decimal("160.00")})
     manager = AlertManager(broker=broker)
     current, prev = manager.get_price_and_prev_close("AAPL")
     assert current == 160.00
-    assert prev == 160.00  # mock returns same for prev_close
+    assert prev == 160.00
