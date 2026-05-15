@@ -1,18 +1,205 @@
 # app/infrastructure/db/compat.py
 """Compatibility layer — re-exports all legacy database functions using SQLAlchemy."""
+import re
 import sqlite3
 import json
 import logging
 from datetime import datetime
+
 from app.db.models import Signal, Trade, Pattern, Decision
+from app.infrastructure.db.base import Base
+from app.infrastructure.db.engine import get_database_url, get_engine, _is_postgres
+import app.infrastructure.db.models  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
+_REPLACE_CONFLICT_COLUMNS = {
+    "account_snapshots": ["date"],
+}
+
+
+class _CompatRow(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+class _EmptyCursor:
+    description = None
+    lastrowid = None
+
+    def fetchall(self):
+        return []
+
+    def fetchone(self):
+        return None
+
+
+class _CompatCursor:
+    def __init__(self, cursor, lastrowid=None):
+        self._cursor = cursor
+        self.description = cursor.description
+        self.lastrowid = lastrowid
+
+    def fetchall(self):
+        if not self._cursor.description:
+            return []
+        rows = self._cursor.fetchall()
+        columns = [col[0] for col in self._cursor.description]
+        return [_CompatRow(zip(columns, row)) for row in rows]
+
+    def fetchone(self):
+        if not self._cursor.description:
+            return None
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        columns = [col[0] for col in self._cursor.description]
+        return _CompatRow(zip(columns, row))
+
+
+class _PostgresCompatConnection:
+    def __init__(self, raw_conn):
+        self._raw_conn = raw_conn
+        self.row_factory = None
+
+    def execute(self, sql, params=None):
+        sql, params = _rewrite_sql_for_postgres(sql, params)
+        if not sql:
+            return _EmptyCursor()
+        cursor = self._raw_conn.cursor()
+        cursor.execute(sql, params or ())
+        lastrowid = None
+        if cursor.description and _sql_returns_inserted_id(sql):
+            row = cursor.fetchone()
+            lastrowid = row[0] if row else None
+        return _CompatCursor(cursor, lastrowid=lastrowid)
+
+    def executemany(self, sql, seq_of_params):
+        sql, _ = _rewrite_sql_for_postgres(sql, None)
+        if not sql:
+            return _EmptyCursor()
+        cursor = self._raw_conn.cursor()
+        cursor.executemany(sql, list(seq_of_params))
+        return _CompatCursor(cursor)
+
+    def executescript(self, script):
+        cursor = None
+        for statement in script.split(";"):
+            statement = statement.strip()
+            if not statement:
+                continue
+            cursor = self.execute(statement)
+        return cursor or _EmptyCursor()
+
+    def commit(self):
+        self._raw_conn.commit()
+
+    def rollback(self):
+        self._raw_conn.rollback()
+
+    def close(self):
+        self._raw_conn.close()
+
+
+def _runtime_uses_postgres() -> bool:
+    return _is_postgres(get_database_url())
+
+
+def _sqlite_path_from_url(url: str) -> str:
+    if url == "sqlite:///:memory:":
+        return ":memory:"
+    if url.startswith("sqlite:///"):
+        return url.removeprefix("sqlite:///")
+    raise ValueError(f"Unsupported sqlite url: {url}")
+
+
+def _replace_qmark_with_pyformat(sql: str) -> str:
+    return "%s".join(sql.split("?"))
+
+
+def _get_conflict_columns(table_name: str) -> list[str]:
+    if table_name in _REPLACE_CONFLICT_COLUMNS:
+        return _REPLACE_CONFLICT_COLUMNS[table_name]
+    table = Base.metadata.tables.get(table_name)
+    if table is None:
+        return ["id"]
+    return [col.name for col in table.primary_key.columns]
+
+
+def _sql_returns_inserted_id(sql: str) -> bool:
+    return " RETURNING id" in sql.upper()
+
+
+def _append_returning_id(sql: str) -> str:
+    match = re.match(r"^\s*INSERT\s+INTO\s+([a-zA-Z_][\w]*)", sql, flags=re.IGNORECASE)
+    if not match or "RETURNING" in sql.upper():
+        return sql
+    table_name = match.group(1)
+    table = Base.metadata.tables.get(table_name)
+    if table is None:
+        return sql
+    pk_cols = [col.name for col in table.primary_key.columns]
+    if pk_cols == ["id"]:
+        return f"{sql} RETURNING id"
+    return sql
+
+
+def _rewrite_insert_or_replace(sql: str) -> str:
+    match = re.match(
+        r"^\s*INSERT\s+OR\s+REPLACE\s+INTO\s+([a-zA-Z_][\w]*)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)\s*$",
+        sql.strip(),
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return sql
+    table_name = match.group(1)
+    columns = [col.strip() for col in match.group(2).split(",")]
+    values_sql = match.group(3).strip()
+    conflict_columns = _get_conflict_columns(table_name)
+    update_columns = [col for col in columns if col not in conflict_columns]
+    update_set = ", ".join(f"{col}=EXCLUDED.{col}" for col in update_columns)
+    return (
+        f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({values_sql}) "
+        f"ON CONFLICT ({', '.join(conflict_columns)}) DO UPDATE SET {update_set}"
+    )
+
+
+def _rewrite_sql_for_postgres(sql: str, params):
+    stripped = sql.strip()
+    upper = stripped.upper()
+    if upper.startswith("PRAGMA "):
+        return "", params
+    rewritten = stripped.replace("ORDER BY rowid", "ORDER BY id")
+    if upper.startswith("INSERT OR IGNORE INTO"):
+        rewritten = re.sub(
+            r"^\s*INSERT\s+OR\s+IGNORE\s+INTO",
+            "INSERT INTO",
+            rewritten,
+            flags=re.IGNORECASE,
+        )
+        rewritten = f"{rewritten} ON CONFLICT DO NOTHING"
+    elif upper.startswith("INSERT OR REPLACE INTO"):
+        rewritten = _rewrite_insert_or_replace(rewritten)
+    rewritten = _append_returning_id(rewritten)
+    rewritten = _replace_qmark_with_pyformat(rewritten)
+    if isinstance(params, list):
+        params = tuple(params)
+    return rewritten, params
+
+
+def _ensure_schema() -> None:
+    Base.metadata.create_all(get_engine())
+
 
 def get_connection():
-    """Return a raw sqlite3 connection (direct, independent of SQLAlchemy pool)."""
-    from app.config.settings import DB_PATH
-    conn = sqlite3.connect(DB_PATH)
+    """Return a backend-aware connection object."""
+    url = get_database_url()
+    if _is_postgres(url):
+        return _PostgresCompatConnection(get_engine(url).raw_connection())
+
+    conn = sqlite3.connect(_sqlite_path_from_url(url))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
@@ -174,6 +361,19 @@ def _seed_symbol_universe(conn) -> None:
 
 
 def init_db():
+    if _runtime_uses_postgres():
+        _ensure_schema()
+        conn = get_connection()
+        try:
+            _seed_symbol_universe(conn)
+        finally:
+            conn.close()
+        init_analysis_tables()
+        init_alerts_table()
+        init_market_permissions_table()
+        init_active_symbols_table()
+        return
+
     conn = get_connection()
     try:
         conn.executescript("""
@@ -286,6 +486,9 @@ CREATE TABLE IF NOT EXISTS active_symbols (
 
 def init_active_symbols_table(conn=None) -> None:
     """Create active_symbols table if it does not exist."""
+    if _runtime_uses_postgres():
+        _ensure_schema()
+        return
     _conn = conn or get_connection()
     _conn.execute(ACTIVE_SYMBOLS_DDL)
     _conn.commit()
@@ -718,6 +921,9 @@ def get_daily_pnl() -> float:
 
 def init_alerts_table():
     """Crea la tabla alerts si no existe."""
+    if _runtime_uses_postgres():
+        _ensure_schema()
+        return
     conn = get_connection()
     conn.execute(
         """CREATE TABLE IF NOT EXISTS alerts (
@@ -798,6 +1004,9 @@ def get_patterns_for_week(since: datetime) -> list:
 # --- Analysis tables ---
 
 def init_analysis_tables():
+    if _runtime_uses_postgres():
+        _ensure_schema()
+        return
     conn = get_connection()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feature_snapshots (
@@ -1069,6 +1278,9 @@ def upsert_watchlist_score(symbol: str, **scores):
 # --- Market permissions table ---
 
 def init_market_permissions_table():
+    if _runtime_uses_postgres():
+        _ensure_schema()
+        return
     conn = get_connection()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS market_permissions (

@@ -9,11 +9,6 @@ from fastapi.responses import Response
 from app.api.auth import require_control_key
 from app.interfaces.api.routes.control_routes import router as control_router
 from app.interfaces.api.routes.jobs_routes import router as jobs_router
-from app.interfaces.api.routes.system_routes import router as system_router
-from app.interfaces.api.routes.trading_routes import router as trading_router
-from app.interfaces.api.routes.market_routes import router as market_router
-from app.interfaces.api.routes.analysis_routes import router as analysis_router
-from app.interfaces.api.routes.reports_routes import router as reports_router
 
 from app.config.settings import MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 from app.api.capital import get_operating_capital
@@ -58,12 +53,10 @@ async def security_headers(request: Request, call_next):
 
 app.include_router(control_router)
 app.include_router(jobs_router)
-app.include_router(system_router)
-app.include_router(trading_router)
-app.include_router(market_router)
-app.include_router(analysis_router)
-app.include_router(reports_router)
-client = get_client()
+
+
+def _get_client():
+    return get_client()
 
 
 def _get_universe_symbols(auto_approve_open: bool = False) -> list[str]:
@@ -105,6 +98,7 @@ def startup():
 
 @app.get("/health")
 def health():
+    client = _get_client()
     return {"status": "ok", "connected": client.ib.isConnected()}
 
 
@@ -114,6 +108,7 @@ def get_price(symbol: str):
     if symbol not in set(get_approved_symbols()):
         raise HTTPException(status_code=403, detail=f"Symbol {symbol} not allowed")
     try:
+        client = _get_client()
         return client.get_stock_price(symbol)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -125,6 +120,7 @@ def get_price_free(symbol: str):
     Solo para analisis — no para operar."""
     symbol = symbol.upper()
     try:
+        client = _get_client()
         return client.get_stock_price(symbol)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -133,6 +129,7 @@ def get_price_free(symbol: str):
 @app.get("/account")
 def get_account():
     try:
+        client = _get_client()
         return client.get_account()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -141,6 +138,7 @@ def get_account():
 @app.get("/portfolio")
 def get_portfolio():
     try:
+        client = _get_client()
         return client.get_portfolio()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -180,6 +178,7 @@ def propose_symbol(req: SymbolProposalRequest):
 @app.post("/orders/preview")
 def orders_preview(req: OrderPreviewRequest):
     symbol = req.symbol.upper()
+    client = _get_client()
     try:
         price_data = client.get_stock_price(symbol)
         current_price = price_data["market_price"]
@@ -265,6 +264,7 @@ def get_trades():
 @app.get("/executions")
 def get_executions(limit: int = 10):
     try:
+        client = _get_client()
         fills = client.get_executions(since_days=7)
         return {"source": "ibkr", "count": len(fills), "executions": fills[:limit]}
     except Exception as exc:
@@ -275,6 +275,7 @@ def get_executions(limit: int = 10):
 def get_commission_report():
     """Retorna historial real de comisiones y P&L de IBKR."""
     try:
+        client = _get_client()
         return client.get_commissions(since_days=30)
     except Exception as exc:
         return {"error": str(exc), "fills": [], "total_commission": 0, "total_realized_pnl": 0, "fill_count": 0}
@@ -290,6 +291,7 @@ def get_patterns(symbol: str):
 def orders_place(req: OrderPreviewRequest):
     from app.config.settings import REQUIRE_HUMAN_APPROVAL, PAPER_TRADING_ONLY
     symbol = req.symbol.upper()
+    client = _get_client()
 
     try:
         price_data = client.get_stock_price(symbol)
@@ -441,6 +443,7 @@ def get_proposals():
 def approve_symbol_endpoint(symbol: str):
     from app.infrastructure.db.compat import approve_symbol
     symbol = symbol.upper()
+    client = _get_client()
     ib_client = client if client and client.ib.isConnected() else None
     approve_symbol(symbol, ib_client=ib_client)
     return {"status": "approved", "symbol": symbol, "message": f"{symbol} approved in DB universe."}
@@ -465,6 +468,7 @@ def system_status():
         }
     open_trades = get_open_trades()
     daily_pnl = get_daily_pnl()
+    client = _get_client()
     try:
         _acct = client.get_account()
         _capital = get_operating_capital(_acct.get("net_liquidation", 0.0))
@@ -580,6 +584,7 @@ def close_trade_by_id(trade_id: int):
 def close_position(symbol: str):
     from app.infrastructure.db.compat import get_open_trades, close_trade
     symbol = symbol.upper()
+    client = _get_client()
     trades = [t for t in get_open_trades() if t.symbol == symbol]
     if not trades:
         raise HTTPException(status_code=404, detail=f"No open position for {symbol}")
@@ -635,6 +640,7 @@ def close_position(symbol: str):
 @app.post("/orders/close-all", dependencies=[Depends(require_control_key)])
 def close_all_positions():
     from app.infrastructure.db.compat import get_open_trades, close_trade
+    client = _get_client()
     trades = get_open_trades()
     if not trades:
         return {"status": "ok", "closed": 0}
