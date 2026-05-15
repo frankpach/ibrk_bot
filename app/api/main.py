@@ -904,46 +904,35 @@ def list_reports_json(limit: int = 20):
 def reports_page():
     """HTML reports index page."""
     from app.infrastructure.db.compat import get_reports
+    from app.api.layout import shared_layout
     reports = get_reports(limit=30)
     rows = ""
     for r in reports:
         type_badge = "Pre-mercado" if r["report_type"] == "pre_market" else "Operaciones"
         rows += f"""
         <tr>
-          <td>{type_badge}</td>
-          <td>{r['report_date']}</td>
+          <td style="color:var(--muted)">{type_badge}</td>
+          <td style="color:var(--muted);font-family:'Fira Code',monospace;font-size:.8rem">{r['report_date']}</td>
           <td><a href="/reports/{r['id']}">{r['title']}</a></td>
-          <td>{r['created_at'][:16]}</td>
-          <td><button onclick="delReport({r['id']})" style="background:rgba(244,63,94,.15);color:#F43F5E;border:1px solid rgba(244,63,94,.3);padding:2px 8px;border-radius:3px;cursor:pointer;font-size:.75rem">Borrar</button></td>
+          <td style="color:var(--dim);font-family:'Fira Code',monospace;font-size:.78rem">{r['created_at'][:16]}</td>
+          <td><button class="btn btn-danger" onclick="delReport({r['id']})">Borrar</button></td>
         </tr>"""
-    return HTMLResponse(content=f"""<!DOCTYPE html>
-<html lang="es"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reportes — IBKR AI Trader</title>
-<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Barlow+Condensed:wght@400;600&display=swap" rel="stylesheet">
-<style>
-body{{background:#06090F;color:#E2E8F0;font-family:"Barlow Condensed",sans-serif;max-width:1000px;margin:0 auto;padding:20px}}
-h1{{color:#38BDF8;font-size:1.6rem;border-bottom:1px solid #1E2D42;padding-bottom:8px}}
-table{{width:100%;border-collapse:collapse;font-family:"Fira Code",monospace;font-size:.82rem;margin-top:16px}}
-th{{color:#64748B;text-align:left;padding:6px 10px;border-bottom:1px solid #1E2D42;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase}}
-td{{padding:8px 10px;border-bottom:1px solid rgba(30,45,66,.5)}}
-a{{color:#38BDF8;text-decoration:none}}a:hover{{text-decoration:underline}}
-.nav{{display:flex;gap:12px;margin-bottom:20px;font-family:"Fira Code",monospace;font-size:.8rem}}
-.nav a{{color:#38BDF8}}
-.empty{{color:#334155;font-family:"Fira Code",monospace;padding:40px;text-align:center}}
-</style>
-</head><body>
-<div class="nav"><a href="/dashboard">&larr; Dashboard</a></div>
-<h1>Reportes de Analisis</h1>
-{'<table><thead><tr><th>Tipo</th><th>Fecha</th><th>Titulo</th><th>Creado</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' if reports else '<div class="empty">// Sin reportes aun — se generan automaticamente antes de apertura de mercado</div>'}
-<script>
-async function delReport(id){{
+    body = f"""
+    <h1>Reportes de Análisis</h1>
+    {"<div class='card'><table><thead><tr><th>Tipo</th><th>Fecha</th><th>Título</th><th>Creado</th><th></th></tr></thead><tbody>" + rows + "</tbody></table></div>" if reports else "<div class='empty'>// Sin reportes aún — se generan automáticamente antes de apertura de mercado</div>"}
+    """
+    return HTMLResponse(content=shared_layout(
+        title="Reportes",
+        active_nav="reports",
+        content=body,
+        extra_scripts="""<script>
+async function delReport(id){
   if(!confirm('Borrar este reporte?'))return;
-  await fetch('/reports/'+id,{{method:'DELETE'}});
+  await fetch('/reports/'+id,{method:'DELETE'});
   location.reload();
-}}
-</script>
-</body></html>""")
+}
+</script>""",
+    ))
 
 
 @app.get("/reports/{report_id}", response_class=HTMLResponse)
@@ -997,41 +986,20 @@ def view_report(report_id: int):
     # Paragraphs
     html_content = re.sub(r'\n\n', '</p><p>', html_content)
 
-    return HTMLResponse(content=f"""<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{report['title']}</title>
-<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Barlow+Condensed:wght@400;600&display=swap" rel="stylesheet">
-<style>
-body{{background:#06090F;color:#E2E8F0;font-family:"Barlow Condensed",sans-serif;max-width:900px;margin:0 auto;padding:20px;line-height:1.6}}
-h1{{font-size:1.8rem;color:#38BDF8;border-bottom:1px solid #1E2D42;padding-bottom:8px}}
-h2{{font-size:1.3rem;color:#94A3B8;margin-top:24px}}
-h3{{font-size:1.1rem;color:#E2E8F0}}
-code{{font-family:"Fira Code",monospace;background:#111D2E;padding:2px 6px;border-radius:3px;color:#38BDF8}}
-blockquote{{border-left:3px solid #38BDF8;margin:0;padding:8px 16px;background:#0C1421;color:#94A3B8;font-style:italic}}
-table{{width:100%;border-collapse:collapse;margin:12px 0;font-family:"Fira Code",monospace;font-size:.82rem}}
-td{{padding:6px 10px;border:1px solid #1E2D42}}
-tr:nth-child(even){{background:#0C1421}}
-ul{{padding-left:20px}}
-li{{margin:4px 0}}
-hr{{border:none;border-top:1px solid #1E2D42;margin:20px 0}}
-em{{color:#94A3B8}}
-strong{{color:#FBBF24}}
-.nav{{display:flex;gap:12px;margin-bottom:20px;font-family:"Fira Code",monospace;font-size:.8rem}}
-.nav a{{color:#38BDF8;text-decoration:none}}
-</style>
-</head>
-<body>
-<div class="nav">
-  <a href="/reports">&larr; Todos los reportes</a>
-  <a href="/dashboard">Dashboard</a>
-</div>
-<p><em>Tipo: {report['report_type']} | Fecha: {report['report_date']} | Creado: {report['created_at'][:16]}</em></p>
-<div>{html_content}</div>
-</body>
-</html>""")
+    from app.api.layout import shared_layout
+    body = f"""
+    <p style="margin-bottom:16px">
+      <a href="/reports" style="font-size:.82rem">← Todos los reportes</a>
+      &nbsp;·&nbsp;
+      <em style="font-size:.82rem">Tipo: {report['report_type']} · Fecha: {report['report_date']} · Creado: {report['created_at'][:16]}</em>
+    </p>
+    <div class="card" style="line-height:1.7">{html_content}</div>
+    """
+    return HTMLResponse(content=shared_layout(
+        title=report['title'],
+        active_nav="reports",
+        content=body,
+    ))
 
 
 @app.delete("/reports/{report_id}")
