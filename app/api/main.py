@@ -9,6 +9,11 @@ from fastapi.responses import Response
 from app.api.auth import require_control_key
 from app.interfaces.api.routes.control_routes import router as control_router
 from app.interfaces.api.routes.jobs_routes import router as jobs_router
+from app.interfaces.api.routes.system_routes import router as system_router
+from app.interfaces.api.routes.trading_routes import router as trading_router
+from app.interfaces.api.routes.market_routes import router as market_router
+from app.interfaces.api.routes.analysis_routes import router as analysis_router
+from app.interfaces.api.routes.reports_routes import router as reports_router
 
 from app.config.settings import MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 from app.api.capital import get_operating_capital
@@ -53,6 +58,11 @@ async def security_headers(request: Request, call_next):
 
 app.include_router(control_router)
 app.include_router(jobs_router)
+app.include_router(system_router)
+app.include_router(trading_router)
+app.include_router(market_router)
+app.include_router(analysis_router)
+app.include_router(reports_router)
 client = get_client()
 
 
