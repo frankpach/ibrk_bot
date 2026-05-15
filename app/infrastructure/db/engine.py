@@ -26,7 +26,7 @@ def get_database_url() -> str:
 
 
 def _is_postgres(url: str) -> bool:
-    return url.startswith("postgresql://") or url.startswith("postgres://")
+    return url.startswith("postgresql") or url.startswith("postgres://")
 
 
 def get_engine(database_url: str | None = None):
