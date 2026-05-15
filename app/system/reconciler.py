@@ -5,7 +5,7 @@ Se ejecuta al arrancar el sistema para detectar desincronizaciones.
 """
 import logging
 from datetime import datetime
-from app.db.database import (
+from app.infrastructure.db.compat import (
     approve_symbol,
     close_trade,
     get_open_trades,

@@ -29,7 +29,7 @@ def _run_calibration_safe(symbol: str, ib_client) -> None:
     """Grid search SL/TP, write best result to symbol_parameters."""
     try:
         from app.backtest.engine import run_backtest
-        from app.db.database import update_symbol_parameters
+        from app.infrastructure.db.compat import update_symbol_parameters
         from app.notifications.telegram import notify
 
         best_result = None

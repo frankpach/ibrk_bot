@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.db.models import Trade
-from app.db.database import update_trade_status, update_trade_close_fill
+from app.infrastructure.db.compat import update_trade_status, update_trade_close_fill
 from app.ibkr.fill_tracker import get_fill_price_fallback
 
 logger = logging.getLogger(__name__)

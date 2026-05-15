@@ -44,7 +44,7 @@ def _build_scanner_row(data_layer, symbol: str) -> dict:
 
 def fetch_and_cache_scanner(data_layer) -> None:
     """Fetch scanner results for most_active, gainers, losers, top_movers."""
-    from app.db.database import upsert_scanner_results
+    from app.infrastructure.db.compat import upsert_scanner_results
 
     scan_map = {
         "most_active": "MOST_ACTIVE",
@@ -61,7 +61,7 @@ def fetch_and_cache_scanner(data_layer) -> None:
 
     # top_movers = union of gainers + losers (already stored separately)
     try:
-        from app.db.database import get_scanner_results
+        from app.infrastructure.db.compat import get_scanner_results
         movers = get_scanner_results("gainers") + get_scanner_results("losers")
         movers.sort(key=lambda r: abs(r.get("change_pct") or 0), reverse=True)
         upsert_scanner_results("top_movers", movers[:10])
@@ -71,7 +71,7 @@ def fetch_and_cache_scanner(data_layer) -> None:
 
 def fetch_and_cache_sectors(data_layer) -> None:
     """Fetch sector ETF daily performance."""
-    from app.db.database import upsert_scanner_results
+    from app.infrastructure.db.compat import upsert_scanner_results
 
     results = []
     for etf, name in SECTOR_ETFS.items():
@@ -95,7 +95,7 @@ def fetch_and_cache_sectors(data_layer) -> None:
 
 def fetch_implied_move(data_layer, symbols: list) -> None:
     """Fetch implied volatility as proxy for expected weekly move."""
-    from app.db.database import upsert_scanner_results
+    from app.infrastructure.db.compat import upsert_scanner_results
 
     results = []
     for symbol in symbols[:10]:

@@ -1,0 +1,34 @@
+[Unit]
+Description=IBKR AI Trader
+After=network.target
+
+[Service]
+Type=simple
+User=frankpach
+Group=frankpach
+WorkingDirectory=/home/frankpach/ibkr-bot
+ExecStart=/home/frankpach/ibkr-bot/venv/bin/python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8088
+Restart=always
+RestartSec=10
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/frankpach/ibkr-bot
+ReadWritePaths=/home/frankpach/ibkr-bot/db
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Secrets must NOT be inline here — use EnvironmentFile only
+EnvironmentFile=/home/frankpach/ibkr-bot/.env.secret
+
+[Install]
+WantedBy=multi-user.target

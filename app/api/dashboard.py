@@ -238,6 +238,51 @@ def render_dashboard_html() -> str:
       );
     }
 
+    /* SystemStatusBar — polls /control/status every 30s (Issue 006) */
+    function SystemStatusBar() {
+      const [status, setStatus] = React.useState(null);
+      const [err, setErr] = React.useState(false);
+
+      React.useEffect(() => {
+        let mounted = true;
+        async function fetchStatus() {
+          try {
+            const res = await fetch('/control/status');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            if (mounted) { setStatus(data); setErr(false); }
+          } catch(e) { if (mounted) setErr(true); }
+        }
+        fetchStatus();
+        const id = setInterval(fetchStatus, 30000);
+        return () => { mounted = false; clearInterval(id); };
+      }, []);
+
+      const mode = (status?.mode || 'paper').toUpperCase();
+      const isLive = mode === 'LIVE';
+      const isPaused = status?.is_paused || status?.paused;
+      const ibConn = status?.ib_connected;
+      const port = status?.ib_port || '—';
+      const pnl = status?.daily_pnl_usd;
+
+      let dotColor = isLive ? 'var(--amber)' : 'var(--green)';
+      if (isPaused) dotColor = 'var(--amber)';
+      if (!ibConn) dotColor = 'var(--red)';
+
+      return (
+        <div style={{padding:'6px 16px',display:'flex',alignItems:'center',gap:'12px',fontFamily:'"Fira Code",monospace',fontSize:'.7rem',background:'var(--surface2)',borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
+          <span style={{width:7,height:7,borderRadius:'50%',background:dotColor,boxShadow:dotColor==='var(--red)'?'none':'0 0 5px '+dotColor}} className={err?'':'pulse'}></span>
+          <span style={{color:isLive?'var(--amber)':'var(--green)',fontWeight:700}}>{mode}</span>
+          <span style={{color:'var(--dim)'}}>| Puerto: {port}</span>
+          <span style={{color:isPaused?'var(--amber)':'var(--green)'}}>{isPaused ? '● Pausado' : '● Activo'}</span>
+          <span style={{color:pnl>=0?'var(--green)':'var(--red)'}}>| P&L: {pnl == null ? '—' : '$' + parseFloat(pnl).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span style={{color:ibConn?'var(--green)':'var(--red)'}}>| IB: {ibConn ? '✓' : '✗'}</span>
+          <a href="/control" style={{color:'var(--blue)',textDecoration:'none',marginLeft:'auto'}}>[→ /control]</a>
+          {err && <span style={{color:'var(--red)',marginLeft:8}}>⚠ offline</span>}
+        </div>
+      );
+    }
+
     /* Countdown ring */
     function Refresh({ total, onTick }) {
       const [rem, setRem] = useState(total);
@@ -1436,6 +1481,8 @@ def render_dashboard_html() -> str:
         <div style={{minHeight:'100vh',background:'var(--bg)'}}>
 
           <IbStatusBar ibConnected={ibConnected} />
+
+          <SystemStatusBar />
 
           <Header data={data} interval={interval} onTick={() => setTick(k => k+1)} onTogglePause={toggleScanner} onRefresh={async () => {
             try { await fetch('/refresh', {method:'POST'}); } catch(e) {}

@@ -1,73 +1,101 @@
-# Code Index: arch-refactor
-module: arch-refactor
-updated_at: "2026-05-14T00:00:00Z"
+# Code Index: refactor
+module: refactor
+updated_at: "2026-05-14T01:00:00Z"
 
 models:
-  - path: app/db/models.py
-    entities: [Trade, Signal, Pattern, Decision, SymbolParameter, DailyWatchlist]
-  - path: app/config/settings.py
-    entities: [Settings — IB_HOST, IB_PORT, PAPER_TRADING_ONLY, MAX_POSITIONS, MAX_RISK_PCT, CAPITAL_CAP, API_BASE, OPENCODE_BIN, OPENCODE_MODEL, TELEGRAM_BOT_TOKEN]
+  existing_raw_sql:
+    - {name: trades, file: "app/db/database.py", lines: "1-1277", action: "migrate to SQLAlchemy TradeModel"}
+    - {name: signals, file: "app/db/database.py", action: "migrate to SQLAlchemy SignalModel"}
+    - {name: symbol_config, file: "app/db/database.py", action: "migrate to SQLAlchemy SymbolConfigModel"}
+    - {name: symbol_parameters, file: "app/db/database.py", action: "migrate to SQLAlchemy SymbolParametersModel"}
+    - {name: decisions, file: "app/db/database.py", action: "migrate to SQLAlchemy DecisionModel"}
+    - {name: feature_snapshots, file: "app/db/database.py", action: "migrate to SQLAlchemy FeatureSnapshotModel"}
+    - {name: account_snapshots, file: "app/db/database.py", action: "migrate to SQLAlchemy AccountSnapshotModel"}
+    - {name: news_cache, file: "app/db/database.py", action: "migrate to SQLAlchemy NewsCacheModel"}
+    - {name: scanner_results, file: "app/db/database.py", action: "migrate to SQLAlchemy ScannerResultModel"}
+    - {name: analysis_reports, file: "app/db/database.py", action: "migrate to SQLAlchemy AnalysisReportModel"}
+    - {name: market_permissions, file: "app/db/database.py", action: "migrate to SQLAlchemy MarketPermissionModel"}
+    - {name: patterns, file: "app/db/database.py", action: "migrate to SQLAlchemy PatternModel"}
+    - {name: daily_watchlist, file: "app/db/database.py", action: "migrate to SQLAlchemy DailyWatchlistModel"}
+    - {name: position_snapshots, file: "app/db/database.py", action: "migrate to SQLAlchemy PositionSnapshotModel"}
+  new_to_create:
+    - {name: control_settings, file: "infrastructure/db/models/control_setting.py", action: "CREATE NEW"}
+    - {name: audit_log, file: "infrastructure/db/models/audit_log.py", action: "CREATE NEW"}
+    - {name: background_jobs, file: "infrastructure/db/models/background_job.py", action: "CREATE NEW"}
 
 components:
-  - path: app/api/main.py
-    lines: 1311
-    role: FastAPI app — 40+ endpoints (mezcla query/command/dashboard/reports)
-    phase_target: split en 5 ficheros en interfaces/api/
-  - path: app/api/dashboard.py
-    lines: 1820
-    role: HTML rendering + queries directas
-    phase_target: split en dashboard_routes.py + read_models/ (Fase 5)
-  - path: app/db/database.py
-    lines: 1276
-    role: SQLite hub — schema + migraciones + 27+ funciones CRUD
-    phase_target: split en connection.py + migrations.py + repositories/* (Fases 2–3)
-  - path: run.py
-    lines: 628
-    role: APScheduler setup + IB watchdog + lógica de negocio pre-open
-    phase_target: split en scheduler/runner.py + scheduler/jobs.py (Fase 2)
-  - path: app/notifications/telegram_bot.py
-    lines: 800
-    role: Telegram bot command handlers
-    phase_target: mover a interfaces/telegram/bot_handlers.py (Fase 5)
+  existing:
+    - {name: DashboardApp, file: "app/api/dashboard.py", loc: 2700, action: "split — separate React components + DashboardDataQuery"}
+    - {name: TradingViewChart, file: "app/api/dashboard.py", action: "keep as-is"}
+    - {name: ReportsViewer, file: "app/api/dashboard.py", action: "keep as-is"}
+  new_to_create:
+    - {name: ControlPlaneApp, file: "interfaces/api/routes/control_routes.py + frontend", action: "CREATE NEW"}
 
 events:
-  - name: TradeOpened
-    phase: 3
-  - name: TradeClosed
-    phase: 3
-  - name: SignalGenerated
-    phase: 3
-  - name: ConfigChanged
-    phase: 3
-  - name: ModeChanged
-    phase: 3
-  - name: CircuitBreakerTripped
-    phase: 3
+  existing: []  # No event bus exists today
+  new_to_create:
+    - SignalDetected
+    - OrderPlaced
+    - PositionOpened
+    - PositionClosed
+    - StopLossHit
+    - TakeProfitHit
+    - TradingModeSwitched
+    - SystemPaused
+    - SystemResumed
+    - CircuitBreakerTriggered
+    - ControlSettingChanged
+    - SymbolApproved
+    - LLMAnalysisCompleted
+    - GatewayDisconnected
 
 services:
-  - name: ExecuteOrderUseCase
-    path: app/application/trading/execute_order.py
-    phase: 1
-    replaces: HTTP POST /orders/place desde llm/loop.py
-  - name: ClosePositionUseCase
-    path: app/application/trading/close_position.py
-    phase: 1
-    replaces: HTTP GET /price/free/ desde positions/manager.py
-  - name: SetTradingModeCommand
-    path: app/application/config/set_trading_mode.py
-    phase: 3
-    replaces: SystemController.set_mode() mutando settings global
-  - name: ControlPlaneQueryService
-    path: app/application/config/query_control_plane.py
-    phase: 4
-  - name: DashboardQueryService
-    path: app/infrastructure/db/read_models/dashboard_queries.py
-    phase: 5
-  - name: InProcessJobRunner
-    path: app/infrastructure/jobs/job_runner.py
-    phase: 6
-
-utilities:
-  - path: app/infrastructure/llm/opencode_adapter.py
-    phase: 0
-    replaces: [app/llm/agent.py::_call_opencode, app/llm/postmortem.py::_call_opencode, app/analysis/pipeline.py::_llm_interpret subprocess]
+  existing_keep:
+    - {name: IBKRClient, file: "app/ibkr/client.py", loc: 294, action: "wrap in IBKRBrokerAdapter(IBrokerPort)"}
+    - {name: NotificationPolicy, file: "app/notifications/policy.py", loc: 108, action: "wrap in TelegramNotificationAdapter"}
+    - {name: NotificationThrottler, file: "app/notifications/throttler.py", loc: 100, action: "wrap in TelegramNotificationAdapter"}
+    - {name: NotificationQueue, file: "app/notifications/queue.py", loc: 130, action: "keep as impl detail of adapter"}
+    - {name: ApprovalManager, file: "app/notifications/approval.py", loc: 195, action: "wrap in TelegramNotificationAdapter.request_approval()"}
+    - {name: OrderDedup, file: "app/ibkr/dedup.py", loc: 157, action: "move logic to PlaceOrderUseCase"}
+    - {name: BacktestEngine, file: "app/backtest/engine.py", loc: 235, action: "keep as-is — convert endpoint to async job"}
+    - {name: TrailingStopManager, file: "app/risk/trailing_stop.py", action: "move to PositionService"}
+    - {name: PartialExitManager, file: "app/risk/partial_exit.py", action: "move to PositionService"}
+  existing_consolidate:
+    - {name: OpenCodeAdapter, file: "app/infrastructure/llm/opencode_adapter.py", action: "USE THIS — delete 3 duplicates in agent.py, pipeline.py, telegram_bot.py"}
+  existing_replace:
+    - {name: SystemController, file: "app/system/controller.py", loc: 90, action: "replace with PersistedSystemState + use cases"}
+  new_to_create:
+    - IBrokerPort (interface)
+    - ILLMPort (interface)
+    - INotificationPort (interface)
+    - ITradeRepository (interface)
+    - ISignalRepository (interface)
+    - ISymbolRepository (interface)
+    - ISystemStateRepository (interface)
+    - IJobRepository (interface)
+    - IBKRBrokerAdapter
+    - MockBrokerAdapter
+    - OpenCodeLLMAdapter (consolidate)
+    - MockLLMAdapter
+    - TelegramNotificationAdapter
+    - MockNotificationAdapter
+    - PersistedSystemState
+    - SecretManager (Fernet)
+    - SettingValidator
+    - EventBus
+    - BackgroundJobRunner
+    - PlaceOrderUseCase
+    - ClosePositionUseCase
+    - ProcessSignalUseCase
+    - ScanMarketUseCase
+    - ChangeTradingModeUseCase
+    - PauseSystemUseCase
+    - ResumeSystemUseCase
+    - UpdateControlSettingUseCase
+    - ApproveSymbolUseCase
+    - RunLearningCycleUseCase
+    - RiskService
+    - PositionService
+    - SymbolService
+    - DashboardDataQuery
+    - container.py

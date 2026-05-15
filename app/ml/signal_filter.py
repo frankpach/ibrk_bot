@@ -161,7 +161,7 @@ class SignalFilter:
                     snap_id = getattr(trade, "feature_snapshot_id", None)
                     if not snap_id:
                         continue
-                    from app.db.database import get_feature_snapshot_by_id
+                    from app.infrastructure.db.compat import get_feature_snapshot_by_id
                     snap_or_none = get_feature_snapshot_by_id(snap_id)
                     if snap_or_none is None:
                         continue

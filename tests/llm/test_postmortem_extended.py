@@ -2,37 +2,9 @@
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 from app.db.models import Trade
-from app.llm.postmortem import _call_opencode, run_postmortem
+from app.llm.postmortem import run_postmortem
 
 
-# ---------- _call_opencode ----------
-@patch("subprocess.run")
-def test_call_opencode_success(mock_run):
-    mock_run.return_value = MagicMock(
-        stdout='{"type":"text","part":{"text":"hello"}}\n',
-        stderr="",
-    )
-    result = _call_opencode("prompt")
-    assert result == "hello"
-
-
-@patch("subprocess.run")
-def test_call_opencode_timeout(mock_run):
-    from subprocess import TimeoutExpired
-    mock_run.side_effect = TimeoutExpired("cmd", 60)
-    result = _call_opencode("prompt")
-    assert result == ""
-
-
-@patch("subprocess.run")
-def test_call_opencode_exception(mock_run):
-    mock_run.side_effect = Exception("fail")
-    result = _call_opencode("prompt")
-    assert result == ""
-
-
-# ---------- run_postmortem ----------
-@patch("app.llm.postmortem.OPENCODE_BIN", None)
 def _make_trade(**kwargs):
     defaults = {
         "id": 1, "symbol": "AAPL", "action": "BUY", "quantity": 10,
@@ -53,7 +25,7 @@ def test_run_postmortem_no_bin():
     run_postmortem(trade)
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.analysis.scorer.update_weights_attenuated")
@@ -68,7 +40,7 @@ def test_run_postmortem_win(mock_update, mock_notify, mock_insert, mock_call):
     mock_notify.assert_called_once()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.llm.postmortem.OPENCODE_BIN", "/fake/opencode")
@@ -80,7 +52,7 @@ def test_run_postmortem_loss(mock_notify, mock_insert, mock_call):
     mock_notify.assert_called_once()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.analysis.scorer.update_weights_attenuated")
@@ -92,7 +64,7 @@ def test_run_postmortem_markdown_response(mock_update, mock_notify, mock_insert,
     mock_insert.assert_called_once()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.llm.postmortem.OPENCODE_BIN", "/fake/opencode")
@@ -103,7 +75,7 @@ def test_run_postmortem_bad_json(mock_notify, mock_insert, mock_call):
     mock_insert.assert_called_once()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.analysis.scorer.update_weights_attenuated")
@@ -117,7 +89,7 @@ def test_run_postmortem_feature_snapshot(mock_update, mock_notify, mock_insert, 
     mock_insert.assert_called_once()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.analysis.scorer.update_weights_attenuated")
@@ -131,7 +103,7 @@ def test_run_postmortem_feature_snapshot_exception(mock_update, mock_notify, moc
     mock_insert.assert_called_once()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.analysis.scorer.update_weights_attenuated")
@@ -143,7 +115,7 @@ def test_run_postmortem_low_confidence_suggestion(mock_update, mock_notify, mock
     mock_update.assert_not_called()
 
 
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 @patch("app.llm.postmortem.insert_pattern")
 @patch("app.llm.postmortem.notify")
 @patch("app.analysis.scorer.update_weights_attenuated")

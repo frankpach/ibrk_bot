@@ -15,7 +15,7 @@ import logging
 from datetime import date
 from typing import TYPE_CHECKING
 
-from app.db.database import upsert_active_symbols
+from app.infrastructure.db.compat import upsert_active_symbols
 
 if TYPE_CHECKING:
     from app.ibkr.client import IBKRClient
@@ -66,7 +66,7 @@ def _get_candidates(market_key, ib_client):
             market_key,
         )
 
-    from app.db.database import get_approved_symbols_with_meta
+    from app.infrastructure.db.compat import get_approved_symbols_with_meta
     meta = get_approved_symbols_with_meta()
     return [m["symbol"] for m in meta if m.get("market_key") == market_key]
 
@@ -95,7 +95,7 @@ def select_top_symbols(
     scorer = _get_scorer()
 
     # Load full metadata so get_indicators can use the right sec_type/exchange/currency
-    from app.db.database import get_approved_symbols_with_meta
+    from app.infrastructure.db.compat import get_approved_symbols_with_meta
     all_meta = {m["symbol"]: m for m in get_approved_symbols_with_meta()}
 
     candidates = _get_candidates(market_key, ib_client)

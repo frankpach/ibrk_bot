@@ -1,79 +1,65 @@
 version: "1.0"
-module: arch-refactor
-updated_at: "2026-05-14T00:00:00Z"
+module: refactor
+updated_at: "2026-05-14T21:20:00Z"
 
 objectives:
-  current: arch-refactor
-  status: phase_1_pending
+  current: refactor
+  status: phase_5_execution_ready
   phases:
-    phase_0: {status: complete, completed_at: "2026-05-14", artifacts: [tests/test_arch_refactor_fase0.py, app/infrastructure/llm/opencode_adapter.py, app/api/auth.py]}
-    phase_1: {status: pending, completed_at: null, artifacts: []}
-    phase_2: {status: pending, completed_at: null, artifacts: []}
-    phase_3: {status: pending, completed_at: null, artifacts: []}
-    phase_4: {status: pending, completed_at: null, artifacts: []}
-    phase_5: {status: pending, completed_at: null, issues_completed: 0, issues_total: 0}
+    phase_0: {status: complete, completed_at: "2026-05-14T00:00:00Z", artifacts: [docs/dev/artifacts/refactor/01-design-concept.md, docs/dev/artifacts/refactor/02-persona-journey.md]}
+    phase_1: {status: complete, completed_at: "2026-05-14T01:00:00Z", artifacts: [docs/dev/artifacts/refactor/03-architecture-map.md, docs/dev/artifacts/refactor/04-constraints.md, docs/dev/artifacts/refactor/05-why-decisions.md]}
+    phase_2: {status: complete, completed_at: "2026-05-14T02:00:00Z", artifacts: [docs/dev/artifacts/refactor/06-interface-design.md]}
+    phase_3: {status: complete, completed_at: "2026-05-14T03:00:00Z", artifacts: [docs/dev/artifacts/refactor/08-prd.md]}
+    phase_4: {status: complete, completed_at: "2026-05-14T04:00:00Z", artifacts: [.claude/current-dev-issues/001-phase0-quick-wins.md, .claude/current-dev-issues/002-phase1-eliminate-internal-http.md, .claude/current-dev-issues/003-phase2-extract-services.md, .claude/current-dev-issues/004-phase3-persist-state.md, .claude/current-dev-issues/005-phase4a-control-plane-backend.md, .claude/current-dev-issues/006-phase4b-control-plane-frontend.md, .claude/current-dev-issues/007-phase5-dashboard-jobs.md, .claude/current-dev-issues/008-phase6-sqlalchemy-alembic.md, .claude/current-dev-issues/009-phase7-postgresql.md, .claude/current-dev-issues/010-phase8-hardening.md]}
+    phase_5: {status: in_progress, completed_at: null, issues_completed: 3, issues_total: 10}
     phase_6: {status: pending, completed_at: null, artifact: null}
     phase_7: {status: pending, completed_at: null, artifact: null}
     phase_8: {status: pending, completed_at: null, artifact: null}
 
-personas: []
+personas:
+  - name: "Frank — Trader"
+    device: "desktop + mobile"
+    environment: "home/office during market hours"
+    goal: "Operar el sistema sin SSH — ajustar parámetros desde browser"
+    constraint: "No puede estar mirando el sistema constantemente"
+    critical_flows: [estado_al_arrancar, cambiar_parametro_riesgo, cambio_modo_live, ver_estado_jobs]
+  - name: "Frank — Developer"
+    device: "desktop (IDE + terminal)"
+    environment: "local testing → Pi production via SSH"
+    goal: "Cambiar features con confianza — tests sin infra, deploy seguro"
+    constraint: "Sistema en producción activo — costo de un bug es inaceptable"
+    critical_flows: [test_use_case, deploy_sin_downtime, ver_estado_jobs]
 
 constraints:
   timeline: null
   technical:
-    - "Sistema debe permanecer operativo en cada fase — no big-bang rewrites"
-    - "Rollback definido para cada fase antes de ejecutar"
-    - "Proceso único hoy — no cerrar puerta a workers separados"
-    - "SQLite en producción hasta Fase 7"
-    - "Acceso privado por Tailscale — sin exposición pública"
+    - "SQLAlchemy + Alembic"
+    - "FastAPI + APScheduler se mantienen"
+    - "ThreadPoolExecutor max_workers=3"
+    - "Event bus in-process síncrono"
+    - "Fernet para secrets"
   business:
-    - "Mínimo riesgo operacional en rutas de trading"
-    - "Paper mode como red de seguridad durante fases críticas"
-
-decisions:
-  - id: D-01
-    decision: "SQL plano + repositorios (no SQLAlchemy/SQLModel)"
-    rationale: "Más legible, revisable y debuggeable para trading; repositorios proveen indirección suficiente"
-  - id: D-02
-    decision: "InProcessJobRunner con asyncio (no Celery/ARQ todavía)"
-    rationale: "Proceso único hoy; interfaz swappable para workers futuros"
-  - id: D-03
-    decision: "X-Control-Key auth (no JWT/OAuth) para control plane inicial"
-    rationale: "Tailscale reduce radio de exposición; JWT agrega complejidad sin ganancia proporcional"
-  - id: D-04
-    decision: "No DDD puro — use cases + ports + adapters es suficiente"
-    rationale: "Pragmático; no hay Aggregates complejos en este dominio"
+    - "Sistema en producción activa — rollback posible en cada issue"
+    - "Sin equipo"
+    - "Acceso Tailscale"
 
 open_questions: []
-assumptions:
-  - "database.py es importado por 27+ módulos"
-  - "llm/loop.py llama /orders/place via httpx (HTTP interno)"
-  - "SystemController.set_mode() muta settings.PAPER_TRADING_ONLY"
-  - "3 implementaciones separadas de _call_opencode() con cwd hardcodeado"
 
-issues: []
+decisions:
+  - "DEC-001 a DEC-014: ver decisions.md"
+
+issues:
+  - {id: "001", title: "Phase 0 — Quick Wins", status: complete, effort: M, type: AFK, blocked_by: null}
+  - {id: "002", title: "Phase 1 — Eliminar HTTP Interno", status: complete, effort: M, type: AFK, blocked_by: "001"}
+  - {id: "003", title: "Phase 2 — Extraer Servicios y DI", status: complete, effort: L, type: AFK, blocked_by: "002"}
+  - {id: "004", title: "Phase 3 — Persistir System State y Event Bus", status: pending, effort: M, type: AFK, blocked_by: "003"}
+  - {id: "005", title: "Phase 4a — Control Plane Backend", status: pending, effort: M, type: AFK, blocked_by: "004"}
+  - {id: "006", title: "Phase 4b — Control Plane Frontend", status: pending, effort: M, type: HITL, blocked_by: "005"}
+  - {id: "007", title: "Phase 5 — Dashboard + Background Jobs", status: pending, effort: M, type: AFK, blocked_by: "006"}
+  - {id: "008", title: "Phase 6 — SQLAlchemy + Alembic", status: pending, effort: XL, type: AFK, blocked_by: "007"}
+  - {id: "009", title: "Phase 7 — Migrar a PostgreSQL", status: pending, effort: M, type: HITL, blocked_by: "008"}
+  - {id: "010", title: "Phase 8 — Hardening Final", status: pending, effort: M, type: AFK, blocked_by: "009"}
+
 actions: []
-
-code_index:
-  models:
-    - "app/db/models.py — Trade, Signal, Pattern, Decision, SymbolParameter"
-    - "app/config/settings.py — Settings globales"
-  components:
-    - "app/api/main.py (1311 líneas) — FastAPI + 40+ endpoints"
-    - "app/api/dashboard.py (1820 líneas) — HTML rendering"
-    - "app/db/database.py (1276 líneas) — SQLite hub central"
-    - "run.py (628 líneas) — APScheduler + IB watchdog"
-  events: []
-  services:
-    - "app/system/controller.py — SystemController (pause/resume/mode)"
-    - "app/analysis/pipeline.py — AnalysisPipeline"
-    - "app/llm/loop.py — process_pending_signals()"
-    - "app/positions/manager.py — check_positions()"
-
 failed_attempts_summary: []
-
-next_action:
-  phase: 0
-  goal: "Ejecutar Fase 0 — Quick Wins: WAL mode, unificar subprocess LLM, auth endpoints críticos"
-  deadline: null
-  blockers: []
+next_action: {phase: 5, goal: "Execute Issue 001 — Phase 0 Quick Wins", deadline: null, blockers: []}

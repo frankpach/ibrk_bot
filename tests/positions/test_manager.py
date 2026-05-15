@@ -1,8 +1,10 @@
 # tests/positions/test_manager.py
 from unittest.mock import MagicMock, patch
 from datetime import datetime
-from app.positions.manager import check_positions
+from decimal import Decimal
+from app.positions.manager import check_positions, set_broker
 from app.db.models import Trade
+from tests.mocks.mock_broker import MockBrokerAdapter
 
 
 def _open_trade(symbol="AAPL", action="BUY", entry=100.0, sl=98.0, tp=110.0, qty=10, partial=False, partial_done=False, remaining=None, signal_strength="STRONG"):
@@ -20,21 +22,19 @@ def _open_trade(symbol="AAPL", action="BUY", entry=100.0, sl=98.0, tp=110.0, qty
     )
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
 @patch("app.positions.manager.notify")
-def test_check_positions_no_trades(mock_notify, mock_get_trades, mock_get):
+def test_check_positions_no_trades(mock_notify, mock_get_trades):
     mock_get_trades.return_value = []
     check_positions()
     mock_notify.assert_not_called()
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_stop_loss(mock_get_trades, mock_get):
+def test_check_positions_stop_loss(mock_get_trades):
     trade = _open_trade()
     mock_get_trades.return_value = [trade]
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 97.0})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("97.0")}))
     with patch("app.positions.manager._close_position", return_value=True) as mock_close:
         check_positions()
         mock_close.assert_called_once()
@@ -42,107 +42,100 @@ def test_check_positions_stop_loss(mock_get_trades, mock_get):
         assert args[0][1] == "STOP_LOSS"
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_take_profit(mock_get_trades, mock_get):
+def test_check_positions_take_profit(mock_get_trades):
     trade = _open_trade(partial_done=True)  # avoid partial exit
     mock_get_trades.return_value = [trade]
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 111.0})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("111.0")}))
     with patch("app.positions.manager._close_position", return_value=True) as mock_close:
         check_positions()
         mock_close.assert_called_once()
         assert mock_close.call_args[0][1] == "TAKE_PROFIT"
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_partial_exit(mock_get_trades, mock_get):
+def test_check_positions_partial_exit(mock_get_trades):
     trade = _open_trade(entry=100.0, sl=98.0, qty=10)
     mock_get_trades.return_value = [trade]
     # 1.5x SL = 3.0% gain
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 103.5})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("103.5")}))
     with patch("app.positions.manager._close_position", return_value=True) as mock_close:
         check_positions()
         mock_close.assert_called_once()
         assert "PARTIAL" in mock_close.call_args[0][1]
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
 @patch("app.positions.manager.update_trade_status")
-def test_check_positions_trailing_stop_update(mock_update, mock_get_trades, mock_get):
+def test_check_positions_trailing_stop_update(mock_update, mock_get_trades):
     trade = _open_trade(entry=100.0, sl=98.0, partial_done=True)
     mock_get_trades.return_value = [trade]
     # 3x SL = 6% gain -> trailing
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 107.0})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("107.0")}))
     with patch("app.positions.manager._close_position", return_value=False):
         check_positions()
     mock_update.assert_called_once()
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_price_fetch_failure(mock_get_trades, mock_get):
+def test_check_positions_price_fetch_failure(mock_get_trades):
     trade = _open_trade()
     mock_get_trades.return_value = [trade]
-    mock_get.side_effect = Exception("network down")
+    set_broker(MockBrokerAdapter(prices={}))  # no price for AAPL
     check_positions()  # should not raise
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_uses_unrestricted_price_endpoint(mock_get_trades, mock_get):
+def test_check_positions_uses_broker_port(mock_get_trades):
     trade = _open_trade(symbol="AAOI")
     mock_get_trades.return_value = [trade]
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 150.0})
+    broker = MockBrokerAdapter(prices={"AAOI": Decimal("150.0")})
+    set_broker(broker)
     check_positions()
-    assert "/price/free/AAOI" in mock_get.call_args.args[0]
+    assert broker.get_price("AAOI") == Decimal("150.0")
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_sell_stop_loss(mock_get_trades, mock_get):
+def test_check_positions_sell_stop_loss(mock_get_trades):
     trade = _open_trade(action="SELL", entry=100.0, sl=102.0, tp=94.0)
     mock_get_trades.return_value = [trade]
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 103.0})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("103.0")}))
     with patch("app.positions.manager._close_position", return_value=True) as mock_close:
         check_positions()
         mock_close.assert_called_once()
         assert mock_close.call_args[0][1] == "STOP_LOSS"
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_sell_take_profit(mock_get_trades, mock_get):
+def test_check_positions_sell_take_profit(mock_get_trades):
     trade = _open_trade(action="SELL", entry=100.0, sl=102.0, tp=94.0, partial_done=True)
     mock_get_trades.return_value = [trade]
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 93.0})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("93.0")}))
     with patch("app.positions.manager._close_position", return_value=True) as mock_close:
         check_positions()
         mock_close.assert_called_once()
         assert mock_close.call_args[0][1] == "TAKE_PROFIT"
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
-def test_check_positions_min_profit_medium(mock_get_trades, mock_get):
+def test_check_positions_min_profit_medium(mock_get_trades):
     trade = _open_trade(signal_strength="MEDIUM", entry=100.0, sl=98.0, tp=110.0, partial_done=True)
     mock_get_trades.return_value = [trade]
     from app.config.settings import MIN_PROFIT_PCT_MEDIUM
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 100.0 + 100.0 * MIN_PROFIT_PCT_MEDIUM + 0.01})
+    price = 100.0 + 100.0 * MIN_PROFIT_PCT_MEDIUM + 0.01
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal(str(price))}))
     with patch("app.positions.manager._close_position", return_value=True) as mock_close:
         check_positions()
         mock_close.assert_called_once()
         assert mock_close.call_args[0][1] == "MIN_PROFIT_MEDIUM"
 
 
-@patch("app.positions.manager.httpx.get")
 @patch("app.positions.manager.get_open_trades")
 @patch("app.positions.manager.update_trade_status")
-def test_check_positions_partial_close_all(mock_update, mock_get_trades, mock_get):
+def test_check_positions_partial_close_all(mock_update, mock_get_trades):
     trade = _open_trade(entry=100.0, sl=98.0, qty=10)
     mock_get_trades.return_value = [trade]
-    mock_get.return_value = MagicMock(json=lambda: {"market_price": 103.5})
+    set_broker(MockBrokerAdapter(prices={"AAPL": Decimal("103.5")}))
     mock_partial = MagicMock()
     mock_partial.should_exit = True
     mock_partial.exit_reason = "PARTIAL_EXIT"

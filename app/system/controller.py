@@ -3,10 +3,11 @@
 Controlador del sistema: pause/resume, cambio de modo paper/live, circuit breaker.
 Instancia unica compartida entre el bot de Telegram y la API.
 """
-import logging
+import structlog
+from app.infrastructure.db.compat import get_control_settings, update_control_setting
 from app.notifications.telegram import notify
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 CIRCUIT_BREAKER_PCT = 0.05  # 5% de perdida diaria detiene el sistema
 
@@ -15,8 +16,27 @@ class SystemController:
     def __init__(self, scheduler):
         import app.config.settings as s
         self.scheduler = scheduler
-        self.is_paused = False
-        self.mode = "paper" if s.PAPER_TRADING_ONLY else "live"
+
+        # Try to load persisted state; fall back to settings/env
+        try:
+            persisted = get_control_settings()
+        except Exception:
+            persisted = {}
+
+        if persisted:
+            self.is_paused = bool(persisted.get("is_paused", False))
+            self.mode = persisted.get("trading_mode", "paper" if s.PAPER_TRADING_ONLY else "live")
+        else:
+            self.is_paused = False
+            self.mode = "paper" if s.PAPER_TRADING_ONLY else "live"
+
+    def _persist_state(self):
+        """Write current operational state to control_settings."""
+        try:
+            update_control_setting("trading_mode", self.mode)
+            update_control_setting("is_paused", "1" if self.is_paused else "0")
+        except Exception as exc:
+            logger.warning(f"Failed to persist system state: {exc}")
 
     def pause(self):
         for job_id in ("signal_processor", "scanner", "scanner_fetch"):
@@ -25,6 +45,7 @@ class SystemController:
             except Exception:
                 pass
         self.is_paused = True
+        self._persist_state()
         logger.info("System paused")
 
     def resume(self):
@@ -34,6 +55,7 @@ class SystemController:
             except Exception:
                 pass
         self.is_paused = False
+        self._persist_state()
         logger.info("System resumed")
 
     def set_mode(self, mode: str):
@@ -47,6 +69,7 @@ class SystemController:
             s.PAPER_TRADING_ONLY = True
             s.REQUIRE_HUMAN_APPROVAL = False
         self.mode = mode
+        self._persist_state()
         logger.info(f"Mode changed to {mode}")
 
     def check_circuit_breaker(self, daily_pnl: float, capital: float) -> bool:

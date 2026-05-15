@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import structlog
 
-from app.db.database import get_connection
+from app.infrastructure.db.compat import get_connection
 from app.domain.trading.events import (
     CircuitBreakerTriggered,
     ControlSettingChanged,

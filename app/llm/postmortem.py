@@ -9,40 +9,11 @@ import logging
 from datetime import datetime
 
 from app.config.settings import MARKET_TZ, OPENCODE_BIN
-from app.db.database import insert_pattern
+from app.infrastructure.db.compat import insert_pattern
 from app.db.models import Pattern, Trade
 from app.notifications.telegram import notify
 
 logger = logging.getLogger(__name__)
-
-
-def _call_opencode(prompt: str) -> str:
-    """Call OpenCode and return text response. Imported from agent to avoid circular import."""
-    import subprocess
-    from app.config.settings import OPENCODE_MODEL, OPENCODE_CWD
-    try:
-        result = subprocess.run(
-            [OPENCODE_BIN, "run", "--model", OPENCODE_MODEL, "--format", "json", prompt],
-            capture_output=True, text=True, timeout=60,
-            cwd=OPENCODE_CWD,
-        )
-        text_parts = []
-        for line in result.stdout.strip().splitlines():
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line)
-                if event.get("type") == "text":
-                    text_parts.append(event["part"]["text"])
-            except json.JSONDecodeError:
-                continue
-        return "".join(text_parts).strip()
-    except subprocess.TimeoutExpired:
-        logger.error("postmortem opencode call timed out")
-        return ""
-    except Exception as e:
-        logger.error(f"postmortem opencode call failed: {e}")
-        return ""
 
 
 def run_postmortem(trade: Trade, feature_snapshot=None):
@@ -85,7 +56,8 @@ def run_postmortem(trade: Trade, feature_snapshot=None):
         '"suggestions": [{{"dimension": "stop_loss_pct", "suggested_multiplier": 1.1, "confidence": 0.7, "reason": "brief reason"}}]}}'
     )
 
-    response = _call_opencode(prompt)
+    from app.infrastructure.llm.opencode_adapter import OpenCodeAdapter
+    response = OpenCodeAdapter().call(prompt, timeout=60)
 
     # Parse with graceful degradation
     pattern_text = f"{trade.symbol} {trade.action} {outcome} — {trade.exit_reason}"

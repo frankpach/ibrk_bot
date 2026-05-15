@@ -27,9 +27,9 @@ Read only:
 ## Required Gates
 
 - All issues complete or explicitly deferred.
-- Phase 6 quality result captured.
-- Phase 7 review result captured.
-- Phase 9 documentation completed.
+- Quality result captured.
+- Review result captured.
+- Documentation completed.
 - HITL issues reviewed.
 - Durable knowledge promoted to `docs/`.
 - Reusable compact knowledge promoted to `.claude/project-memory/`.

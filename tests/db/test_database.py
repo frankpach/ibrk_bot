@@ -1,7 +1,7 @@
 # tests/db/test_database.py
 import pytest
 from datetime import datetime
-from app.db.database import (
+from app.infrastructure.db.compat import (
     get_connection, init_db,
     insert_signal, get_pending_signals, mark_signal_processed,
     insert_trade, get_open_trades, close_trade, update_trade_status, get_trades_by_status,
@@ -454,7 +454,7 @@ def test_cleanup_old_reports():
     from datetime import timedelta
 
     # Insert a report dated 10 days ago directly (bypass cleanup)
-    from app.db.database import get_connection
+    from app.infrastructure.db.compat import get_connection
     from datetime import datetime as _dt
     old_date = (_dt.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")
     conn = get_connection()

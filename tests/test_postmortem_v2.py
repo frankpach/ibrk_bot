@@ -28,7 +28,7 @@ def test_postmortem_no_openai_import():
 
 
 def test_postmortem_saves_pattern_on_success():
-    with patch("app.llm.postmortem._call_opencode") as mock_oc, \
+    with patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call") as mock_oc, \
          patch("app.llm.postmortem.insert_pattern") as mock_insert, \
          patch("app.llm.postmortem.notify"):
         mock_oc.return_value = '{"pattern_text": "AAPL RSI oversold -> BUY reliable", "suggestions": []}'
@@ -41,7 +41,7 @@ def test_postmortem_saves_pattern_on_success():
 
 
 def test_postmortem_degrades_on_json_parse_failure():
-    with patch("app.llm.postmortem._call_opencode") as mock_oc, \
+    with patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call") as mock_oc, \
          patch("app.llm.postmortem.insert_pattern") as mock_insert, \
          patch("app.llm.postmortem.notify"):
         mock_oc.return_value = "AAPL looks good for BUY on RSI oversold"
@@ -52,7 +52,7 @@ def test_postmortem_degrades_on_json_parse_failure():
 
 
 def test_postmortem_handles_empty_opencode_response():
-    with patch("app.llm.postmortem._call_opencode") as mock_oc, \
+    with patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call") as mock_oc, \
          patch("app.llm.postmortem.insert_pattern") as mock_insert, \
          patch("app.llm.postmortem.notify"):
         mock_oc.return_value = ""
@@ -63,7 +63,7 @@ def test_postmortem_handles_empty_opencode_response():
 
 
 def test_postmortem_notifies_frank():
-    with patch("app.llm.postmortem._call_opencode") as mock_oc, \
+    with patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call") as mock_oc, \
          patch("app.llm.postmortem.insert_pattern"), \
          patch("app.llm.postmortem.notify") as mock_notify:
         mock_oc.return_value = '{"pattern_text": "test", "suggestions": []}'
@@ -75,7 +75,7 @@ def test_postmortem_notifies_frank():
 
 
 def test_postmortem_loss_trade():
-    with patch("app.llm.postmortem._call_opencode") as mock_oc, \
+    with patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call") as mock_oc, \
          patch("app.llm.postmortem.insert_pattern") as mock_insert, \
          patch("app.llm.postmortem.notify"):
         mock_oc.return_value = '{"pattern_text": "bad entry", "suggestions": []}'

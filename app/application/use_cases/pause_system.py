@@ -6,7 +6,7 @@ import structlog
 
 from app.application.event_bus import EventBus
 from app.application.ports.notification_port import INotificationPort
-from app.db.database import get_control_settings, update_control_setting
+from app.infrastructure.db.compat import get_control_settings, update_control_setting
 from app.domain.trading.events import SystemPaused, SystemResumed
 
 logger = structlog.get_logger(__name__)

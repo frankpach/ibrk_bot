@@ -90,7 +90,7 @@ def run_permission_discovery(ib_client) -> list[dict]:
         logger.error(f"market_permissions discovery failed: {e}")
         return []
 
-    from app.db.database import upsert_market_permissions
+    from app.infrastructure.db.compat import upsert_market_permissions
     upsert_market_permissions(results)
     logger.info(f"market_permissions: saved {len(results)} results")
     return results
@@ -101,7 +101,7 @@ def get_permissions_report(ib_client=None, force_refresh: bool = False) -> dict:
     Retorna reporte de permisos. Si la cache tiene < 24h usa DB;
     si force_refresh=True o no hay cache, consulta IB.
     """
-    from app.db.database import get_market_permissions, get_market_permissions_age_hours
+    from app.infrastructure.db.compat import get_market_permissions, get_market_permissions_age_hours
 
     age = get_market_permissions_age_hours()
     if force_refresh or age is None or age > 23:

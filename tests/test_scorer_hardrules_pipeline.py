@@ -95,7 +95,7 @@ class TestHardRules:
 
 class TestDBAnalysisTables:
     def test_init_creates_tables(self):
-        from app.db.database import init_analysis_tables, get_connection
+        from app.infrastructure.db.compat import init_analysis_tables, get_connection
         init_analysis_tables()
         conn = get_connection()
         tables = [r[0] for r in conn.execute(
@@ -108,7 +108,7 @@ class TestDBAnalysisTables:
         assert "watchlist_scores" in tables
 
     def test_get_or_create_symbol_parameters_defaults(self):
-        from app.db.database import get_or_create_symbol_parameters, init_analysis_tables
+        from app.infrastructure.db.compat import get_or_create_symbol_parameters, init_analysis_tables
         init_analysis_tables()
         params = get_or_create_symbol_parameters("TESTSYM")
         assert params.symbol == "TESTSYM"
@@ -116,7 +116,7 @@ class TestDBAnalysisTables:
         assert params.trade_count == 0
 
     def test_insert_feature_snapshot(self):
-        from app.db.database import insert_feature_snapshot, init_analysis_tables
+        from app.infrastructure.db.compat import insert_feature_snapshot, init_analysis_tables
         init_analysis_tables()
         fs_dict = {
             "symbol": "AAPL", "timestamp": datetime.utcnow().isoformat(),
@@ -177,7 +177,7 @@ class TestAnalysisPipeline:
 
     def test_pipeline_persists_feature_snapshot(self):
         from app.analysis.pipeline import AnalysisPipeline
-        from app.db.database import init_analysis_tables
+        from app.infrastructure.db.compat import init_analysis_tables
         init_analysis_tables()
         pipeline = AnalysisPipeline("AAPL", self.data_layer, self.context)
         result = pipeline.run()

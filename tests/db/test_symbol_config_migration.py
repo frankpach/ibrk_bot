@@ -87,7 +87,7 @@ def test_seeded_forex_uses_idealpro(fresh_db):
 
 
 def test_get_approved_symbols_with_meta_returns_correct_structure(fresh_db):
-    from app.db.database import get_approved_symbols_with_meta
+    from app.infrastructure.db.compat import get_approved_symbols_with_meta
     rows = get_approved_symbols_with_meta()
     assert len(rows) == 40
     required_keys = {"symbol", "sec_type", "exchange", "currency", "liquid_hours", "market_key"}

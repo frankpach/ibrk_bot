@@ -1,27 +1,41 @@
 # app/positions/manager.py
-import logging
+import structlog
 import threading
-import httpx
 from app.config.settings import MIN_PROFIT_PCT_MEDIUM
-from app.db.database import get_open_trades, close_trade, update_trade_status
+from app.infrastructure.db.compat import get_open_trades, close_trade, update_trade_status
 from app.llm.postmortem import run_postmortem
 from app.notifications.telegram import notify
 from app.notifications.policy import get_policy
 from app.risk.trailing_stop import TrailingStopManager
 from app.risk.partial_exit import PartialExitManager
 from app.ibkr.fill_tracker import get_fill_price_fallback
+from app.application.ports.broker_port import IBrokerPort
 
-logger = logging.getLogger(__name__)
-from app.config.settings import API_BASE  # noqa: F401
+logger = structlog.get_logger(__name__)
 
 trailing_mgr = TrailingStopManager()
 partial_mgr = PartialExitManager()
 _positions_check_lock = threading.Lock()
 
+# --- Transient dependency injection ---
+_broker: IBrokerPort | None = None
+
+
+def set_broker(broker: IBrokerPort) -> None:
+    global _broker
+    _broker = broker
+
+
+def _get_broker() -> IBrokerPort:
+    if _broker is None:
+        from app.infrastructure.broker.ibkr_adapter import IBKRBrokerAdapter
+        return IBKRBrokerAdapter()
+    return _broker
+
 
 def _is_trade_open(trade_id: int) -> bool:
     """Verifica si un trade sigue OPEN en la base de datos."""
-    from app.db.database import get_connection
+    from app.infrastructure.db.compat import get_connection
     conn = get_connection()
     try:
         row = conn.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
@@ -32,7 +46,8 @@ def _is_trade_open(trade_id: int) -> bool:
 
 def _get_current_price(symbol: str) -> float | None:
     try:
-        return httpx.get(f"{API_BASE}/price/free/{symbol}", timeout=15).json().get("market_price")
+        price = _get_broker().get_price(symbol)
+        return float(price)
     except Exception as e:
         logger.error(f"Could not fetch price for {symbol}: {e}")
         return None
@@ -161,7 +176,7 @@ def check_positions():
             pnl_usd = pnl_pct * entry * qty
 
             try:
-                from app.db.database import upsert_position_snapshot
+                from app.infrastructure.db.compat import upsert_position_snapshot
                 upsert_position_snapshot(
                     trade_id=trade.id,
                     symbol=trade.symbol,

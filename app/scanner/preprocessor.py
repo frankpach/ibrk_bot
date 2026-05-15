@@ -15,7 +15,7 @@ from app.config.settings import (
     MARKET_TZ, MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE,
     MARKET_CLOSE_HOUR, MARKET_CLOSE_MINUTE,
 )
-from app.db.database import get_approved_symbols, get_approved_symbols_with_meta, get_all_active_symbols_today, insert_signal
+from app.infrastructure.db.compat import get_approved_symbols, get_approved_symbols_with_meta, get_all_active_symbols_today, insert_signal
 from app.db.models import Signal
 from app.ibkr.contract_factory import build_contract, get_use_rth
 from app.scanner.liquid_hours import is_liquid_at

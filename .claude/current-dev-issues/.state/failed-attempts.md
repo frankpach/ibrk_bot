@@ -1,6 +1,6 @@
-# Failed Attempts Registry: arch-refactor
+# Failed Attempts Registry: refactor
 
-**Module**: arch-refactor
+**Module**: refactor
 **Last Updated**: 2026-05-14
 
 [Failures will be logged here during execution]

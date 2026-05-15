@@ -1,50 +1,36 @@
-# Decisions Log: arch-refactor
+# Decisions Log: refactor
 
-**Module**: arch-refactor
+**Module**: refactor
 **Last Updated**: 2026-05-14
 
-## D-01: SQL plano + repositorios (no ORM)
+## Module: refactor — 2026-05-14
 
-**Decision**: No SQLAlchemy, no SQLModel. SQL plano con repositorios por entidad.
-**Why**: Codebase ya usa SQL plano eficazmente. ORM añade complejidad sin ganancia clara para trading. SQL plano es más legible, revisable y debuggeable. Repositorios proveen la indirección necesaria para cambiar backend.
-**How to apply**: Todo SQL en `infrastructure/db/repositories/`. Ningún módulo de domain/application importa sqlite3 o psycopg.
+### DEC-001: SQLAlchemy como ORM — committed
+Decidido por el usuario. Reemplaza raw SQL en database.py (1,277 LOC). Facilita portabilidad SQLite→PostgreSQL.
 
----
+### DEC-002: Alembic para migraciones — committed
+Reemplaza ALTER TABLE en try/except. Revisiones numeradas con upgrade() y downgrade() siempre. alembic upgrade head al startup.
 
-## D-02: InProcessJobRunner con asyncio (no Celery/ARQ todavía)
+### DEC-003: Ports/Adapters con capas explícitas — committed
+domain/ → application/ports/ + use_cases/ → infrastructure/ → interfaces/. Tests de use cases sin infra real (mocks).
 
-**Decision**: Background jobs usando asyncio.Semaphore + asyncio.create_task. Estado de jobs en tabla `background_jobs` en DB.
-**Why**: Proceso único hoy. Interfaz swappable: reemplazar InProcessJobRunner por CeleryJobRunner implementando la misma interfaz cuando la carga lo requiera.
-**How to apply**: Fase 6 si se necesita escalar; Fase 9 para separación completa en workers.
+### DEC-004: Eliminar HTTP interno — committed
+llm/loop.py y positions/manager.py dejan de llamar httpx a localhost. Llaman use cases Python directamente.
 
----
+### DEC-005: Event bus in-process síncrono — committed
+Handlers registrados en container.py. Publishers emiten eventos. No Redis/RabbitMQ. Handlers sync.
 
-## D-03: X-Control-Key auth (no JWT/OAuth) para control plane inicial
+### DEC-006: Persistir estado en DB (control_settings) — committed
+is_paused, trading_mode, ib_port y todos los parámetros de riesgo en tabla control_settings SQLAlchemy. Restart preserva estado.
 
-**Decision**: API key en header X-Control-Key leído de .env. Tres niveles: READ_ONLY, OPERATOR, ADMIN.
-**Why**: Tailscale reduce radio de exposición. JWT agrega complejidad (rotación, expiración, storage) sin ganancia proporcional para un sistema de 1 usuario.
-**How to apply**: Middleware en control_plane_routes.py. JWT diferido a Fase 8 si se requiere.
+### DEC-007: Control plane /control — committed
+React SPA accesible desde header del dashboard. Gestiona API keys (cifradas), puertos IB, DB URL, parámetros de riesgo, jobs/scheduler.
 
----
+### DEC-008: Control Key + Admin Key — committed
+X-Control-Key para operaciones estándar. X-Admin-Key para alto impacto (modo live, API keys, puertos IB, DB URL, aprobar símbolos).
 
-## D-04: No DDD puro — use cases + ports + adapters
+### DEC-009: ThreadPoolExecutor para jobs lentos — committed
+max_workers=3. Estado en background_jobs (SQLAlchemy). API de polling: POST /jobs/{type} → {job_id}, GET /jobs/{id} → {status, result}.
 
-**Decision**: No Aggregates, no Domain Services formales, no Repositories como parte del domain.
-**Why**: El dominio de trading de este sistema no tiene invariantes complejos que requieran Aggregates. Use cases + ports proveen suficiente separación para testabilidad y evolución.
-**How to apply**: application/ports/ define interfaces. infrastructure/ implementa. domain/ solo entidades y eventos.
-
----
-
-## D-05: No CQRS full — read models separados para dashboard
-
-**Decision**: Un read model separado para dashboard/reportes. No event sourcing.
-**Why**: El dashboard agrega datos de 15+ fuentes. Separar en DashboardQueryService evita que el dominio operativo quede acoplado a presentación. Event sourcing es overkill para este sistema.
-**How to apply**: infrastructure/db/read_models/ con queries optimizadas para presentación.
-
----
-
-## D-06: Feature flags temporales para rollback en Fases 1–2
-
-**Decision**: USE_DIRECT_CALLS=true/false en .env para Fase 1. Se elimina después de 1 semana de operación estable.
-**Why**: Fase 1 toca la ruta crítica de trading (loop.py → orders/place). Feature flag permite rollback sin revert de código.
-**How to apply**: Verificar en execute_order.py qué path tomar. Eliminar al cerrar Fase 1.
+### DEC-010: Fernet (cryptography) para secrets — pending-confirmation
+cryptography.Fernet con SECRET_ENCRYPTION_KEY env var. Campos is_secret=True cifrados. Nunca en plain text en API responses.

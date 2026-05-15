@@ -39,8 +39,10 @@ class TelegramNotificationAdapter(INotificationPort):
                     estimated_risk_usd=estimated_risk_usd,
                 )
             )
-        except RuntimeError:
-            # If already inside an event loop (e.g. tests), use the sync fallback
+        except RuntimeError as exc:
+            if "cannot run nested event loop" not in str(exc) and "This event loop is already running" not in str(exc):
+                raise
+            # Event loop conflict (e.g. tests): use the sync fallback
             from app.notifications.telegram import request_approval as sync_request_approval
             return sync_request_approval(
                 symbol=symbol,

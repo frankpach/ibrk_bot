@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.notifications.telegram_bot import (
-    _api, _call_opencode, _only_owner,
+    _api, _only_owner,
     cmd_estado, cmd_posiciones, cmd_cerrar,
     cmd_analizar, cmd_ayuda, cmd_diagnostico,
     cmd_modo, cmd_notificaciones, cmd_silencio,
@@ -25,22 +25,6 @@ def test_api_error():
     with patch("app.notifications.telegram_bot.httpx.get", side_effect=Exception("fail")):
         result = _api("get", "/health")
         assert "error" in result
-
-
-@patch("app.notifications.telegram_bot.subprocess.run")
-def test_call_opencode_success(mock_run):
-    mock_run.return_value = MagicMock(
-        stdout=json.dumps({"type": "text", "part": {"text": "hello"}}),
-        stderr="",
-    )
-    result = _call_opencode("prompt")
-    assert result == "hello"
-
-
-@patch("app.notifications.telegram_bot.subprocess.run", side_effect=Exception("fail"))
-def test_call_opencode_error(mock_run):
-    result = _call_opencode("prompt")
-    assert "Error" in result
 
 
 @pytest.mark.asyncio

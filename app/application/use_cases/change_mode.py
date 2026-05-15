@@ -7,7 +7,7 @@ import structlog
 from app.application.event_bus import EventBus
 from app.application.ports.broker_port import IBrokerPort
 from app.application.ports.notification_port import INotificationPort
-from app.db.database import get_control_settings, update_control_setting, get_trades_by_status
+from app.infrastructure.db.compat import get_control_settings, update_control_setting, get_trades_by_status
 from app.domain.trading.events import TradingModeSwitched
 
 logger = structlog.get_logger(__name__)

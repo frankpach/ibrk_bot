@@ -37,7 +37,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 import pytest
-from app.db.database import init_db, get_connection
+from app.infrastructure.db.compat import init_db, get_connection
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +46,7 @@ def _init_test_db(tmp_path):
     Every test gets a fresh in-memory SQLite DB with all tables.
     We temporarily override DB_PATH so the real file is never touched.
     """
-    import app.db.database as db_mod
+    import app.infrastructure.db.compat as db_mod
     import app.config.settings as settings_mod
 
     old_db_path = getattr(db_mod, "DB_PATH", None)

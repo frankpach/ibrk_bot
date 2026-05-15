@@ -10,7 +10,7 @@ def fetch_and_cache_news(data_layer) -> int:
     Fetch news for all approved symbols. Returns count of articles saved.
     Rate-limit safe: 0.5s delay between symbols.
     """
-    from app.db.database import (
+    from app.infrastructure.db.compat import (
         get_approved_symbols_with_meta, insert_news_cache, clear_news_cache_older_than,
     )
 

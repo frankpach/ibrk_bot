@@ -29,7 +29,7 @@ def get_sector_context() -> dict:
     Returns {symbol: sector_boost_score} based on sector ETF performance.
     Positive = tailwind, negative = headwind, 0 = neutral.
     """
-    from app.db.database import get_scanner_results
+    from app.infrastructure.db.compat import get_scanner_results
 
     sector_data = get_scanner_results("sector")
     context = {}
@@ -82,7 +82,7 @@ def scan_correlation_lags(data_layer) -> list:
     Find symbols significantly lagging their sector ETF today.
     A lagging symbol in an uptrending sector = potential catch-up trade.
     """
-    from app.db.database import get_scanner_results, get_daily_watchlist, upsert_daily_watchlist
+    from app.infrastructure.db.compat import get_scanner_results, get_daily_watchlist, upsert_daily_watchlist
     from app.config.settings import MARKET_TZ
 
     today = datetime.now(MARKET_TZ).strftime("%Y-%m-%d")
@@ -168,7 +168,7 @@ def scan_news_triggered_opportunities(data_layer) -> list:
     Check if any recent news (last 45min) warrants immediate analysis.
     Returns list of symbols with positive news that haven't been analyzed today.
     """
-    from app.db.database import get_news_cache, get_daily_watchlist, upsert_daily_watchlist, get_approved_symbols
+    from app.infrastructure.db.compat import get_news_cache, get_daily_watchlist, upsert_daily_watchlist, get_approved_symbols
     from datetime import timedelta
     from app.config.settings import MARKET_TZ
 
@@ -259,7 +259,7 @@ def run_opportunity_scan(data_layer, ib_client=None) -> list:
     Returns list of NEW high-scoring opportunities (not previously alerted).
     Sector context is applied as a score multiplier.
     """
-    from app.db.database import (
+    from app.infrastructure.db.compat import (
         get_scanner_results, get_approved_symbols, upsert_daily_watchlist,
         mark_watchlist_alerted,
     )

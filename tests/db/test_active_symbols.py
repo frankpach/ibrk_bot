@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from app.db.database import (
+from app.infrastructure.db.compat import (
     get_active_symbols,
     get_all_active_symbols_today,
     init_active_symbols_table,

@@ -41,6 +41,7 @@ OPENCODE_CWD = os.getenv("OPENCODE_CWD", "/home/frankpach/ibkr-bot")
 # --- Internal API ---
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8088")
 API_CONTROL_KEY = os.getenv("API_CONTROL_KEY", "")
+API_ADMIN_KEY = os.getenv("API_ADMIN_KEY", "")
 
 # --- Scheduler ---
 SCAN_INTERVAL_MINUTES = 15

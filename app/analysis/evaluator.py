@@ -16,7 +16,7 @@ def run_return_evaluator(data_layer):
 
 
 def _evaluate_at(data_layer, days_ago: int):
-    from app.db.database import get_candidate_decisions_for_evaluation, get_connection
+    from app.infrastructure.db.compat import get_candidate_decisions_for_evaluation, get_connection
     decisions = get_candidate_decisions_for_evaluation(days_ago)
     if not decisions:
         return

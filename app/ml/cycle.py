@@ -51,7 +51,7 @@ def run_learning_cycle(data_layer, ib_client=None) -> LearningReport:
 
     # Step 2: retrain SignalFilter if enough data
     try:
-        from app.db.database import get_closed_trades_with_snapshots
+        from app.infrastructure.db.compat import get_closed_trades_with_snapshots
         from app.ml.signal_filter import get_signal_filter
         trades = get_closed_trades_with_snapshots(limit=200)
         if len(trades) >= 10:
@@ -67,7 +67,7 @@ def run_learning_cycle(data_layer, ib_client=None) -> LearningReport:
 
     # Step 3: rollback check and win rates per symbol
     try:
-        from app.db.database import get_approved_symbols
+        from app.infrastructure.db.compat import get_approved_symbols
         symbols = get_approved_symbols()
         for symbol in symbols:
             try:
@@ -86,7 +86,7 @@ def run_learning_cycle(data_layer, ib_client=None) -> LearningReport:
     # Step 4: save daily account snapshot when IB client is available
     if ib_client is not None:
         try:
-            from app.db.database import upsert_account_snapshot, get_daily_pnl
+            from app.infrastructure.db.compat import upsert_account_snapshot, get_daily_pnl
             account = ib_client.get_account()
             daily_pnl = get_daily_pnl()
             capital = float(account.get("net_liquidation") or 0.0)
@@ -122,7 +122,7 @@ def maybe_rollback_parameters(symbol: str) -> bool:
     Revert symbol_parameters to previous version if recent win rate < 30%.
     Returns True if rollback was applied.
     """
-    from app.db.database import (
+    from app.infrastructure.db.compat import (
         get_closed_trades_by_symbol,
         get_or_create_symbol_parameters,
         update_symbol_parameters,
@@ -153,7 +153,7 @@ def maybe_rollback_parameters(symbol: str) -> bool:
 
 def _get_win_rate_last_10(symbol: str) -> float | None:
     """Return win rate for last 10 closed trades, or None if < 3 trades."""
-    from app.db.database import get_closed_trades_by_symbol
+    from app.infrastructure.db.compat import get_closed_trades_by_symbol
     trades = get_closed_trades_by_symbol(symbol, limit=10)
     if len(trades) < 3:
         return None

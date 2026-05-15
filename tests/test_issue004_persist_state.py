@@ -24,7 +24,7 @@ from app.domain.trading.events import (
 from app.application.use_cases.change_mode import ChangeTradingModeUseCase
 from app.application.use_cases.pause_system import PauseSystemUseCase, ResumeSystemUseCase
 from app.infrastructure.notifications.telegram_adapter import TelegramNotificationAdapter
-from app.db.database import get_connection, get_control_settings, update_control_setting
+from app.infrastructure.db.compat import get_connection, get_control_settings, update_control_setting
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +395,7 @@ def test_no_direct_notify_imports_in_application():
     import os
     from pathlib import Path
 
-    app_dir = Path("D:\\Documents\\Mis_proyectos\\Proyectos_Actuales\\llm_ibr\\app\\application")
+    app_dir = Path(__file__).parent.parent / "app" / "application"
     found = []
     for py_file in app_dir.rglob("*.py"):
         content = py_file.read_text(encoding="utf-8")

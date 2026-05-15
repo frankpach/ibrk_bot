@@ -1,37 +1,37 @@
-# Next Actions: arch-refactor
+# Next Actions: refactor
 
-**Module**: arch-refactor
-**Last Updated**: 2026-05-14
-
-## ✅ Fase 0 — Completa (2026-05-14)
-
-WAL mode, OPENCODE_CWD, OpenCodeAdapter, X-Control-Key auth. 839/839 tests green.
+**Module**: refactor
+**Last Updated**: 2026-05-15
 
 ## Current Focus
 
-**Phase**: Fase 1 — Eliminar HTTP interno
-**Goal**: Reemplazar `llm/loop.py → POST /orders/place` (httpx interno) con llamada directa a `ExecuteOrderUseCase`
+**Phase**: Phase 5 — Execution (COMPLETADO)
+**Goal**: Ejecutar los 10 issues en orden secuencial — TODOS COMPLETADOS
 
 ## Next Action (Do This Now)
 
-1. **Crear `app/application/trading/execute_order.py`** — `ExecuteOrderUseCase`
-   - Extrae la lógica actual de `POST /orders/place` en `app/api/main.py`
-   - Parámetros: symbol, action, quantity, order_type, stop_loss_pct, take_profit_pct, limit_price (optional)
-   - Feature flag: `USE_DIRECT_CALLS=true` en `.env` para rollback sin revert de código (D-06)
+1. `/210-quality refactor` — ejecutar quality gates y validar el modulo completo
 
-2. **Actualizar `app/llm/loop.py`**
-   - Reemplazar `httpx.post(f"{API_BASE}/orders/place", ...)` por `ExecuteOrderUseCase().execute(...)`
-   - Verificar que `app/positions/manager.py` también usa HTTP interno y migrar si aplica
+## Queue de Ejecución
 
-3. **Mantener `POST /orders/place` en main.py** — ahora solo llama `ExecuteOrderUseCase`; no eliminar el endpoint todavía
+| Orden | Issue | Effort | Type | Estado |
+|-------|-------|--------|------|--------|
+| 1 | 001-phase0-quick-wins | M | AFK | DONE |
+| 2 | 002-phase1-eliminate-internal-http | M | AFK | DONE |
+| 3 | 003-phase2-extract-services | L | AFK | DONE |
+| 4 | 004-phase3-persist-state | M | AFK | DONE |
+| 5 | 005-phase4a-control-plane-backend | M | AFK | DONE |
+| 6 | 006-phase4b-control-plane-frontend | M | HITL | DONE |
+| 7 | 007-phase5-dashboard-jobs | M | AFK | DONE |
+| 8 | 008-phase6-sqlalchemy-alembic | XL | AFK | DONE |
+| 9 | 009-phase7-postgresql | M | HITL | DONE |
+| 10 | 010-phase8-hardening | M | AFK | DONE |
 
-## Backlog
+## Protocolo por Issue
 
-- [ ] Fase 1 — Eliminar HTTP interno (loop.py, positions/manager.py) — después de Fase 0
-- [ ] Fase 2 — Extraer servicios de aplicación (ports, use cases, scheduler split) — después de Fase 1
-- [ ] Fase 3 — Persistir system state en DB — después de Fase 2
-- [ ] Fase 4 — Control plane /control — después de Fase 3
-- [ ] Fase 5 — Desacoplar dashboard/reportes — después de Fase 4
-- [ ] Fase 6 — Doble soporte SQLite/PostgreSQL — después de Fase 5
-- [ ] Fase 7 — Migrar a PostgreSQL — después de Fase 6
-- [ ] Fase 8 — Endurecimiento final — después de Fase 7
+Para cada issue:
+1. `/clear`
+2. `/workflows:200-execution <issue-number>`
+3. Al terminar: mover issue a `done/`, actualizar `current-objective.md`
+4. `/clear`
+5. Siguiente issue

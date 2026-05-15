@@ -145,7 +145,7 @@ def _dim_price_change(features) -> float:
 def _get_multipliers(symbol: str) -> dict:
     """Load per-symbol weight multipliers from DB. Returns defaults if not found."""
     try:
-        from app.db.database import get_or_create_symbol_parameters
+        from app.infrastructure.db.compat import get_or_create_symbol_parameters
         params = get_or_create_symbol_parameters(symbol)
         if params:
             return {
@@ -214,7 +214,7 @@ def update_weights_attenuated(
 ) -> bool:
     """Update per-symbol weight multiplier with attenuation. Returns False if trade count < min."""
     try:
-        from app.db.database import get_or_create_symbol_parameters, update_symbol_parameters
+        from app.infrastructure.db.compat import get_or_create_symbol_parameters, update_symbol_parameters
         params = get_or_create_symbol_parameters(symbol)
         if params is None:
             return False

@@ -240,7 +240,7 @@ def compute_features(
 
     # Load feature relevance from DB
     try:
-        from app.db.database import get_or_create_symbol_parameters
+        from app.infrastructure.db.compat import get_or_create_symbol_parameters
         params = get_or_create_symbol_parameters(symbol)
         if params:
             fs.feature_relevance = {

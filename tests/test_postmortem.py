@@ -21,7 +21,7 @@ def make_closed_trade(pnl_pct=0.04, exit_reason="TAKE_PROFIT"):
 
 
 @patch("app.llm.postmortem.insert_pattern")
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 def test_inserts_pattern_after_win(mock_oc, mock_insert):
     mock_oc.return_value = '{"pattern_text": "AAPL + RSI<30 + MACD alcista -> BUY confiable", "suggestions": []}'
 
@@ -36,7 +36,7 @@ def test_inserts_pattern_after_win(mock_oc, mock_insert):
 
 
 @patch("app.llm.postmortem.insert_pattern")
-@patch("app.llm.postmortem._call_opencode")
+@patch("app.infrastructure.llm.opencode_adapter.OpenCodeAdapter.call")
 def test_inserts_loss_pattern_after_stop_loss(mock_oc, mock_insert):
     mock_oc.return_value = '{"pattern_text": "AAPL + RSI marginal -> evitar entrada sin volumen", "suggestions": []}'
 

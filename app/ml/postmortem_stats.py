@@ -39,7 +39,7 @@ def enrich_postmortem_context(symbol: str) -> "PostmortemContext | None":
     Returns None if fewer than 3 closed trades exist for the symbol.
     """
     try:
-        from app.db.database import get_closed_trades_by_symbol, get_patterns_for_symbol
+        from app.infrastructure.db.compat import get_closed_trades_by_symbol, get_patterns_for_symbol
         trades = get_closed_trades_by_symbol(symbol, limit=10)
         if len(trades) < 3:
             return None

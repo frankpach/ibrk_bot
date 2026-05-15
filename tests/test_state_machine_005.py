@@ -1,12 +1,12 @@
 import pytest
 from datetime import datetime, timezone
-from app.db.database import init_db, get_connection, insert_trade, get_open_trades, get_trades_by_status, update_trade_status, update_trade_close_fill, close_trade
+from app.infrastructure.db.compat import init_db, get_connection, insert_trade, get_open_trades, get_trades_by_status, update_trade_status, update_trade_close_fill, close_trade
 from app.db.models import Trade
 
 
 @pytest.fixture
 def fresh_db(tmp_path):
-    import app.db.database as db_mod
+    import app.infrastructure.db.compat as db_mod
     orig_path = db_mod.DB_PATH
     db_mod.DB_PATH = str(tmp_path / "test_state_machine.db")
     init_db()

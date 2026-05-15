@@ -1,15 +1,20 @@
 # app/api/main.py
 import logging
+import os
 from datetime import datetime
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from app.api.auth import require_control_key
+from app.interfaces.api.routes.control_routes import router as control_router
+from app.interfaces.api.routes.jobs_routes import router as jobs_router
 
 from app.config.settings import MARKET_TZ, MAX_RISK_PCT, MIN_RISK_USD, MAX_POSITION_USD
 from app.api.capital import get_operating_capital
 from app.ibkr.client import get_client
 from app.risk.validator import validate_order
-from app.db.database import (
+from app.infrastructure.db.compat import (
     get_pending_signals,
     get_open_trades,
     get_patterns_for_symbol,
@@ -19,6 +24,35 @@ from app.db.database import (
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="IBKR AI Trader API")
+
+# CORS — restrict to configured origin(s); default is restrictive (no public access)
+_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
+allow_origins = [o.strip() for o in _ALLOWED_ORIGINS.split(",") if o.strip()] or ["*"]
+if os.getenv("RESTRICT_CORS", "false").lower() == "true":
+    allow_origins = [o.strip() for o in _ALLOWED_ORIGINS.split(",") if o.strip()]
+    if not allow_origins:
+        allow_origins = []
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["X-Control-Key", "X-Admin-Key", "Content-Type"],
+)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Add security headers to every response."""
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+app.include_router(control_router)
+app.include_router(jobs_router)
 client = get_client()
 
 
@@ -26,7 +60,7 @@ def _get_universe_symbols(auto_approve_open: bool = False) -> list[str]:
     approved = list(get_approved_symbols())
     open_symbols = [t.symbol.upper() for t in get_open_trades()]
     if auto_approve_open:
-        from app.db.database import approve_symbol
+        from app.infrastructure.db.compat import approve_symbol
         approved_set = set(approved)
         for sym in open_symbols:
             if sym not in approved_set:
@@ -104,7 +138,7 @@ def get_portfolio():
 
 @app.get("/allowed-symbols")
 def get_allowed_symbols():
-    from app.db.database import get_approved_symbols_with_meta
+    from app.infrastructure.db.compat import get_approved_symbols_with_meta
     approved_meta = get_approved_symbols_with_meta()
     meta_by_symbol = {row["symbol"]: row for row in approved_meta}
     symbols = []
@@ -122,7 +156,7 @@ def get_allowed_symbols():
 
 @app.post("/symbols/propose")
 def propose_symbol(req: SymbolProposalRequest):
-    from app.db.database import save_symbol_proposal
+    from app.infrastructure.db.compat import save_symbol_proposal
     symbol = req.symbol.upper()
     save_symbol_proposal(symbol, req.reason)
     return {
@@ -349,7 +383,7 @@ def orders_place(req: OrderPreviewRequest):
     # Use real fill price if available
     fill_price = order_result.fill_price or current_price
 
-    from app.db.database import insert_trade
+    from app.infrastructure.db.compat import insert_trade
     from app.db.models import Trade
     from datetime import datetime as dt
     price_for_sl = fill_price or current_price
@@ -389,13 +423,13 @@ def orders_place(req: OrderPreviewRequest):
 
 @app.get("/symbols/proposals")
 def get_proposals():
-    from app.db.database import get_pending_proposals
+    from app.infrastructure.db.compat import get_pending_proposals
     return get_pending_proposals()
 
 
 @app.post("/symbols/approve/{symbol}", dependencies=[Depends(require_control_key)])
 def approve_symbol_endpoint(symbol: str):
-    from app.db.database import approve_symbol
+    from app.infrastructure.db.compat import approve_symbol
     symbol = symbol.upper()
     ib_client = client if client and client.ib.isConnected() else None
     approve_symbol(symbol, ib_client=ib_client)
@@ -408,7 +442,7 @@ def approve_symbol_endpoint(symbol: str):
 @app.get("/system/status")
 def system_status():
     from app.system.controller import get_controller
-    from app.db.database import get_daily_pnl, get_open_trades
+    from app.infrastructure.db.compat import get_daily_pnl, get_open_trades
     from app.config.settings import PAPER_TRADING_ONLY
     try:
         ctrl = get_controller()
@@ -496,7 +530,7 @@ def system_mode(mode: str):
 
 @app.get("/trades/closed")
 def get_closed_trades_endpoint(limit: int = 10):
-    from app.db.database import get_closed_trades
+    from app.infrastructure.db.compat import get_closed_trades
     trades = get_closed_trades(limit)
     return [
         {
@@ -514,7 +548,7 @@ def get_closed_trades_endpoint(limit: int = 10):
 @app.post("/orders/close/id/{trade_id}", dependencies=[Depends(require_control_key)])
 def close_trade_by_id(trade_id: int):
     """Request to close a position by trade ID — sends Telegram confirmation."""
-    from app.db.database import get_open_trades
+    from app.infrastructure.db.compat import get_open_trades
     trades = [t for t in get_open_trades() if t.id == trade_id]
     if not trades:
         raise HTTPException(status_code=404, detail="Trade not found or already closed")
@@ -534,7 +568,7 @@ def close_trade_by_id(trade_id: int):
 
 @app.post("/orders/close/{symbol}", dependencies=[Depends(require_control_key)])
 def close_position(symbol: str):
-    from app.db.database import get_open_trades, close_trade
+    from app.infrastructure.db.compat import get_open_trades, close_trade
     symbol = symbol.upper()
     trades = [t for t in get_open_trades() if t.symbol == symbol]
     if not trades:
@@ -590,7 +624,7 @@ def close_position(symbol: str):
 
 @app.post("/orders/close-all", dependencies=[Depends(require_control_key)])
 def close_all_positions():
-    from app.db.database import get_open_trades, close_trade
+    from app.infrastructure.db.compat import get_open_trades, close_trade
     trades = get_open_trades()
     if not trades:
         return {"status": "ok", "closed": 0}
@@ -669,275 +703,12 @@ def dashboard():
 
 @app.get("/dashboard/data")
 def dashboard_data():
-    """JSON endpoint consumed by the React dashboard every 30s."""
-    from pathlib import Path
-    from app.db.database import (
-        get_open_trades, get_closed_trades, get_pending_signals,
-        get_patterns_for_symbol, get_daily_pnl, get_closed_trades_by_symbol,
-        get_approved_symbols, get_account_history,
-    )
+    """JSON endpoint consumed by the React dashboard every 30s.
 
-    # ── Status ──
-    daily_pnl = get_daily_pnl()
-    open_trades = get_open_trades()
-
-    account_history = []
-    latest_account = {}
-    try:
-        account_history = get_account_history(days=30)
-        if account_history:
-            latest_account = account_history[-1]
-    except Exception as e:
-        logger.warning(f"Account history failed: {e}")
-
-    _nl = float(latest_account.get("net_liquidation") or 0.0)
-    _bp = float(latest_account.get("buying_power") or 0.0)
-    _capital = get_operating_capital(_nl) if _nl else None
-    if not _capital:
-        from app.config.settings import CAPITAL_CAP
-        _capital = CAPITAL_CAP
-    if not latest_account:
-        latest_account = {
-            "net_liquidation": round(_nl, 2),
-            "buying_power": round(_bp, 2),
-        }
-
-    # Detect mode from settings + controller
-    from app.config.settings import PAPER_TRADING_ONLY
-    _mode = "paper" if PAPER_TRADING_ONLY else "live"
-    latest_account_date = str(latest_account.get("date") or "")
-    today_utc = datetime.utcnow().strftime("%Y-%m-%d")
-
-    status = {
-        "mode": _mode,
-        "paused": False,
-        "daily_pnl_usd": round(daily_pnl, 2),
-        "daily_pnl_pct": round(daily_pnl / _capital * 100, 4) if _capital else 0.0,
-        "open_positions": len(open_trades),
-        "operating_capital": _capital,
-        "simulated_capital": _capital,
-        "net_liquidation": round(_nl, 2),
-        "buying_power": round(_bp, 2),
-        "ib_data_live": bool(latest_account_date and latest_account_date == today_utc),
-    }
-    try:
-        from app.system.controller import get_controller
-        ctrl = get_controller()
-        status["mode"] = ctrl.mode
-        status["paused"] = ctrl.is_paused
-    except RuntimeError:
-        pass
-    status["drawdown_pct"] = 0.0
-
-    # ── Open trades ──
-    trades_out = [
-        {
-            "id": t.id,
-            "trade_id": t.id,
-            "symbol": t.symbol, "action": t.action,
-            "quantity": t.quantity,
-            "entry_price": t.entry_fill_price or t.entry_price,
-            "stop_loss_price": t.stop_loss_price,
-            "take_profit_price": t.take_profit_price,
-            "signal_strength": t.signal_strength,
-            "opened_at": t.opened_at.isoformat() if hasattr(t.opened_at, 'isoformat') else str(t.opened_at),
-        }
-        for t in open_trades
-    ]
-
-    # ── Closed trades (last 8, with pnl_pct) ──
-    closed_out = [
-        {
-            "symbol": t.symbol, "action": t.action,
-            "pnl_usd": t.pnl_usd, "pnl_pct": t.pnl_pct,
-            "exit_reason": t.exit_reason,
-            "closed_at": t.closed_at.isoformat() if t.closed_at and hasattr(t.closed_at, 'isoformat') else str(t.closed_at or ""),
-        }
-        for t in get_closed_trades(limit=8)
-    ]
-
-    # ── Signals (include extra_indicators for weekly_trend) ──
-    signals_out = [
-        {
-            "symbol": s.symbol, "strength": s.strength,
-            "rsi": s.rsi, "volume_ratio": s.volume_ratio,
-            "extra_indicators": s.extra_indicators or "{}",
-            "created_at": s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at),
-        }
-        for s in get_pending_signals()
-    ]
-
-    # ── Patterns (from approved symbols) ──
-    patterns_out = []
-    try:
-        syms = get_approved_symbols()[:8]
-        for sym in syms:
-            for p in get_patterns_for_symbol(sym, limit=1):
-                patterns_out.append({
-                    "symbol": p.symbol,
-                    "pattern_text": p.pattern_text,
-                    "wins": p.win_count, "losses": p.loss_count,
-                })
-    except Exception:
-        pass
-
-    # ── Learning metrics ──
-    learning = {"model_trained": False, "win_rates": {}, "total_trades": 0, "pkl_age_hours": None}
-    try:
-        pkl = Path("models/signal_filter.pkl")
-        if pkl.exists():
-            import time
-            age_h = (time.time() - pkl.stat().st_mtime) / 3600
-            learning["model_trained"] = True
-            learning["pkl_age_hours"] = round(age_h, 1)
-    except Exception:
-        pass
-    try:
-        all_closed = get_closed_trades(limit=150)
-        learning["total_trades"] = len(all_closed)
-        by_sym: dict = {}
-        for t in all_closed:
-            by_sym.setdefault(t.symbol, []).append(t)
-        for sym, ts in by_sym.items():
-            recent = ts[:10]
-            if len(recent) >= 3:
-                wins = sum(1 for t in recent if (t.pnl_pct or 0) > 0)
-                learning["win_rates"][sym] = round(wins / len(recent), 3)
-    except Exception:
-        pass
-
-    # --- 1. Position snapshots (live P&L per open trade) ---
-    try:
-        from app.db.database import get_position_snapshots
-        pos_snaps = get_position_snapshots()  # {trade_id: {current_price, pnl_usd, pnl_pct, updated_at}}
-        for t in trades_out:
-            snap = pos_snaps.get(t.get("trade_id"))
-            if snap:
-                t["current_price"] = snap.get("current_price")
-                t["pnl_usd"] = snap.get("pnl_usd", 0.0)
-                t["pnl_pct"] = snap.get("pnl_pct", 0.0)
-                t["snapshot_at"] = snap.get("updated_at")
-            else:
-                t["current_price"] = t.get("entry_price")
-                t["pnl_usd"] = 0.0
-                t["pnl_pct"] = 0.0
-                t["snapshot_at"] = None
-    except Exception as e:
-        logger.warning(f"Position snapshots failed: {e}")
-        pos_snaps = {}
-
-    position_snapshots_out = list(pos_snaps.values()) if pos_snaps else []
-    if status["mode"] == "live":
-        live_trade_ids = {t["trade_id"] for t in trades_out}
-        floating_live_pnl = sum(
-            float(snap.get("pnl_usd") or 0.0)
-            for snap in position_snapshots_out
-            if snap.get("trade_id") in live_trade_ids
-        )
-        status["daily_pnl_usd"] = round(floating_live_pnl, 2)
-        status["daily_pnl_pct"] = round(floating_live_pnl / _capital * 100, 4) if _capital else 0.0
-
-    # --- 3. News (filtered by approved symbols) ---
-    news = []
-    try:
-        from app.db.database import get_news_cache
-        all_syms = _get_universe_symbols(auto_approve_open=True)
-        news = get_news_cache(symbols=all_syms, limit=20)
-    except Exception as e:
-        logger.warning(f"News cache failed: {e}")
-
-    # --- 4. Scanner results (all scan types) ---
-    scanner = {}
-    try:
-        from app.db.database import get_scanner_results
-        for scan_type in ("most_active", "top_movers", "gainers", "losers", "sector", "implied_move"):
-            scanner[scan_type] = get_scanner_results(scan_type)
-    except Exception as e:
-        logger.warning(f"Scanner results failed: {e}")
-
-    # --- 5. Symbol universe with calibration data ---
-    symbols_universe = []
-    try:
-        from app.db.database import get_or_create_symbol_parameters
-        open_symbols = {t.symbol for t in open_trades}
-        universe_symbols = _get_universe_symbols(auto_approve_open=True)
-        for sym in universe_symbols:
-            try:
-                params = get_or_create_symbol_parameters(sym)
-                trades_sym = get_closed_trades_by_symbol(sym, limit=20)
-                wins = sum(1 for t in trades_sym if (t.pnl_pct or 0) > 0)
-                win_rate = round(wins / len(trades_sym), 3) if trades_sym else None
-                multipliers_drifted = {
-                    k: round(getattr(params, f"{k}_mult", 1.0), 3)
-                    for k in ("momentum", "trend", "volume", "volatility")
-                    if abs(getattr(params, f"{k}_mult", 1.0) - 1.0) > 0.05
-                }
-                symbols_universe.append({
-                    "symbol": sym,
-                    "backtest_calibrated": bool(getattr(params, "backtest_calibrated", 0)),
-                    "backtest_calibrated_at": getattr(params, "backtest_calibrated_at", None),
-                    "backtest_profit_factor": getattr(params, "backtest_profit_factor", None),
-                    "stop_loss_pct": params.stop_loss_pct,
-                    "take_profit_pct": params.take_profit_pct,
-                    "trade_count": params.trade_count,
-                    "win_rate": win_rate,
-                    "multipliers_drifted": multipliers_drifted,
-                    "is_open": sym in open_symbols,
-                })
-            except Exception:
-                pass
-        symbols_universe.sort(key=lambda item: (not item["is_open"], item["symbol"]))
-    except Exception as e:
-        logger.warning(f"Symbols universe failed: {e}")
-
-    # Daily watchlist (dynamic opportunity candidates)
-    daily_watchlist = []
-    try:
-        from app.db.database import get_daily_watchlist
-        from datetime import datetime as _dt2
-        daily_watchlist = get_daily_watchlist(_dt2.utcnow().strftime("%Y-%m-%d"))
-    except Exception:
-        pass
-
-    # --- 6. IB connection status ---
-    ib_connected = False
-    try:
-        ib_connected = bool(client.ib.isConnected())
-    except Exception:
-        pass
-
-    # --- 7. Earnings warnings for open positions ---
-    earnings_warnings = {}
-    try:
-        from datetime import datetime as _dt
-        from app.llm.agent import get_data_layer
-        data_layer_inst = get_data_layer()
-        for trade in open_trades:
-            ed = data_layer_inst.get_earnings_date(trade.symbol)
-            if ed:
-                days_until = (ed - _dt.now()).days
-                if 0 <= days_until <= 3:
-                    earnings_warnings[trade.symbol] = days_until
-    except Exception as e:
-        logger.debug(f"Earnings warnings: {e}")
-
-    return {
-        "status": status,
-        "open_trades": trades_out,
-        "closed_trades": closed_out,
-        "signals": signals_out,
-        "patterns": patterns_out,
-        "position_snapshots": position_snapshots_out,
-        "learning": learning,
-        "account_history": account_history,
-        "latest_account": latest_account,
-        "news": news,
-        "scanner": scanner,
-        "symbols_universe": symbols_universe,
-        "ib_connected": ib_connected,
-        "earnings_warnings": earnings_warnings,
-        "daily_watchlist": daily_watchlist,
-    }
+    Uses DashboardDataQuery read model for fast aggregation.
+    """
+    from app.infrastructure.db.read_models.dashboard_query import DashboardDataQuery
+    return DashboardDataQuery().execute()
 
 
 @app.get("/dashboard/symbol/{symbol}")
@@ -1011,43 +782,36 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
 
 @app.get("/backtest/{symbol}")
 def run_backtest_endpoint(symbol: str, days: int = 180):
-    from app.backtest.engine import run_backtest
-    from app.backtest.reporter import format_api
+    """Queue a backtest job. Returns immediately with job_id."""
+    from app.application.services.job_runner import get_global_runner
+    from app.interfaces.api.routes.jobs_routes import _run_backtest
     symbol = symbol.upper()
     if symbol not in set(_get_universe_symbols(auto_approve_open=True)):
         raise HTTPException(status_code=403, detail=f"Symbol {symbol} not in approved DB list")
-    try:
-        _acct = client.get_account()
-        _capital = get_operating_capital(_acct.get("net_liquidation", 0.0))
-    except Exception:
-        from app.config.settings import CAPITAL_CAP
-        _capital = CAPITAL_CAP
-    try:
-        result = run_backtest(
-            symbol=symbol,
-            ib_client=client,
-            period_days=days,
-            capital=_capital,
-        )
-        return format_api(result)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    runner = get_global_runner()
+    job_id = runner.submit(
+        job_type="backtest",
+        fn=_run_backtest,
+        timeout_seconds=60,
+        symbol=symbol,
+        days=days,
+    )
+    return {"job_id": job_id}
 
 
 @app.get("/candidate-analysis/{symbol}")
 def candidate_analysis_endpoint(symbol: str):
-    """Run full AnalysisPipeline for any symbol."""
-    from app.analysis.pipeline import AnalysisPipeline, AnalysisContext
-    from app.llm.agent import get_data_layer
-    symbol = symbol.upper()
-    try:
-        data_layer = get_data_layer()
-        context = AnalysisContext(mode="on_demand")
-        pipeline = AnalysisPipeline(symbol, data_layer, context, notify_fn=None)
-        result = pipeline.run()
-        return result.to_dict()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    """Queue an LLM analysis job. Returns immediately with job_id."""
+    from app.application.services.job_runner import get_global_runner
+    from app.interfaces.api.routes.jobs_routes import _run_llm_analysis
+    runner = get_global_runner()
+    job_id = runner.submit(
+        job_type="llm-analysis",
+        fn=_run_llm_analysis,
+        timeout_seconds=60,
+        symbol=symbol.upper(),
+    )
+    return {"job_id": job_id}
 
 
 @app.get("/analysis/indicator/{symbol}/{indicator_name}")
@@ -1072,7 +836,7 @@ def single_indicator_endpoint(symbol: str, indicator_name: str):
 @app.get("/universe/watchlist")
 def universe_watchlist():
     """Return universe symbols with their watchlist scores."""
-    from app.db.database import get_connection
+    from app.infrastructure.db.compat import get_connection
     conn = get_connection()
     rows = conn.execute("SELECT * FROM watchlist_scores ORDER BY watchlist_score DESC").fetchall()
     conn.close()
@@ -1086,7 +850,7 @@ def universe_watchlist():
 @app.get("/candidate-decisions")
 def get_candidate_decisions_endpoint(limit: int = 20):
     """Return candidate decisions with return metrics."""
-    from app.db.database import get_connection
+    from app.infrastructure.db.compat import get_connection
     conn = get_connection()
     rows = conn.execute(
         "SELECT * FROM candidate_decisions ORDER BY decision_date DESC LIMIT ?", (limit,)
@@ -1098,7 +862,7 @@ def get_candidate_decisions_endpoint(limit: int = 20):
 @app.get("/symbol-parameters/{symbol}")
 def get_symbol_parameters_endpoint(symbol: str):
     """Return adaptive parameters for a symbol."""
-    from app.db.database import get_or_create_symbol_parameters, init_analysis_tables
+    from app.infrastructure.db.compat import get_or_create_symbol_parameters, init_analysis_tables
     init_analysis_tables()
     import dataclasses
     params = get_or_create_symbol_parameters(symbol.upper())
@@ -1122,14 +886,14 @@ def get_market_permissions_endpoint(refresh: bool = False):
 @app.get("/reports/list")
 def list_reports_json(limit: int = 20):
     """JSON list of recent reports."""
-    from app.db.database import get_reports
+    from app.infrastructure.db.compat import get_reports
     return {"reports": get_reports(limit=limit)}
 
 
 @app.get("/reports", response_class=HTMLResponse)
 def reports_page():
     """HTML reports index page."""
-    from app.db.database import get_reports
+    from app.infrastructure.db.compat import get_reports
     reports = get_reports(limit=30)
     rows = ""
     for r in reports:
@@ -1175,7 +939,7 @@ async function delReport(id){{
 @app.get("/reports/{report_id}", response_class=HTMLResponse)
 def view_report(report_id: int):
     """Render a single report as HTML."""
-    from app.db.database import get_report_by_id
+    from app.infrastructure.db.compat import get_report_by_id
     report = get_report_by_id(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -1262,7 +1026,7 @@ strong{{color:#FBBF24}}
 
 @app.delete("/reports/{report_id}")
 def delete_report_endpoint(report_id: int):
-    from app.db.database import delete_report
+    from app.infrastructure.db.compat import delete_report
     if not delete_report(report_id):
         raise HTTPException(status_code=404, detail="Report not found")
     return {"deleted": True, "id": report_id}

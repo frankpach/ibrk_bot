@@ -7,7 +7,7 @@ from app.config.settings import (
     MAX_POSITIONS, MAX_RISK_PCT, MIN_RISK_USD,
     MARKET_TZ, MARKET_OPEN_HOUR, MARKET_CLOSE_HOUR,
 )
-from app.db.database import get_approved_symbols
+from app.infrastructure.db.compat import get_approved_symbols
 
 ALLOWED_ORDER_TYPES = {"MKT", "LMT"}
 

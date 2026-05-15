@@ -81,7 +81,7 @@ def generate_weekly_report(trades: list, patterns: list, capital: float) -> str:
 
 def get_closed_trades_since(since: datetime) -> list:
     """Retorna trades cerrados desde una fecha."""
-    from app.db.database import get_connection
+    from app.infrastructure.db.compat import get_connection
     from app.db.models import Trade
 
     conn = get_connection()
@@ -106,7 +106,7 @@ def get_closed_trades_since(since: datetime) -> list:
 
 def send_weekly_report(capital: float = 500.0):
     """Genera y envia el reporte semanal por Telegram."""
-    from app.db.database import get_patterns_for_week
+    from app.infrastructure.db.compat import get_patterns_for_week
 
     now = datetime.now(tz=ET)
     week_ago = now - timedelta(days=7)

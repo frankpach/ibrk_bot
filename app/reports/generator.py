@@ -12,8 +12,8 @@ def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None
     Returns the report id (for Telegram link), or None on failure.
     """
     try:
-        from app.db.database import save_report, get_news_cache, get_scanner_results
-        from app.db.database import get_account_history
+        from app.infrastructure.db.compat import save_report, get_news_cache, get_scanner_results
+        from app.infrastructure.db.compat import get_account_history
 
         today = datetime.utcnow().strftime("%Y-%m-%d")
         now_str = datetime.utcnow().strftime("%H:%M UTC")
@@ -142,7 +142,7 @@ def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None
 def generate_daily_ops_report(trades_today: list) -> int | None:
     """Generate an end-of-day operations report."""
     try:
-        from app.db.database import save_report, get_account_history
+        from app.infrastructure.db.compat import save_report, get_account_history
 
         today = datetime.utcnow().strftime("%Y-%m-%d")
         now_str = datetime.utcnow().strftime("%H:%M UTC")
