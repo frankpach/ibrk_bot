@@ -126,10 +126,23 @@ def render_control_html() -> str:
     .modal h3{font-size:1.1rem;margin-bottom:10px}
     .modal p{font-size:.82rem;color:var(--muted);margin-bottom:12px}
 
-    @media(max-width:700px){
-      .sidebar{width:56px}
-      .sidebar-item{padding:8px 4px;text-align:center;font-size:.7rem}
-      .sidebar-item span{display:none}
+    /* ─── Mobile sidebar ─────────────────────────── */
+    @media(max-width:768px){
+      .ctrl-page{flex-direction:column}
+      .sidebar{
+        width:100%;border-right:none;border-bottom:1px solid var(--border);
+        flex-direction:row;padding:4px 8px;gap:0;overflow-x:auto;
+        flex-wrap:nowrap;white-space:nowrap;
+      }
+      .sidebar-item{
+        padding:8px 12px;font-size:.8rem;border-bottom:none;
+        border-right:1px solid var(--border);flex-shrink:0;
+      }
+      .sidebar-item.active{border-bottom:2px solid var(--blue)!important;border-right:none}
+      .main{padding:8px}
+    }
+    @media(min-width:769px){
+      .main{padding:16px;flex:1;overflow-y:auto}
     }
   </style>
 </head>
@@ -526,6 +539,85 @@ def render_control_html() -> str:
       );
     }
 
+    function LLMPanel() {
+      const [settings, setSettings] = useState({});
+      const [toast, setToast] = useState(null);
+      const taskKeys = [
+        ['llm_model_analysis',   'Análisis Técnico', 'Pipeline de análisis on-demand'],
+        ['llm_model_signal',     'Procesamiento Señales', 'Loop de señales en tiempo real'],
+        ['llm_model_postmortem', 'Postmortem/Aprendizaje', 'Ciclo de aprendizaje semanal'],
+        ['opencode_model',       'Modelo Global (fallback)', 'Usado si no hay valor por tarea'],
+        ['opencode_bin',         'OpenCode Binary Path', 'Ruta al binario opencode'],
+      ];
+      const SUGGESTIONS = [
+        'opencode-go/qwen3.5-plus',
+        'opencode-go/claude-sonnet-4',
+        'opencode-go/gpt-4o',
+        'opencode-go/gemini-2.5-pro',
+        'anthropic/claude-opus-4-5',
+      ];
+
+      useEffect(() => {
+        fetch('/control/settings').then(r=>r.json()).then(d=>{
+          const map = {};
+          (d.settings||[]).forEach(s => { map[s.key] = s.value; });
+          setSettings(map);
+        }).catch(()=>{});
+      }, []);
+
+      async function save(key) {
+        try {
+          const res = await fetch(`/control/settings/${key}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Control-Key': localStorage.getItem('ctrlKey') || '',
+            },
+            body: JSON.stringify({ value: String(settings[key] || '') }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          setToast({ msg: `✓ ${key} guardado`, err: false });
+        } catch(e) {
+          setToast({ msg: 'Error: ' + e.message, err: true });
+        }
+      }
+
+      return (
+        <div>
+          {toast && <Toast msg={toast.msg} isError={toast.err} onClose={()=>setToast(null)} />}
+          <div className="card">
+            <div className="ch">
+              <span className="ct">Modelos LLM por Tarea</span>
+              <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.7rem',color:'var(--dim)'}}>
+                cambios aplican en el próximo análisis
+              </span>
+            </div>
+            <div className="cb">
+              {taskKeys.map(([key, label, hint]) => (
+                <div className="field" key={key}>
+                  <label>{label}</label>
+                  <div style={{fontSize:'.7rem',color:'var(--dim)',marginBottom:4,fontFamily:'"Fira Code",monospace'}}>{hint}</div>
+                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <input
+                      list={`suggest-${key}`}
+                      value={settings[key] || ''}
+                      onChange={e => setSettings(prev => ({...prev, [key]: e.target.value}))}
+                      style={{flex:1,minWidth:200}}
+                      placeholder="modelo/nombre"
+                    />
+                    <datalist id={`suggest-${key}`}>
+                      {SUGGESTIONS.map(s => <option key={s} value={s} />)}
+                    </datalist>
+                    <button className="btn btn-primary" onClick={() => save(key)}>Guardar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function JobsPanel() {
       const [jobs, setJobs] = useState([]);
       const [loading, setLoading] = useState({});
@@ -718,6 +810,7 @@ def render_control_html() -> str:
         {id:'symbols',label:'Símbolos'},
         {id:'infra',label:'Infraestructura'},
         {id:'jobs',label:'Jobs'},
+        {id:'llm',label:'🤖 Modelos LLM'},
         {id:'apikeys',label:'API Keys'},
         {id:'audit',label:'Audit Log'},
       ];
@@ -745,6 +838,7 @@ def render_control_html() -> str:
               {section==='symbols' && <SymbolsPanel />}
               {section==='infra' && <InfraPanel />}
               {section==='jobs' && <JobsPanel />}
+              {section==='llm' && <LLMPanel />}
               {section==='apikeys' && <ApiKeysPanel />}
               {section==='audit' && <AuditLogPanel />}
             </div>
