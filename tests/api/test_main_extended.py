@@ -16,12 +16,45 @@ def _fresh_client():
     return TestClient(app, headers={"X-Control-Key": _TEST_CONTROL_KEY})
 
 
+def _fresh_app():
+    for mod in list(sys.modules.keys()):
+        if "app.api.main" in mod:
+            del sys.modules[mod]
+    from app.api.main import app
+    return app
+
+
 def _mock_account():
     return {"net_liquidation": 10000.0, "buying_power": 5000.0}
 
 
 def _mock_portfolio():
     return []
+
+
+def test_logs_endpoint_is_not_shadowed_by_duplicate_route():
+    app = _fresh_app()
+    log_routes = [route for route in app.routes if getattr(route, "path", None) == "/logs"]
+    assert len(log_routes) == 1
+
+
+def test_logs_endpoint_returns_dashboard_payload_shape():
+    mock_file = MagicMock()
+    mock_file.readlines.return_value = ["line 1\n", "line 2\n", "line 3\n"]
+    mock_open = MagicMock()
+    mock_open.__enter__.return_value = mock_file
+    mock_open.__exit__.return_value = None
+
+    with patch("app.api.main.os.path.exists", return_value=True), \
+         patch("builtins.open", return_value=mock_open):
+        client = _fresh_client()
+        resp = client.get("/logs?lines=2")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["lines"] == 2
+    assert data["count"] == 2
+    assert data["log"] == "line 2\nline 3\n"
 
 
 # ---- Price endpoints ----

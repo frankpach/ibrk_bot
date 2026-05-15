@@ -697,9 +697,19 @@ def get_logs(lines: int = 100):
     import os
     log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bot.log")
     try:
+        if not os.path.exists(log_path):
+            # Create empty file so future logging can append
+            open(log_path, "a", encoding="utf-8").close()
+            return {
+                "lines": lines,
+                "count": 0,
+                "log": "// bot.log no existe aun. Reinicia la aplicacion para que el FileHandler empiece a escribir logs aqui.",
+            }
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             all_lines = f.readlines()
         last_lines = all_lines[-lines:]
+        if not last_lines:
+            return {"lines": lines, "count": 0, "log": "// sin entradas de log aun"}
         return {"lines": lines, "count": len(last_lines), "log": "".join(last_lines)}
     except Exception as e:
         return {"lines": lines, "count": 0, "log": f"Error reading log: {e}"}
@@ -725,10 +735,12 @@ def dashboard_data():
 def dashboard_symbol_data(symbol: str, period: str = "intraday"):
     """Lazy-loaded symbol data for dashboard chart. Uses IBDataLayer cache."""
     import pandas as pd
+    import numpy as np
     try:
         from app.llm.agent import get_data_layer
         data_layer = get_data_layer()
         result: dict = {"symbol": symbol.upper(), "period": period, "bars": []}
+        df = None
         if period == "intraday":
             df = data_layer.get_ohlcv(symbol, "1 D", "5 mins", "dashboard_chart")
         else:
@@ -745,7 +757,7 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
                 }
                 for i, (_, r) in enumerate(df.iterrows())
             ]
-        if period in ("intraday", "daily", "indicators") and df is not None and len(df) >= 15:
+        if df is not None and len(df) >= 15:
             from app.analysis.indicators import _compute_rsi
             # RSI series
             rsi_series = []
@@ -784,6 +796,67 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
                         "lower": round(float(sma20.iloc[i] - 2 * std20.iloc[i]), 4),
                     })
             result["boll_series"] = boll_series
+
+            # EMA 9 / EMA 20
+            ema9 = df["close"].ewm(span=9, adjust=False).mean()
+            ema20_line = df["close"].ewm(span=20, adjust=False).mean()
+            result["ema9_series"] = [
+                {"time": i, "value": round(float(v), 4)}
+                for i, v in enumerate(ema9) if not pd.isna(v)
+            ]
+            result["ema20_series"] = [
+                {"time": i, "value": round(float(v), 4)}
+                for i, v in enumerate(ema20_line) if not pd.isna(v)
+            ]
+
+            # VWAP (intraday only typical)
+            typical = (df["high"] + df["low"] + df["close"]) / 3
+            vwap = (typical * df["volume"]).cumsum() / df["volume"].cumsum()
+            result["vwap_series"] = [
+                {"time": i, "value": round(float(v), 4)}
+                for i, v in enumerate(vwap) if not pd.isna(v)
+            ]
+
+            # ATR(14)
+            high_low = df["high"] - df["low"]
+            high_close = np.abs(df["high"] - df["close"].shift())
+            low_close = np.abs(df["low"] - df["close"].shift())
+            tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+            atr = tr.rolling(14).mean()
+            result["atr"] = round(float(atr.iloc[-1]), 4) if not pd.isna(atr.iloc[-1]) else None
+
+        # Intraday extras: premarket H/L, prev day H/L, RVOL
+        if period == "intraday" and df is not None and len(df) > 0:
+            # Premarket approx: bars before the highest volume bar (market open)
+            vol_idx = int(df["volume"].idxmax()) if df["volume"].max() > 0 else len(df) // 3
+            pre = df.iloc[:vol_idx]
+            result["premarket_high"] = round(float(pre["high"].max()), 4) if len(pre) else None
+            result["premarket_low"] = round(float(pre["low"].min()), 4) if len(pre) else None
+            result["day_high"] = round(float(df["high"].max()), 4)
+            result["day_low"] = round(float(df["low"].min()), 4)
+
+            # Previous day H/L from daily fetch
+            try:
+                df_daily = data_layer.get_ohlcv(symbol, "5 D", "1 day", "dashboard_chart_prev")
+                if df_daily is not None and len(df_daily) >= 2:
+                    prev = df_daily.iloc[-2]
+                    result["prev_high"] = round(float(prev["high"]), 4)
+                    result["prev_low"] = round(float(prev["low"]), 4)
+                    result["prev_close"] = round(float(prev["close"]), 4)
+            except Exception:
+                pass
+
+            # Relative volume vs 20-day average
+            try:
+                df_vol = data_layer.get_ohlcv(symbol, "30 D", "1 day", "dashboard_chart_vol")
+                if df_vol is not None and len(df_vol) >= 5:
+                    avg_vol = df_vol["volume"].mean()
+                    today_vol = int(df["volume"].sum())
+                    result["volume_relative"] = round(today_vol / avg_vol, 2) if avg_vol else 0.0
+                    result["avg_daily_volume"] = int(avg_vol)
+            except Exception:
+                pass
+
         return result
     except Exception as e:
         logger.error(f"dashboard_symbol_data({symbol}): {e}")

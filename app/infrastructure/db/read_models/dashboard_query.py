@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -66,9 +66,35 @@ class DashboardDataQuery:
 
             # IB connection (lightweight, no DB)
             ib_connected = self._check_ib_connection()
+            ib_port = self._get_ib_port()
 
             # Earnings warnings (skip in read model — too slow / requires IB)
             earnings_warnings = {}
+
+            # Extra metrics
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            realized_pnl = self._fetch_realized_pnl_today(conn, today_str)
+            unrealized_pnl = self._fetch_unrealized_pnl(conn)
+            commissions = self._fetch_commissions(conn, today_str)
+            overnight_symbols = self._fetch_overnight_symbols(open_trades, today_str)
+            market_context = self._fetch_market_context(conn)
+            trade_timeline = self._fetch_trade_timeline(conn, today_str)
+            drawdown_info = self._compute_drawdown(account_history)
+
+            # Enrich status
+            status["realized_pnl_usd"] = round(realized_pnl, 2)
+            status["unrealized_pnl_usd"] = round(unrealized_pnl, 2)
+            status["intraday_pnl_usd"] = round(realized_pnl + unrealized_pnl, 2)
+            status["daily_commissions_usd"] = round(commissions["daily"], 2)
+            status["weekly_commissions_usd"] = round(commissions["weekly"], 2)
+            status["overnight_count"] = len(overnight_symbols)
+            status["overnight_symbols"] = overnight_symbols
+            status["drawdown_pct"] = round(drawdown_info["current_dd_pct"], 2)
+            status["max_drawdown_pct"] = round(drawdown_info["max_dd_pct"], 2)
+            status["peak_net_liq"] = round(drawdown_info["peak"], 2)
+            status["ib_port"] = ib_port
+            status["market_context"] = market_context
+            status["trade_timeline"] = trade_timeline
 
             return {
                 "status": status,
@@ -360,3 +386,115 @@ class DashboardDataQuery:
             return bool(c.ib.isConnected())
         except Exception:
             return False
+
+    def _get_ib_port(self) -> int | None:
+        try:
+            from app.ibkr.client import get_client
+            c = get_client()
+            return c.ib.client.port if hasattr(c.ib.client, "port") else None
+        except Exception:
+            return None
+
+    def _fetch_realized_pnl_today(self, conn, today_str: str) -> float:
+        row = conn.execute(
+            "SELECT SUM(pnl_usd) as total FROM trades WHERE status='CLOSED' AND DATE(closed_at)=?",
+            (today_str,),
+        ).fetchone()
+        return float(row["total"] or 0.0)
+
+    def _fetch_unrealized_pnl(self, conn) -> float:
+        row = conn.execute(
+            "SELECT SUM(pnl_usd) as total FROM position_snapshots"
+        ).fetchone()
+        return float(row["total"] or 0.0)
+
+    def _fetch_commissions(self, conn, today_str: str) -> dict:
+        # Estimate $1 per trade side (open + close)
+        daily_closed = conn.execute(
+            "SELECT COUNT(*) as c FROM trades WHERE status='CLOSED' AND DATE(closed_at)=?",
+            (today_str,),
+        ).fetchone()["c"] or 0
+        daily_open = conn.execute(
+            "SELECT COUNT(*) as c FROM trades WHERE status='OPEN' AND DATE(opened_at)=?",
+            (today_str,),
+        ).fetchone()["c"] or 0
+        # Weekly range (last 7 days)
+        week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+        weekly_closed = conn.execute(
+            "SELECT COUNT(*) as c FROM trades WHERE status='CLOSED' AND DATE(closed_at) >= ?",
+            (week_ago,),
+        ).fetchone()["c"] or 0
+        weekly_open = conn.execute(
+            "SELECT COUNT(*) as c FROM trades WHERE status='OPEN' AND DATE(opened_at) >= ?",
+            (week_ago,),
+        ).fetchone()["c"] or 0
+        return {
+            "daily": (daily_closed + daily_open) * 1.0,
+            "weekly": (weekly_closed + weekly_open) * 1.0,
+        }
+
+    def _fetch_overnight_symbols(self, open_trades: list[dict], today_str: str) -> list[str]:
+        syms = []
+        for t in open_trades:
+            opened = str(t.get("opened_at") or "")
+            if opened and not opened.startswith(today_str):
+                syms.append(t["symbol"])
+        return syms
+
+    def _fetch_market_context(self, conn) -> dict:
+        # Try to get last scanner results for key ETFs
+        ctx = {}
+        for sym in ("SPY", "QQQ", "IWM", "VIX"):
+            row = conn.execute(
+                """SELECT change_pct, volume_ratio FROM scanner_results
+                   WHERE symbol=? AND scan_type IN ('most_active','top_movers')
+                   ORDER BY fetched_at DESC LIMIT 1""",
+                (sym,),
+            ).fetchone()
+            if row:
+                ctx[sym] = {
+                    "change_pct": round(float(row["change_pct"] or 0), 2),
+                    "volume_ratio": round(float(row["volume_ratio"] or 0), 2),
+                }
+            else:
+                ctx[sym] = {"change_pct": 0.0, "volume_ratio": 0.0}
+        return ctx
+
+    def _fetch_trade_timeline(self, conn, today_str: str) -> list[dict]:
+        rows = conn.execute(
+            """SELECT symbol, action, pnl_usd, pnl_pct, exit_reason, opened_at, closed_at, status
+               FROM trades WHERE DATE(opened_at)=? OR DATE(closed_at)=?
+               ORDER BY opened_at DESC LIMIT 20""",
+            (today_str, today_str),
+        ).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "symbol": r["symbol"],
+                "action": r["action"],
+                "pnl_usd": r["pnl_usd"],
+                "pnl_pct": r["pnl_pct"],
+                "exit_reason": r["exit_reason"],
+                "opened_at": r["opened_at"],
+                "closed_at": r["closed_at"],
+                "status": r["status"],
+            })
+        return out
+
+    def _compute_drawdown(self, account_history: list[dict]) -> dict:
+        peak = 0.0
+        max_dd = 0.0
+        current = 0.0
+        current_dd = 0.0
+        for h in account_history:
+            nl = float(h.get("net_liquidation") or 0)
+            if nl <= 0:
+                continue
+            if nl > peak:
+                peak = nl
+            dd = (peak - nl) / peak * 100
+            if dd > max_dd:
+                max_dd = dd
+            current = nl
+            current_dd = dd
+        return {"peak": peak, "max_dd_pct": max_dd, "current_dd_pct": current_dd}

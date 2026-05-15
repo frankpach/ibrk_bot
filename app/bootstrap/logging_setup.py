@@ -24,7 +24,16 @@ def configure_logging() -> None:
         cache_logger_on_first_use=True,
     )
     # Keep stdlib basicConfig for third-party libs that use logging directly
+    log_format = "%(asctime)s %(levelname)s %(name)s - %(message)s"
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    try:
+        file_handler = logging.FileHandler("bot.log", mode="a", encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter(log_format))
+        handlers.append(file_handler)
+    except Exception:
+        pass
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+        format=log_format,
+        handlers=handlers,
     )

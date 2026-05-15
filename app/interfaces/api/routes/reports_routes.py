@@ -1,21 +1,7 @@
 # app/interfaces/api/routes/reports_routes.py
-import os
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
-from app.container import get_container
+from fastapi import APIRouter
 
 router = APIRouter()
-
-
-@router.get("/logs")
-def get_logs(lines: int = 100):
-    log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "bot.log")
-    try:
-        with open(log_path, "r", encoding="utf-8") as f:
-            return {"lines": f.readlines()[-lines:]}
-    except Exception:
-        return {"lines": []}
-
 
 
 @router.get("/reports/list")
