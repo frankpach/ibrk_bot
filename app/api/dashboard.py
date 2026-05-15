@@ -54,18 +54,18 @@ def render_dashboard_html() -> str:
     /* Cards */
     .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
     .ch{background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-    .ct{font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+    .ct{font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
     .cb{padding:12px}
 
     /* Stat card */
     .sc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative;overflow:hidden}
-    .sl{font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+    .sl{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
     .sv{font-family:"Bebas Neue",cursive;font-size:2rem;line-height:1.05}
-    .ss{font-family:"Fira Code",monospace;font-size:.65rem;color:var(--muted);margin-top:3px}
+    .ss{font-family:"Fira Code",monospace;font-size:.78rem;color:var(--muted);margin-top:3px}
     .green{color:var(--green)}.red{color:var(--red)}.blue{color:var(--blue)}.amber{color:var(--amber)}.purple{color:var(--purple)}
 
     /* Tags */
-    .tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.62rem;font-family:"Fira Code",monospace;font-weight:500;border:1px solid}
+    .tag{display:inline-block;padding:2px 7px;border-radius:3px;font-size:.72rem;font-family:"Fira Code",monospace;font-weight:500;border:1px solid}
     .tag-buy{background:var(--green-bg);color:var(--green);border-color:rgba(16,185,129,.3)}
     .tag-sell{background:var(--red-bg);color:var(--red);border-color:rgba(244,63,94,.3)}
     .tag-overnight{background:var(--amber-bg);color:var(--amber);border-color:rgba(251,191,36,.25)}
@@ -76,7 +76,7 @@ def render_dashboard_html() -> str:
     .pos-card:last-child{margin-bottom:0}
     .pos-row{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:6px}
     .pos-sym{font-family:"Bebas Neue",cursive;font-size:1.2rem;letter-spacing:.06em;color:var(--text)}
-    .pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 8px;font-family:"Fira Code",monospace;font-size:.68rem;margin:8px 0}
+    .pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 8px;font-family:"Fira Code",monospace;font-size:.8rem;margin:8px 0}
     @media(min-width:640px){.pos-grid{grid-template-columns:repeat(4,1fr)}}
     .pos-k{color:var(--muted)}.pos-v{color:var(--text);font-weight:500}
     .pos-pnl{font-family:"Fira Code",monospace;font-size:.9rem;font-weight:500}
@@ -89,7 +89,7 @@ def render_dashboard_html() -> str:
 
     /* Tabs */
     .tabs{display:flex;gap:2px;background:var(--bg);border-radius:5px;padding:2px}
-    .tab{padding:3px 9px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.64rem;color:var(--dim);cursor:pointer;border:none;background:transparent;white-space:nowrap}
+    .tab{padding:4px 10px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.75rem;color:var(--dim);cursor:pointer;border:none;background:transparent;white-space:nowrap}
     .tab.on{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
 
     /* Buttons */
@@ -108,30 +108,30 @@ def render_dashboard_html() -> str:
     .theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:20px;font-size:.72rem;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:"Barlow Condensed",sans-serif;font-weight:600}
 
     /* Market context bar */
-    .mkt-bar{padding:5px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface2);border-bottom:1px solid var(--border);font-family:"Fira Code",monospace;font-size:.62rem}
+    .mkt-bar{padding:6px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface2);border-bottom:1px solid var(--border);font-family:"Fira Code",monospace;font-size:.75rem}
     .mkt-chip{display:flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;background:var(--bg);border:1px solid var(--border)}
 
     /* System bar */
-    .sys-bar{padding:5px 12px;display:flex;align-items:center;gap:12px;font-family:"Fira Code",monospace;font-size:.65rem;background:var(--surface2);border-bottom:1px solid var(--border);flex-wrap:wrap}
+    .sys-bar{padding:6px 12px;display:flex;align-items:center;gap:12px;font-family:"Fira Code",monospace;font-size:.78rem;background:var(--surface2);border-bottom:1px solid var(--border);flex-wrap:wrap}
 
     /* Quick scan */
     .qs-box{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-    .qs-input{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:.75rem;font-family:"Fira Code",monospace;width:140px}
+    .qs-input{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:.82rem;font-family:"Fira Code",monospace;width:150px}
 
     /* Empty */
-    .empty{color:var(--dimmer);font-family:"Fira Code",monospace;font-size:.72rem;padding:1.2rem 0;text-align:center;letter-spacing:.04em}
+    .empty{color:var(--dimmer);font-family:"Fira Code",monospace;font-size:.82rem;padding:1.4rem 0;text-align:center;letter-spacing:.04em}
 
     /* Timeline */
     .tl{display:flex;flex-direction:column;gap:0}
-    .tl-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-family:"Fira Code",monospace;font-size:.68rem}
+    .tl-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-family:"Fira Code",monospace;font-size:.8rem}
     .tl-item:last-child{border-bottom:none}
     .tl-dot{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0}
-    .tl-time{min-width:42px;color:var(--dim);font-size:.6rem}
+    .tl-time{min-width:44px;color:var(--dim);font-size:.72rem}
 
     /* Table */
-    table{width:100%;border-collapse:collapse;font-family:"Fira Code",monospace;font-size:.68rem}
-    th{color:var(--dim);font-weight:500;padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)}
-    td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted)}
+    table{width:100%;border-collapse:collapse;font-family:"Fira Code",monospace;font-size:.8rem}
+    th{color:var(--dim);font-weight:500;padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)}
+    td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--muted)}
     td.sym{color:var(--text);font-weight:500}
     tr:last-child td{border-bottom:none}
 
@@ -140,6 +140,29 @@ def render_dashboard_html() -> str:
 
     /* Scroll container */
     .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+    /* ─── Mobile 480px (iPhone 13 Pro 390px) ─────── */
+    @media(max-width:480px){
+      html{font-size:15px}
+      .page{padding:6px;gap:6px}
+      .header{padding:6px 10px}
+      .logo{font-size:1.1rem}
+      .badge{font-size:.72rem}
+      .sv{font-size:1.6rem}
+      .sc{padding:10px}
+      .ch{padding:6px 10px;gap:6px}
+      .ct{font-size:.82rem}
+      .tag{font-size:.74rem;padding:2px 6px}
+      .tab{font-size:.74rem;padding:3px 8px}
+      .btn{font-size:.82rem;padding:5px 10px}
+      .pos-grid{font-size:.78rem}
+      table{min-width:480px}
+      .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -6px;padding:0 6px}
+      .hide-mobile{display:none!important}
+      .mkt-bar{font-size:.78rem;gap:6px}
+      .sys-bar{font-size:.8rem}
+    }
   </style>
 </head>
 <body>
@@ -786,13 +809,124 @@ def render_dashboard_html() -> str:
       );
     }
 
+    function AnalyzeModal({ symbol, onClose }) {
+      const [phase, setPhase] = useState('idle'); // idle | analyzing | done | error | approving | approved
+      const [result, setResult] = useState(null);
+      const [err, setErr] = useState(null);
+
+      async function runAnalysis() {
+        setPhase('analyzing'); setErr(null);
+        try {
+          const r = await fetch('/candidate-analysis/'+symbol);
+          const j = await r.json();
+          const jobId = j.job_id;
+          // poll until done
+          for (let i=0; i<60; i++) {
+            await new Promise(res=>setTimeout(res,2000));
+            const p = await fetch('/jobs/'+jobId);
+            const pj = await p.json();
+            if (pj.status==='success') { setResult(pj.result); setPhase('done'); return; }
+            if (pj.status==='failed') { setErr(pj.error||'Análisis falló'); setPhase('error'); return; }
+          }
+          setErr('Timeout'); setPhase('error');
+        } catch(e) { setErr(String(e)); setPhase('error'); }
+      }
+
+      async function approve() {
+        setPhase('approving');
+        try {
+          await fetch('/symbols/approve/'+symbol, {method:'POST', headers:{'X-Control-Key': window._controlKey||''}});
+          setPhase('approved');
+        } catch(e) { setErr(String(e)); setPhase('error'); }
+      }
+
+      const score = result?.score ?? result?.total ?? null;
+      const rec = result?.recommendation || null;
+      const recColor = rec==='PRIORITY'?'var(--green)':rec==='WATCHLIST'?'var(--amber)':'var(--red)';
+
+      return (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
+          <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:8,padding:24,width:340,maxWidth:'90vw'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.4rem',color:'var(--text)'}}>{symbol}</span>
+              <button onClick={onClose} style={{background:'none',border:'none',color:'var(--dim)',cursor:'pointer',fontSize:'1.2rem'}}>✕</button>
+            </div>
+
+            {phase==='idle' && (
+              <button onClick={runAnalysis} className="btn btn-primary" style={{width:'100%',fontSize:'.85rem',padding:'8px'}}>
+                🔍 Analizar con IA
+              </button>
+            )}
+
+            {phase==='analyzing' && (
+              <div style={{textAlign:'center',padding:'16px 0',fontFamily:'"Fira Code",monospace',fontSize:'.8rem',color:'var(--dim)'}}>
+                <div className="pulse" style={{marginBottom:8}}>⚡ Analizando {symbol}...</div>
+                <div style={{fontSize:'.7rem',color:'var(--dimmer)'}}>puede tardar 30-60s</div>
+              </div>
+            )}
+
+            {phase==='done' && result && (
+              <div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}>
+                  <div>
+                    <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>Score</div>
+                    <div style={{fontFamily:'"Bebas Neue",cursive',fontSize:'2rem',color:'var(--blue)',lineHeight:1}}>{score!=null?Math.round(score):'—'}</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--dim)'}}>Recomendación</div>
+                    <div style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.2rem',color:recColor}}>{rec||'—'}</div>
+                  </div>
+                </div>
+                {result.justification && (
+                  <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.72rem',color:'var(--muted)',marginBottom:12,lineHeight:1.5,maxHeight:80,overflow:'auto'}}>
+                    {result.justification}
+                  </div>
+                )}
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={approve} className="btn btn-primary" style={{flex:1,fontSize:'.82rem',padding:'7px'}}>
+                    ✅ Agregar al universo
+                  </button>
+                  <button onClick={onClose} className="btn" style={{fontSize:'.82rem',padding:'7px 12px'}}>
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {phase==='approving' && (
+              <div style={{textAlign:'center',padding:'16px 0',fontFamily:'"Fira Code",monospace',fontSize:'.8rem',color:'var(--dim)'}}>
+                Aprobando {symbol}...
+              </div>
+            )}
+
+            {phase==='approved' && (
+              <div style={{textAlign:'center',padding:'16px 0'}}>
+                <div style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.4rem',color:'var(--green)',marginBottom:8}}>✓ {symbol} AGREGADO</div>
+                <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.75rem',color:'var(--dim)',marginBottom:12}}>Ya está en tu universo de trading</div>
+                <button onClick={onClose} className="btn" style={{fontSize:'.82rem',padding:'7px 16px'}}>Cerrar</button>
+              </div>
+            )}
+
+            {phase==='error' && (
+              <div style={{textAlign:'center',padding:'12px 0'}}>
+                <div style={{color:'var(--red)',fontFamily:'"Fira Code",monospace',fontSize:'.75rem',marginBottom:12}}>{err}</div>
+                <button onClick={()=>setPhase('idle')} className="btn" style={{fontSize:'.82rem'}}>Reintentar</button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     function MarketTrendsCard({ data }) {
       const [tab,setTab]=useState('most_active');
+      const [modal,setModal]=useState(null);
       const scanner=data?.scanner||{};
       const tabs=[['most_active','Activos'],['top_movers','Movers'],['gainers','Gainers'],['losers','Losers'],['sector','Sectores']];
       const rows=scanner[tab]||[];
       return (
         <div className="card fade-up">
+          {modal && <AnalyzeModal symbol={modal} onClose={()=>setModal(null)} />}
           <div className="ch">
             <span className="ct">Market Trends</span>
             <div className="tabs">
@@ -800,19 +934,20 @@ def render_dashboard_html() -> str:
             </div>
           </div>
           <div style={{padding:'0 12px'}}>
-            {!rows.length && <div style={{padding:'12px 0',textAlign:'center',fontFamily:'"Fira Code",monospace',fontSize:'.7rem',color:'var(--dimmer)'}}>// actualizando...</div>}
+            {!rows.length && <div style={{padding:'12px 0',textAlign:'center',fontFamily:'"Fira Code",monospace',fontSize:'.8rem',color:'var(--dimmer)'}}>// actualizando...</div>}
             {tab==='sector'?(
-              <div style={{display:'flex',flexDirection:'column',gap:5,padding:'8px 0'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:6,padding:'8px 0'}}>
                 {rows.slice(0,6).map((r,i)=>{
                   const pct=r.change_pct==null?null:parseFloat(r.change_pct);
                   const color=(pct??0)>=0?'var(--green)':'var(--red)';
                   return (
-                    <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontFamily:'"Fira Code",monospace',fontSize:'.68rem'}}>
-                      <span style={{width:32,color:'var(--text)',fontWeight:500}}>{r.symbol}</span>
-                      <span style={{width:70,color:'var(--muted)',fontSize:'.6rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}>
+                      <span style={{width:36,color:'var(--text)',fontWeight:600}}>{r.symbol}</span>
+                      <span style={{width:72,color:'var(--muted)',fontSize:'.72rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>
                       <div style={{flex:1,height:6,borderRadius:3,background:'rgba(255,255,255,.04)',overflow:'hidden'}}>
                         <div style={{height:'100%',width:`${Math.min(Math.abs(pct??0)*10,100)}%`,background:color,borderRadius:3}}/></div>
-                      <span style={{color,width:40,textAlign:'right'}}>{pct==null?'—':`${pct>=0?'+':''}${fmt.n(pct,1)}%`}</span>
+                      <span style={{color,width:44,textAlign:'right',fontWeight:600}}>{pct==null?'—':`${pct>=0?'+':''}${fmt.n(pct,1)}%`}</span>
+                      <button onClick={()=>setModal(r.symbol)} className="btn btn-primary" style={{fontSize:'.7rem',padding:'2px 7px'}}>+</button>
                     </div>
                   );
                 })}
@@ -821,12 +956,12 @@ def render_dashboard_html() -> str:
               const pct=r.change_pct==null?null:parseFloat(r.change_pct);
               const vr=r.volume_ratio==null?null:parseFloat(r.volume_ratio);
               return (
-                <div key={i} style={{display:'grid',gridTemplateColumns:'44px 1fr 50px 48px 56px',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)',gap:4,fontFamily:'"Fira Code",monospace',fontSize:'.65rem'}}>
-                  <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'.95rem',color:'var(--text)'}}>{r.symbol}</span>
-                  <span style={{color:'var(--muted)',fontSize:'.6rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||''}</span>
-                  <span style={{color:(pct??0)>=0?'var(--green)':'var(--red)'}}>{pct==null?'—':`${pct>=0?'+':''}${fmt.n(pct,1)}%`}</span>
-                  <span className="tag" style={{fontSize:'.55rem',background:(vr??0)>2?'var(--green-bg)':'var(--amber-bg)',color:(vr??0)>2?'var(--green)':'var(--amber)',borderColor:(vr??0)>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}}>{vr==null?'—':`${fmt.n(vr,1)}x`}</span>
-                  <button onClick={()=>window.open('/analyze-page/'+r.symbol,'_blank')} className="btn btn-primary" style={{fontSize:'.55rem',padding:'2px 5px'}}>Ver</button>
+                <div key={i} style={{display:'grid',gridTemplateColumns:'52px 1fr 56px 50px 60px',alignItems:'center',padding:'7px 0',borderBottom:'1px solid var(--border)',gap:6,fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}>
+                  <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.1rem',color:'var(--text)'}}>{r.symbol}</span>
+                  <span style={{color:'var(--muted)',fontSize:'.72rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||''}</span>
+                  <span style={{color:(pct??0)>=0?'var(--green)':'var(--red)',fontWeight:600}}>{pct==null?'—':`${pct>=0?'+':''}${fmt.n(pct,1)}%`}</span>
+                  <span className="tag" style={{fontSize:'.65rem',background:(vr??0)>2?'var(--green-bg)':'var(--amber-bg)',color:(vr??0)>2?'var(--green)':'var(--amber)',borderColor:(vr??0)>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}}>{vr==null?'—':`${fmt.n(vr,1)}x`}</span>
+                  <button onClick={()=>setModal(r.symbol)} className="btn btn-primary" style={{fontSize:'.7rem',padding:'3px 6px'}}>+ Analizar</button>
                 </div>
               );
             })}
@@ -867,7 +1002,7 @@ def render_dashboard_html() -> str:
           <div style={{display:'flex',gap:6,padding:'6px 12px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar..." style={{background:'var(--surface)',color:'var(--text)',border:'1px solid var(--border)',borderRadius:4,padding:'3px 8px',fontSize:'.68rem',fontFamily:'"Fira Code",monospace',width:120}}/>
           </div>
-          <div className="scroll-x">
+          <div className="table-wrap">
             <table>
               <thead><tr>{['SYM','CAL','SL%','TP%','PF','WR','TRADES',''].map(h=>(<th key={h}>{h}</th>))}</tr></thead>
               <tbody>
