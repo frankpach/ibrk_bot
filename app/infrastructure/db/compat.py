@@ -1722,15 +1722,19 @@ def get_control_setting_value(key: str, default: str = "") -> str:
 
 def seed_control_setting(key: str, value: str, is_secret: bool = False) -> None:
     """Insert a control setting only if it does not exist yet (idempotent)."""
+    from app.infrastructure.db.engine import get_database_url
+    pg = _is_postgres(get_database_url())
+    now_fn = "NOW()" if pg else "datetime('now')"
+    placeholder = "%s" if pg else "?"
     conn = get_connection()
     try:
         existing = conn.execute(
-            "SELECT key FROM control_settings WHERE key = ?", (key,)
+            f"SELECT key FROM control_settings WHERE key = {placeholder}", (key,)
         ).fetchone()
         if not existing:
             conn.execute(
-                """INSERT INTO control_settings (key, value, is_secret, updated_at, updated_by)
-                   VALUES (?, ?, ?, datetime('now'), 'seed')""",
+                f"""INSERT INTO control_settings (key, value, is_secret, requires_restart, updated_at, updated_by)
+                   VALUES ({placeholder}, {placeholder}, {placeholder}, 0, {now_fn}, 'seed')""",
                 (key, value, 1 if is_secret else 0),
             )
             conn.commit()
