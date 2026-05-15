@@ -327,8 +327,17 @@ def render_dashboard_html() -> str:
         setIsDark(d => !d);
       }
 
+      const path = window.location.pathname;
+      const navLinks = [
+        {href:'/dashboard', label:'Dashboard'},
+        {href:'/control',   label:'Control'},
+        {href:'/reports',   label:'Reportes'},
+        {href:'/docs',      label:'API Docs'},
+      ];
+
       return (
         <div className="header">
+          {/* Left: logo + status badges */}
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <span style={{
               display:'inline-block',width:8,height:8,borderRadius:'50%',
@@ -346,6 +355,33 @@ def render_dashboard_html() -> str:
                 border:'1px solid var(--border)'}}>PAUSADO</span>
             )}
           </div>
+
+          {/* Center: navigation */}
+          <nav style={{display:'flex',alignItems:'center',gap:2}}>
+            {navLinks.map(({href, label}) => {
+              const active = path === href || (href !== '/dashboard' && path.startsWith(href));
+              return (
+                <a key={href} href={href} style={{
+                  fontFamily:'"Barlow Condensed",sans-serif',
+                  fontWeight: active ? 600 : 500,
+                  fontSize:'.85rem',
+                  letterSpacing:'.04em',
+                  color: active ? 'var(--text)' : 'var(--dim)',
+                  textDecoration:'none',
+                  padding:'4px 12px',
+                  borderRadius:5,
+                  background: active ? 'var(--surface2)' : 'transparent',
+                  border: active ? '1px solid var(--border)' : '1px solid transparent',
+                  transition:'color .15s,background .15s',
+                }}
+                onMouseOver={e=>{if(!active){e.currentTarget.style.color='var(--muted)'}}}
+                onMouseOut={e=>{if(!active){e.currentTarget.style.color='var(--dim)'}}}
+                >{label}</a>
+              );
+            })}
+          </nav>
+
+          {/* Right: actions */}
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button
               className="hbtn hbtn-pause"
@@ -353,12 +389,6 @@ def render_dashboard_html() -> str:
               title={!ibConnected ? 'IB Gateway offline' : ''}
               onClick={onTogglePause}
             >⏸ Pausar</button>
-            <a href="/reports" style={{
-              fontFamily:'"Fira Code",monospace', fontSize:'.75rem',
-              color:'var(--blue)', textDecoration:'none',
-              padding:'4px 10px', borderRadius:5,
-              background:'var(--blue-bg)', border:'1px solid rgba(56,189,248,.25)'
-            }}>📊 Reportes</a>
             <button onClick={onRefresh} style={{
               background:'var(--surface2)', border:'1px solid var(--border)',
               color:'var(--dim)', padding:'4px 8px', borderRadius:5,
@@ -1616,31 +1646,12 @@ def render_dashboard_html() -> str:
 
           </div>
 
-          <div className="footer" style={{display:'flex',flexWrap:'wrap',gap:'6px 16px',alignItems:'center',justifyContent:'space-between'}}>
-            <span>
-              {data
-                ? (data.open_trades?.length||0) + ' posiciones · ' +
-                  (data.closed_trades?.length||0) + ' trades cerrados · ' +
-                  (data.patterns?.length||0) + ' patrones'
-                : 'cargando...'}
-            </span>
-            <span style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-              {[
-                ['/dashboard','Dashboard'],
-                ['/control','Control'],
-                ['/reports','Reportes'],
-                ['/reports/list','Lista Reportes'],
-                ['/logs','Logs'],
-                ['/docs','API Docs'],
-              ].map(([href,label])=>(
-                <a key={href} href={href}
-                  style={{color:'var(--blue)',textDecoration:'none',fontSize:'.68rem',opacity:window.location.pathname===href?1:.6}}
-                  onMouseOver={e=>e.target.style.opacity=1}
-                  onMouseOut={e=>e.target.style.opacity=window.location.pathname===href?1:.6}>
-                  {label}
-                </a>
-              ))}
-            </span>
+          <div className="footer">
+            {data
+              ? (data.open_trades?.length||0) + ' posiciones · ' +
+                (data.closed_trades?.length||0) + ' trades cerrados · ' +
+                (data.patterns?.length||0) + ' patrones'
+              : 'cargando...'}
           </div>
 
         </div>
