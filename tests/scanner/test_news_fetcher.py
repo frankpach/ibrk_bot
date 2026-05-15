@@ -1,6 +1,8 @@
 """Tests for app/scanner/news_fetcher.py"""
 from unittest.mock import MagicMock, patch, call
 
+_DB = "app.infrastructure.db.compat"
+
 
 def test_fetch_and_cache_news_empty_symbols():
     """With no approved symbols, returns 0 and does not call insert_news_cache."""
@@ -8,9 +10,9 @@ def test_fetch_and_cache_news_empty_symbols():
 
     data_layer = MagicMock()
 
-    with patch("app.db.database.get_approved_symbols_with_meta", return_value=[]), \
-         patch("app.db.database.clear_news_cache_older_than"), \
-         patch("app.db.database.insert_news_cache") as mock_insert:
+    with patch(f"{_DB}.get_approved_symbols_with_meta", return_value=[]), \
+         patch(f"{_DB}.clear_news_cache_older_than"), \
+         patch(f"{_DB}.insert_news_cache") as mock_insert:
         result = fetch_and_cache_news(data_layer)
 
     assert result == 0
@@ -31,15 +33,14 @@ def test_fetch_and_cache_news_inserts_articles():
 
     symbols = [{"symbol": "AAPL"}]
 
-    with patch("app.db.database.get_approved_symbols_with_meta", return_value=symbols), \
-         patch("app.db.database.clear_news_cache_older_than"), \
-         patch("app.db.database.insert_news_cache") as mock_insert, \
-         patch("time.sleep"):  # skip rate-limit delay in tests
+    with patch(f"{_DB}.get_approved_symbols_with_meta", return_value=symbols), \
+         patch(f"{_DB}.clear_news_cache_older_than"), \
+         patch(f"{_DB}.insert_news_cache") as mock_insert, \
+         patch("time.sleep"):
         result = fetch_and_cache_news(data_layer)
 
     assert result == 2
     assert mock_insert.call_count == 2
-    # Verify first call args
     first_call = mock_insert.call_args_list[0]
     assert first_call.kwargs["symbol"] == "AAPL"
     assert first_call.kwargs["headline"] == "AAPL beats earnings"
@@ -58,9 +59,9 @@ def test_fetch_and_cache_news_skips_empty_headline():
          "article_id": "104", "date": "2026-05-13"},
     ]
 
-    with patch("app.db.database.get_approved_symbols_with_meta", return_value=[{"symbol": "TSLA"}]), \
-         patch("app.db.database.clear_news_cache_older_than"), \
-         patch("app.db.database.insert_news_cache") as mock_insert, \
+    with patch(f"{_DB}.get_approved_symbols_with_meta", return_value=[{"symbol": "TSLA"}]), \
+         patch(f"{_DB}.clear_news_cache_older_than"), \
+         patch(f"{_DB}.insert_news_cache") as mock_insert, \
          patch("time.sleep"):
         result = fetch_and_cache_news(data_layer)
 
@@ -75,9 +76,9 @@ def test_fetch_and_cache_news_handles_news_fetch_error():
     data_layer = MagicMock()
     data_layer.get_news.side_effect = RuntimeError("IB disconnected")
 
-    with patch("app.db.database.get_approved_symbols_with_meta", return_value=[{"symbol": "MSFT"}]), \
-         patch("app.db.database.clear_news_cache_older_than"), \
-         patch("app.db.database.insert_news_cache") as mock_insert, \
+    with patch(f"{_DB}.get_approved_symbols_with_meta", return_value=[{"symbol": "MSFT"}]), \
+         patch(f"{_DB}.clear_news_cache_older_than"), \
+         patch(f"{_DB}.insert_news_cache") as mock_insert, \
          patch("time.sleep"):
         result = fetch_and_cache_news(data_layer)
 

@@ -8,6 +8,8 @@ from app.ibkr.market_permissions import (
     get_permissions_report,
 )
 
+_DB = "app.infrastructure.db.compat"
+
 
 @pytest.mark.asyncio
 async def test_probe_contract_success():
@@ -49,10 +51,11 @@ async def test_discover_permissions_async():
 
 
 @patch("asyncio.run")
-@patch("app.db.database.upsert_market_permissions")
+@patch(f"{_DB}.upsert_market_permissions")
 def test_run_permission_discovery(mock_upsert, mock_asyncio_run):
     mock_asyncio_run.return_value = [
-        {"key": "STK_US", "label": "Stock US", "sec_type": "STK", "available": True, "valid_exchanges": "SMART", "checked_at": "2024-01-01T00:00:00"}
+        {"key": "STK_US", "label": "Stock US", "sec_type": "STK", "available": True,
+         "valid_exchanges": "SMART", "checked_at": "2024-01-01T00:00:00"}
     ]
     result = run_permission_discovery(None)
     assert len(result) == 1
@@ -65,29 +68,31 @@ def test_run_permission_discovery_exception(mock_asyncio_run):
     assert result == []
 
 
-@patch("app.db.database.get_market_permissions_age_hours", return_value=12)
-@patch("app.db.database.get_market_permissions")
+@patch(f"{_DB}.get_market_permissions_age_hours", return_value=12)
+@patch(f"{_DB}.get_market_permissions")
 def test_get_permissions_report_cached(mock_get, mock_age):
     mock_get.return_value = [
-        {"key": "STK_US", "label": "Stock US", "sec_type": "STK", "available": True, "valid_exchanges": "SMART", "checked_at": "2024-01-01T00:00:00"}
+        {"key": "STK_US", "label": "Stock US", "sec_type": "STK", "available": True,
+         "valid_exchanges": "SMART", "checked_at": "2024-01-01T00:00:00"}
     ]
     report = get_permissions_report()
     assert report["cache_age_hours"] == 12
     assert len(report["available"]) == 1
 
 
-@patch("app.db.database.get_market_permissions_age_hours", return_value=25)
+@patch(f"{_DB}.get_market_permissions_age_hours", return_value=25)
 @patch("app.ibkr.market_permissions.run_permission_discovery")
 def test_get_permissions_report_refresh(mock_run, mock_age):
     mock_run.return_value = [
-        {"key": "STK_US", "label": "Stock US", "sec_type": "STK", "available": True, "valid_exchanges": "SMART", "checked_at": "2024-01-01T00:00:00"}
+        {"key": "STK_US", "label": "Stock US", "sec_type": "STK", "available": True,
+         "valid_exchanges": "SMART", "checked_at": "2024-01-01T00:00:00"}
     ]
     report = get_permissions_report(force_refresh=True)
     mock_run.assert_called_once()
     assert len(report["available"]) == 1
 
 
-@patch("app.db.database.get_market_permissions_age_hours", return_value=None)
+@patch(f"{_DB}.get_market_permissions_age_hours", return_value=None)
 @patch("app.ibkr.market_permissions.run_permission_discovery")
 def test_get_permissions_report_no_cache(mock_run, mock_age):
     mock_run.return_value = []

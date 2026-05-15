@@ -244,20 +244,20 @@ def test_get_audit_log_query_is_paginated():
 
 @pytest.fixture
 def client(secret_manager):
-    os.environ["API_CONTROL_KEY"] = "test-control-key"
-    os.environ["API_ADMIN_KEY"] = "test-admin-key"
-    # Force reload of settings module so the env vars are picked up
+    # Set control keys without reloading settings (would clobber DATABASE_URL from _init_test_db)
     import app.config.settings as settings_mod
-    import importlib
-    importlib.reload(settings_mod)
-    # Re-export to the database module which may cache DB_PATH
     import app.infrastructure.db.compat as db_mod
-    db_mod.DB_PATH = getattr(settings_mod, "DB_PATH", db_mod.DB_PATH)
+    old_control = getattr(settings_mod, "API_CONTROL_KEY", None)
+    old_admin = getattr(settings_mod, "API_ADMIN_KEY", None)
+    settings_mod.API_CONTROL_KEY = "test-control-key"
+    settings_mod.API_ADMIN_KEY = "test-admin-key"
     from app.api.main import app
     with TestClient(app) as c:
         yield c
-    os.environ.pop("API_CONTROL_KEY", None)
-    os.environ.pop("API_ADMIN_KEY", None)
+    if old_control is not None:
+        settings_mod.API_CONTROL_KEY = old_control
+    if old_admin is not None:
+        settings_mod.API_ADMIN_KEY = old_admin
 
 
 def test_get_control_status_is_public(client):

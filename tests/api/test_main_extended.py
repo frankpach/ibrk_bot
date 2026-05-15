@@ -226,7 +226,7 @@ def test_orders_place_success():
              patch("app.ibkr.dedup.PreflightChecker") as MockPreflight, \
              patch("app.ibkr.dedup.get_deduplicator") as mock_dedup_get, \
              patch("app.notifications.order_monitor.OrderExecutionMonitor.place_and_monitor") as mock_place, \
-             patch("app.db.database.insert_trade") as mock_insert:
+             patch("app.infrastructure.db.compat.insert_trade") as mock_insert:
             mock_preflight = MagicMock()
             mock_preflight.check.return_value = MagicMock(ok=True, reason=None)
             MockPreflight.return_value = mock_preflight
@@ -277,8 +277,8 @@ def test_close_position_success():
         mock.place_order.return_value = {"order_id": "999"}
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_open_trades", return_value=[trade]), \
-             patch("app.db.database.close_trade") as mock_close, \
+        with patch("app.infrastructure.db.compat.get_open_trades", return_value=[trade]), \
+             patch("app.infrastructure.db.compat.close_trade") as mock_close, \
              patch("app.ibkr.dedup.get_deduplicator") as mock_dedup_get, \
              patch("app.ibkr.dedup.PreflightChecker") as MockPreflight, \
              patch("app.ibkr.fill_tracker.get_fill_price_fallback", return_value=105.0):
@@ -309,8 +309,8 @@ def test_close_all_positions_with_trades():
         mock.place_order.return_value = {"order_id": "999"}
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_open_trades", return_value=[trade]), \
-             patch("app.db.database.close_trade") as mock_close, \
+        with patch("app.infrastructure.db.compat.get_open_trades", return_value=[trade]), \
+             patch("app.infrastructure.db.compat.close_trade") as mock_close, \
              patch("app.ibkr.dedup.get_deduplicator") as mock_dedup_get, \
              patch("app.ibkr.dedup.PreflightChecker") as MockPreflight, \
              patch("app.ibkr.fill_tracker.get_fill_price_fallback", return_value=105.0):
@@ -424,7 +424,7 @@ def test_close_trade_by_id_not_found():
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_open_trades", return_value=[]):
+        with patch("app.infrastructure.db.compat.get_open_trades", return_value=[]):
             resp = client.post("/orders/close/id/99999")
             assert resp.status_code == 404
 
@@ -440,7 +440,7 @@ def test_close_trade_by_id_sends_telegram():
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_open_trades", return_value=[trade]), \
+        with patch("app.infrastructure.db.compat.get_open_trades", return_value=[trade]), \
              patch("app.notifications.telegram.notify") as mock_notify:
             resp = client.post("/orders/close/id/42")
             assert resp.status_code == 200
@@ -530,7 +530,7 @@ def test_get_proposals():
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_pending_proposals", return_value=[{"symbol": "NFLX"}]):
+        with patch("app.infrastructure.db.compat.get_pending_proposals", return_value=[{"symbol": "NFLX"}]):
             resp = client.get("/symbols/proposals")
             assert resp.status_code == 200
             assert resp.json()[0]["symbol"] == "NFLX"
@@ -542,7 +542,7 @@ def test_approve_symbol():
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.approve_symbol") as mock_approve:
+        with patch("app.infrastructure.db.compat.approve_symbol") as mock_approve:
             resp = client.post("/symbols/approve/NFLX")
             assert resp.status_code == 200
             assert resp.json()["status"] == "approved"
@@ -555,7 +555,7 @@ def test_allowed_symbols_endpoint_uses_db_approved_symbols():
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_approved_symbols_with_meta", return_value=[
+        with patch("app.infrastructure.db.compat.get_approved_symbols_with_meta", return_value=[
             {"symbol": "AAOI"},
             {"symbol": "MSFT"},
         ]):
@@ -572,12 +572,12 @@ def test_allowed_symbols_endpoint_includes_open_trades_and_autorepairs_universe(
         mock.ib.isConnected.return_value = True
         MockClient.return_value = mock
         client = _fresh_client()
-        with patch("app.db.database.get_approved_symbols_with_meta", return_value=[
+        with patch("app.infrastructure.db.compat.get_approved_symbols_with_meta", return_value=[
             {"symbol": "MSFT", "sec_type": "STK", "exchange": "SMART", "currency": "USD", "liquid_hours": None, "market_key": "STK_US"},
         ]), \
              patch("app.api.main.get_approved_symbols", return_value=["MSFT"]), \
              patch("app.api.main.get_open_trades", return_value=[trade]), \
-             patch("app.db.database.approve_symbol") as mock_approve:
+             patch("app.infrastructure.db.compat.approve_symbol") as mock_approve:
             resp = client.get("/allowed-symbols")
         assert resp.status_code == 200
         assert resp.json()["symbols"] == ["AAOI", "MSFT"]
@@ -787,8 +787,8 @@ def test_dashboard_data_exposes_snapshot_data_for_open_trades():
             volatility_mult=1.0,
         )
 
-        with patch("app.db.database.get_open_trades", return_value=[trade]), \
-             patch("app.db.database.get_position_snapshots", return_value={
+        with patch("app.infrastructure.db.compat.get_open_trades", return_value=[trade]), \
+             patch("app.infrastructure.db.compat.get_position_snapshots", return_value={
                  42: {
                      "trade_id": 42,
                      "symbol": "AAOI",
@@ -798,8 +798,8 @@ def test_dashboard_data_exposes_snapshot_data_for_open_trades():
                      "updated_at": "2026-05-13T14:22:51",
                  }
              }), \
-             patch("app.db.database.get_approved_symbols", return_value=["MSFT", "AAOI"]), \
-             patch("app.db.database.get_or_create_symbol_parameters", return_value=symbol_params):
+             patch("app.infrastructure.db.compat.get_approved_symbols", return_value=["MSFT", "AAOI"]), \
+             patch("app.infrastructure.db.compat.get_or_create_symbol_parameters", return_value=symbol_params):
             resp = client.get("/dashboard/data")
 
         assert resp.status_code == 200
@@ -846,7 +846,7 @@ def test_dashboard_data_sorts_open_symbol_first_in_universe():
 
         with patch("app.api.main.get_open_trades", return_value=[trade]), \
              patch("app.api.main.get_approved_symbols", return_value=["MSFT", "AAOI", "AAPL"]), \
-             patch("app.db.database.get_or_create_symbol_parameters", return_value=symbol_params):
+             patch("app.infrastructure.db.compat.get_or_create_symbol_parameters", return_value=symbol_params):
             resp = client.get("/dashboard/data")
 
         assert resp.status_code == 200
@@ -909,7 +909,7 @@ def test_dashboard_data_live_uses_open_snapshot_pnl_and_includes_open_symbol_in_
 
         with patch("app.system.controller.get_controller", return_value=SimpleNamespace(mode="live", is_paused=False)), \
              patch("app.api.main.get_open_trades", return_value=[trade]), \
-             patch("app.db.database.get_position_snapshots", return_value={
+             patch("app.infrastructure.db.compat.get_position_snapshots", return_value={
                  280: {
                      "trade_id": 280,
                      "symbol": "AAOI",
@@ -920,8 +920,8 @@ def test_dashboard_data_live_uses_open_snapshot_pnl_and_includes_open_symbol_in_
                  }
              }), \
              patch("app.api.main.get_approved_symbols", return_value=["AAPL", "MSFT"]), \
-             patch("app.db.database.get_or_create_symbol_parameters", return_value=symbol_params), \
-             patch("app.db.database.get_account_history", return_value=[{
+             patch("app.infrastructure.db.compat.get_or_create_symbol_parameters", return_value=symbol_params), \
+             patch("app.infrastructure.db.compat.get_account_history", return_value=[{
                  "date": "2026-05-13",
                  "net_liquidation": 26.62,
                  "buying_power": 7.95,

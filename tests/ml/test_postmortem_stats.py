@@ -2,6 +2,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+_DB = "app.infrastructure.db.compat"
+
 
 def _make_trade(pnl_pct, exit_reason="STOP_LOSS"):
     t = MagicMock()
@@ -12,7 +14,7 @@ def _make_trade(pnl_pct, exit_reason="STOP_LOSS"):
 
 def test_returns_none_with_fewer_than_3_trades():
     from app.ml.postmortem_stats import enrich_postmortem_context
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=[]):
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=[]):
         result = enrich_postmortem_context("AAPL")
     assert result is None
 
@@ -20,7 +22,7 @@ def test_returns_none_with_fewer_than_3_trades():
 def test_returns_none_with_2_trades():
     from app.ml.postmortem_stats import enrich_postmortem_context
     trades = [_make_trade(0.01), _make_trade(-0.01)]
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=trades):
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=trades):
         result = enrich_postmortem_context("AAPL")
     assert result is None
 
@@ -34,8 +36,8 @@ def test_returns_context_with_enough_trades():
         _make_trade(-0.01, "STOP_LOSS"),
         _make_trade(0.04, "TAKE_PROFIT"),
     ]
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=trades), \
-         patch("app.db.database.get_patterns_for_symbol", return_value=[]):
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=trades), \
+         patch(f"{_DB}.get_patterns_for_symbol", return_value=[]):
         result = enrich_postmortem_context("AAPL")
     assert isinstance(result, PostmortemContext)
     assert result.win_rate_last_10 == pytest.approx(3/5)
@@ -63,8 +65,8 @@ def test_patterns_included_in_context():
     trades = [_make_trade(0.01) for _ in range(5)]
     pattern = MagicMock()
     pattern.pattern_text = "RSI oversold + high volume = reliable entry"
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=trades), \
-         patch("app.db.database.get_patterns_for_symbol", return_value=[pattern]):
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=trades), \
+         patch(f"{_DB}.get_patterns_for_symbol", return_value=[pattern]):
         result = enrich_postmortem_context("AAPL")
     assert len(result.patterns_last_3) == 1
     assert "RSI oversold" in result.patterns_last_3[0]
@@ -72,7 +74,7 @@ def test_patterns_included_in_context():
 
 def test_graceful_on_db_error():
     from app.ml.postmortem_stats import enrich_postmortem_context
-    with patch("app.db.database.get_closed_trades_by_symbol",
+    with patch(f"{_DB}.get_closed_trades_by_symbol",
                side_effect=Exception("DB error")):
         result = enrich_postmortem_context("AAPL")
     assert result is None

@@ -223,7 +223,7 @@ def test_dim_price_change_ideal_buy():
 
 
 # ---------- _get_multipliers ----------
-@patch("app.db.database.get_or_create_symbol_parameters")
+@patch("app.infrastructure.db.compat.get_or_create_symbol_parameters")
 def test_get_multipliers_from_db(mock_params):
     mock_params.return_value = MagicMock(
         momentum_mult=1.2, trend_mult=0.9, volume_mult=1.0,
@@ -234,7 +234,7 @@ def test_get_multipliers_from_db(mock_params):
     assert m["portfolio_fit"] == 0.8
 
 
-@patch("app.db.database.get_or_create_symbol_parameters")
+@patch("app.infrastructure.db.compat.get_or_create_symbol_parameters")
 def test_get_multipliers_fallback(mock_params):
     mock_params.side_effect = Exception("db error")
     m = _get_multipliers("AAPL")
@@ -285,23 +285,23 @@ def test_compute_score_to_dict(mock_mult):
 
 
 # ---------- update_weights_attenuated ----------
-@patch("app.db.database.get_or_create_symbol_parameters")
-@patch("app.db.database.update_symbol_parameters")
+@patch("app.infrastructure.db.compat.get_or_create_symbol_parameters")
+@patch("app.infrastructure.db.compat.update_symbol_parameters")
 def test_update_weights_attenuated_low_trade_count(mock_update, mock_get):
     mock_get.return_value = MagicMock(trade_count=2)
     assert update_weights_attenuated("AAPL", "momentum", 1.2, 0.8) is False
 
 
-@patch("app.db.database.get_or_create_symbol_parameters")
-@patch("app.db.database.update_symbol_parameters")
+@patch("app.infrastructure.db.compat.get_or_create_symbol_parameters")
+@patch("app.infrastructure.db.compat.update_symbol_parameters")
 def test_update_weights_attenuated_success(mock_update, mock_get):
     mock_get.return_value = MagicMock(trade_count=10, momentum_mult=1.0)
     assert update_weights_attenuated("AAPL", "momentum", 1.2, 0.8) is True
     mock_update.assert_called_once()
 
 
-@patch("app.db.database.get_or_create_symbol_parameters")
-@patch("app.db.database.update_symbol_parameters")
+@patch("app.infrastructure.db.compat.get_or_create_symbol_parameters")
+@patch("app.infrastructure.db.compat.update_symbol_parameters")
 def test_update_weights_attenuated_bounds(mock_update, mock_get):
     mock_get.return_value = MagicMock(trade_count=10, momentum_mult=1.4)
     update_weights_attenuated("AAPL", "momentum", 2.0, 1.0)
@@ -309,7 +309,7 @@ def test_update_weights_attenuated_bounds(mock_update, mock_get):
     assert args[1]["momentum_mult"] == pytest.approx(1.49)
 
 
-@patch("app.db.database.get_or_create_symbol_parameters")
+@patch("app.infrastructure.db.compat.get_or_create_symbol_parameters")
 def test_update_weights_attenuated_exception(mock_get):
     mock_get.side_effect = Exception("db fail")
     assert update_weights_attenuated("AAPL", "momentum", 1.2, 0.8) is False

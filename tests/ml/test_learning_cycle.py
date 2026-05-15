@@ -2,14 +2,16 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+_DB = "app.infrastructure.db.compat"
+
 
 def test_run_learning_cycle_no_trades(tmp_path):
     """Cycle runs without error when no closed trades exist."""
     from app.ml.cycle import run_learning_cycle
     data_layer = MagicMock()
     with patch("app.analysis.evaluator.run_return_evaluator"), \
-         patch("app.db.database.get_closed_trades_with_snapshots", return_value=[]), \
-         patch("app.db.database.get_approved_symbols", return_value=[]):
+         patch(f"{_DB}.get_closed_trades_with_snapshots", return_value=[]), \
+         patch(f"{_DB}.get_approved_symbols", return_value=[]):
         report = run_learning_cycle(data_layer)
     assert report.signal_filter_auc is None
     assert report.errors == [] or isinstance(report.errors, list)
@@ -18,7 +20,6 @@ def test_run_learning_cycle_no_trades(tmp_path):
 def test_run_learning_cycle_with_trades(tmp_path):
     """Cycle returns AUC when enough trades exist."""
     from app.ml.cycle import run_learning_cycle
-    # Build 15 fake trade dicts
     fake_trades = [
         {"pnl_pct": 0.01 if i % 2 == 0 else -0.01,
          "rsi_14": 50 + i, "macd_line": 0, "atr_pct": 2.0,
@@ -28,8 +29,8 @@ def test_run_learning_cycle_with_trades(tmp_path):
     ]
     data_layer = MagicMock()
     with patch("app.analysis.evaluator.run_return_evaluator"), \
-         patch("app.db.database.get_closed_trades_with_snapshots", return_value=fake_trades), \
-         patch("app.db.database.get_approved_symbols", return_value=[]), \
+         patch(f"{_DB}.get_closed_trades_with_snapshots", return_value=fake_trades), \
+         patch(f"{_DB}.get_approved_symbols", return_value=[]), \
          patch("app.ml.signal_filter.get_signal_filter") as mock_sf, \
          patch("app.notifications.telegram.notify"):
         mock_sf.return_value.retrain.return_value = 0.63
@@ -41,7 +42,7 @@ def test_run_learning_cycle_with_trades(tmp_path):
 def test_maybe_rollback_not_enough_trades():
     """No rollback when fewer than 5 closed trades."""
     from app.ml.cycle import maybe_rollback_parameters
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=[]):
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=[]):
         result = maybe_rollback_parameters("AAPL")
     assert result is False
 
@@ -49,8 +50,8 @@ def test_maybe_rollback_not_enough_trades():
 def test_maybe_rollback_good_win_rate():
     """No rollback when win rate >= 30%."""
     from app.ml.cycle import maybe_rollback_parameters
-    trades = [MagicMock(pnl_pct=0.01) for _ in range(5)]  # all wins
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=trades):
+    trades = [MagicMock(pnl_pct=0.01) for _ in range(5)]
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=trades):
         result = maybe_rollback_parameters("AAPL")
     assert result is False
 
@@ -59,12 +60,12 @@ def test_maybe_rollback_applies_when_win_rate_low():
     """Rollback applied when win rate < 30% and previous_json exists."""
     import json
     from app.ml.cycle import maybe_rollback_parameters
-    trades = [MagicMock(pnl_pct=-0.01) for _ in range(5)]  # all losses
+    trades = [MagicMock(pnl_pct=-0.01) for _ in range(5)]
     params = MagicMock()
     params.previous_json = json.dumps({"stop_loss_pct": 0.025})
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=trades), \
-         patch("app.db.database.get_or_create_symbol_parameters", return_value=params), \
-         patch("app.db.database.update_symbol_parameters") as mock_update, \
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=trades), \
+         patch(f"{_DB}.get_or_create_symbol_parameters", return_value=params), \
+         patch(f"{_DB}.update_symbol_parameters") as mock_update, \
          patch("app.notifications.telegram.notify"):
         result = maybe_rollback_parameters("AAPL")
     assert result is True
@@ -74,18 +75,18 @@ def test_maybe_rollback_applies_when_win_rate_low():
 def test_get_win_rate_last_10_insufficient():
     """Returns None when fewer than 3 trades."""
     from app.ml.cycle import _get_win_rate_last_10
-    with patch("app.db.database.get_closed_trades_by_symbol", return_value=[]):
+    with patch(f"{_DB}.get_closed_trades_by_symbol", return_value=[]):
         result = _get_win_rate_last_10("AAPL")
     assert result is None
 
 
 def test_run_learning_cycle_without_ib_client_no_regression():
-    """run_learning_cycle(data_layer) with no ib_client still works — no regression."""
+    """run_learning_cycle(data_layer) with no ib_client still works."""
     from app.ml.cycle import run_learning_cycle
     data_layer = MagicMock()
     with patch("app.analysis.evaluator.run_return_evaluator"), \
-         patch("app.db.database.get_closed_trades_with_snapshots", return_value=[]), \
-         patch("app.db.database.get_approved_symbols", return_value=[]):
+         patch(f"{_DB}.get_closed_trades_with_snapshots", return_value=[]), \
+         patch(f"{_DB}.get_approved_symbols", return_value=[]):
         report = run_learning_cycle(data_layer)
     assert report is not None
     assert report.errors == [] or isinstance(report.errors, list)
@@ -102,10 +103,10 @@ def test_run_learning_cycle_with_ib_client_calls_account_snapshot():
     }
 
     with patch("app.analysis.evaluator.run_return_evaluator"), \
-         patch("app.db.database.get_closed_trades_with_snapshots", return_value=[]), \
-         patch("app.db.database.get_approved_symbols", return_value=[]), \
-         patch("app.db.database.upsert_account_snapshot") as mock_acct, \
-         patch("app.db.database.get_daily_pnl", return_value=500.0):
+         patch(f"{_DB}.get_closed_trades_with_snapshots", return_value=[]), \
+         patch(f"{_DB}.get_approved_symbols", return_value=[]), \
+         patch(f"{_DB}.upsert_account_snapshot") as mock_acct, \
+         patch(f"{_DB}.get_daily_pnl", return_value=500.0):
         report = run_learning_cycle(data_layer, ib_client=ib_client)
 
     mock_acct.assert_called_once()
@@ -113,7 +114,7 @@ def test_run_learning_cycle_with_ib_client_calls_account_snapshot():
     assert kwargs["net_liquidation"] == 50000.0
     assert kwargs["buying_power"] == 25000.0
     assert kwargs["daily_pnl_usd"] == 500.0
-    assert abs(kwargs["daily_pnl_pct"] - 1.0) < 0.01  # 500/50000*100 = 1.0%
+    assert abs(kwargs["daily_pnl_pct"] - 1.0) < 0.01
 
 
 def test_learning_report_to_telegram():

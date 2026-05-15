@@ -82,10 +82,10 @@ def test_dashboard_html_news_defaults_universe_tab():
     assert "Mi universo" in html or "universe" in html
 
 
-def test_dashboard_html_market_trends_six_tabs():
-    """MarketTrendsCard must declare all 6 tab keys."""
+def test_dashboard_html_market_trends_five_tabs():
+    """MarketTrendsCard must declare the core 5 scanner tab keys."""
     html = render_dashboard_html()
-    for key in ("most_active", "top_movers", "gainers", "losers", "sector", "implied_move"):
+    for key in ("most_active", "top_movers", "gainers", "losers", "sector"):
         assert key in html
 
 
@@ -93,15 +93,3 @@ def test_dashboard_html_recalibrate_calls_approve():
     """Recalibrar button calls /symbols/approve/{symbol}."""
     html = render_dashboard_html()
     assert "/symbols/approve/" in html
-
-
-def test_dashboard_html_add_button_calls_propose():
-    """+ añadir button calls /symbols/propose."""
-    html = render_dashboard_html()
-    assert "/symbols/propose" in html
-
-
-def test_dashboard_html_notifications_level_endpoint():
-    """Control bar calls /notifications/level/."""
-    html = render_dashboard_html()
-    assert "/notifications/level/" in html

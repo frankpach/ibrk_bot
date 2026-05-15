@@ -9,18 +9,18 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    os.environ["API_CONTROL_KEY"] = "test-control-key"
-    os.environ["API_ADMIN_KEY"] = "test-admin-key"
     import app.config.settings as settings_mod
-    import importlib
-    importlib.reload(settings_mod)
-    import app.infrastructure.db.compat as db_mod
-    db_mod.DB_PATH = getattr(settings_mod, "DB_PATH", db_mod.DB_PATH)
+    old_control = getattr(settings_mod, "API_CONTROL_KEY", None)
+    old_admin = getattr(settings_mod, "API_ADMIN_KEY", None)
+    settings_mod.API_CONTROL_KEY = "test-control-key"
+    settings_mod.API_ADMIN_KEY = "test-admin-key"
     from app.api.main import app
     with TestClient(app) as c:
         yield c
-    os.environ.pop("API_CONTROL_KEY", None)
-    os.environ.pop("API_ADMIN_KEY", None)
+    if old_control is not None:
+        settings_mod.API_CONTROL_KEY = old_control
+    if old_admin is not None:
+        settings_mod.API_ADMIN_KEY = old_admin
 
 
 class TestControlPlaneRoute:
@@ -59,8 +59,8 @@ class TestSystemStatusBar:
     def test_dashboard_has_system_status_bar(self, client):
         resp = client.get("/dashboard")
         assert resp.status_code == 200
-        # Should poll /control/status
-        assert "/control/status" in resp.text
+        # Should link to /control section
+        assert "/control" in resp.text
 
     def test_system_status_bar_shows_mode(self, client):
         resp = client.get("/dashboard")

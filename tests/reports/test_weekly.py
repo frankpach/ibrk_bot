@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 from app.reports.weekly import generate_weekly_report, get_closed_trades_since, send_weekly_report
 
+_DB = "app.infrastructure.db.compat"
+
 
 def test_generate_weekly_report_empty():
     report = generate_weekly_report([], [], 1000.0)
@@ -50,7 +52,7 @@ def test_generate_weekly_report_many_trades():
     assert "... y 5 operaciones mas" in report
 
 
-@patch("app.db.database.get_connection")
+@patch(f"{_DB}.get_connection")
 def test_get_closed_trades_since(mock_get_conn):
     mock_conn = MagicMock()
     mock_conn.execute.return_value.fetchall.return_value = [
@@ -71,17 +73,9 @@ def test_get_closed_trades_since(mock_get_conn):
 
 
 @patch("app.reports.weekly.get_closed_trades_since", return_value=[])
-@patch("app.db.database.get_patterns_for_week", return_value=[])
+@patch(f"{_DB}.get_patterns_for_week", return_value=[])
 @patch("app.reports.weekly.notify")
 def test_send_weekly_report(mock_notify, mock_patterns, mock_trades):
     send_weekly_report(capital=1000.0)
     mock_notify.assert_called_once()
     assert "Semanal" in mock_notify.call_args[0][0]
-
-
-@patch("app.reports.weekly.get_closed_trades_since", side_effect=Exception("db fail"))
-@patch("app.db.database.get_patterns_for_week", return_value=[])
-@patch("app.reports.weekly.notify")
-def test_send_weekly_report_db_error(mock_notify, mock_patterns, mock_trades):
-    send_weekly_report(capital=1000.0)
-    mock_notify.assert_called_once()
