@@ -185,6 +185,15 @@ def render_dashboard_html() -> str:
       date: v => v ? String(v).slice(2,16).replace('T',' ') : '—',
     };
 
+    // Global chart symbol bus — lets any component trigger the chart
+    window._chartBus = window._chartBus || { listeners: [], emit(sym) { this.listeners.forEach(fn => fn(sym)); } };
+    function useChartBus(cb) {
+      React.useEffect(() => {
+        window._chartBus.listeners.push(cb);
+        return () => { window._chartBus.listeners = window._chartBus.listeners.filter(f => f !== cb); };
+      }, [cb]);
+    }
+
     function toggleTheme() {
       const h = document.documentElement;
       const dark = h.getAttribute('data-theme') === 'dark';
@@ -461,7 +470,7 @@ def render_dashboard_html() -> str:
           <div key={t.trade_id||t.id||i} className="pos-card fade-up">
             <div className="pos-row">
               <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-                <span className="pos-sym">{t.symbol}</span>
+                <span className="pos-sym" style={{cursor:'pointer'}} onClick={()=>window._chartBus.emit(t.symbol)}>{t.symbol}</span>
                 <span className={'tag ' + (t.action==='BUY'?'tag-buy':'tag-sell')}>{t.action}</span>
                 <span className="tag tag-neutral">{t.signal_strength||'—'}</span>
                 {overnightSet.has(t.symbol) && <span className="tag tag-overnight">OVERNIGHT</span>}
@@ -545,6 +554,7 @@ def render_dashboard_html() -> str:
     }
 
     function SymbolChart({ data }) {
+      const [open, setOpen] = useState(false);
       const [selected, setSelected] = useState(null);
       const [cdata, setCdata] = useState(null);
       const [tab, setTab] = useState('intraday');
@@ -554,140 +564,150 @@ def render_dashboard_html() -> str:
       const tvRef = useRef(null);
       const seriesRef = useRef({});
 
-      const chips = useMemo(()=>{
-        const syms=[...(data?.open_trades||[]).map(t=>t.symbol),...(data?.signals||[]).slice(0,4).map(s=>s.symbol)];
-        return [...new Set(syms)].slice(0,8);
-      },[data]);
+      const chips = useMemo(() => {
+        const openSyms = (data?.open_trades||[]).map(t => t.symbol);
+        const uniSyms = (data?.symbols_universe||[]).map(s => s.symbol);
+        const all = [...new Set([...openSyms, ...uniSyms])].slice(0, 12);
+        return { all, open: new Set(openSyms) };
+      }, [data]);
 
-      async function load(sym,period){
+      const handleBus = useCallback((sym) => { setOpen(true); selectSym(sym); }, [tab]);
+      useChartBus(handleBus);
+
+      const PERIODS = [
+        ['intraday','Hoy 5m'],['1h','1h'],['4h','4h'],
+        ['daily','30D'],['weekly','1W'],['monthly','3M'],
+      ];
+
+      async function load(sym, period) {
         setLoading(true);
-        try{ const res=await fetch('/dashboard/symbol/'+sym+'?period='+period); const d=await res.json(); setCdata(d); }
-        catch(e){ setCdata(null); }
+        try {
+          const res = await fetch(`/dashboard/symbol/${sym}?period=${period}`);
+          const d = await res.json();
+          setCdata(d);
+        } catch(e) { setCdata(null); }
         setLoading(false);
       }
-      function select(sym){ setSelected(sym); load(sym,tab); }
-      function switchTab(t){ setTab(t); if(selected) load(selected,t); }
 
-      useEffect(()=>{
-        if(!chartRef.current || !cdata?.bars?.length || typeof LightweightCharts==='undefined') return;
-        if(tvRef.current){ try{tvRef.current.remove();}catch(e){} tvRef.current=null; seriesRef.current={}; }
-        const isDark=document.documentElement.getAttribute('data-theme')!=='light';
-        const bg=isDark?'#0C1421':'#FFFFFF'; const text=isDark?'#94A3B8':'#475569'; const grid=isDark?'#1E2D42':'#E2E8F0';
+      function selectSym(sym) { setSelected(sym); load(sym, tab); }
+      function switchTab(t) { setTab(t); if (selected) load(selected, t); }
+
+      useEffect(() => {
+        if (!chartRef.current || !cdata?.bars?.length || typeof LightweightCharts === 'undefined') return;
+        if (tvRef.current) { try { tvRef.current.remove(); } catch(e) {} tvRef.current = null; seriesRef.current = {}; }
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        const bg = isDark ? '#0C1421' : '#FFFFFF'; const text = isDark ? '#94A3B8' : '#475569'; const grid = isDark ? '#1E2D42' : '#E2E8F0';
         const chart = LightweightCharts.createChart(chartRef.current, {
           layout:{background:{color:bg},textColor:text},
           grid:{vertLines:{color:grid},horzLines:{color:grid}},
           crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
           rightPriceScale:{borderColor:grid},
           timeScale:{borderColor:grid,timeVisible:false},
-          width:chartRef.current.clientWidth, height:240,
+          width:chartRef.current.clientWidth, height:260,
         });
-        tvRef.current=chart;
-        const bars=cdata.bars;
+        tvRef.current = chart;
+        const bars = cdata.bars;
         const candle = chart.addCandlestickSeries({upColor:'#10B981',downColor:'#F43F5E',borderUpColor:'#10B981',borderDownColor:'#F43F5E',wickUpColor:'#10B981',wickDownColor:'#F43F5E'});
         candle.setData(bars.map(b=>({time:b.time,open:b.open,high:b.high,low:b.low,close:b.close})));
-        seriesRef.current.candle=candle;
-
-        const trade = data?.open_trades?.find(t=>t.symbol===selected);
-        if(trade && bars.length>0){
-          const el = chart.addLineSeries({color:'#FBBF24',lineWidth:1,lineStyle:LightweightCharts.LineStyle.LargeDashed});
-          el.setData(bars.map(b=>({time:b.time,value:trade.entry_price})));
-          const sl = chart.addLineSeries({color:'#F43F5E',lineWidth:1,lineStyle:LightweightCharts.LineStyle.LargeDashed});
-          sl.setData(bars.map(b=>({time:b.time,value:trade.stop_loss_price})));
-          const tp = chart.addLineSeries({color:'#10B981',lineWidth:1,lineStyle:LightweightCharts.LineStyle.LargeDashed});
-          tp.setData(bars.map(b=>({time:b.time,value:trade.take_profit_price})));
-          // Invalidation line: entry +/- 1 ATR approx (use SL distance * 1.5)
-          const atrDist = Math.abs(parseFloat(trade.entry_price||0)-parseFloat(trade.stop_loss_price||0))*1.5;
-          const invPrice = trade.action==='BUY' ? parseFloat(trade.entry_price)-atrDist : parseFloat(trade.entry_price)+atrDist;
-          const inv = chart.addLineSeries({color:'#A78BFA',lineWidth:1,lineStyle:LightweightCharts.LineStyle.SparseDotted});
-          inv.setData(bars.map(b=>({time:b.time,value:invPrice})));
+        const trade = (data?.open_trades||[]).find(t=>t.symbol===selected);
+        if (trade && bars.length > 0) {
+          [[trade.entry_price,'#FBBF24'],[trade.stop_loss_price,'#F43F5E'],[trade.take_profit_price,'#10B981']].forEach(([price,color])=>{
+            if (price == null) return;
+            const s = chart.addLineSeries({color,lineWidth:1,lineStyle:LightweightCharts.LineStyle.LargeDashed});
+            s.setData(bars.map(b=>({time:b.time,value:parseFloat(price)})));
+          });
         }
-
-        if(inds.volume){
+        if (inds.volume) {
           const vol = chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'vol',color:'#38BDF840'});
           chart.priceScale('vol').applyOptions({scaleMargins:{top:.82,bottom:0}});
           vol.setData(bars.map(b=>({time:b.time,value:b.volume,color:b.close>=b.open?'#10B98140':'#F43F5E40'})));
         }
-        if(inds.vwap && cdata.vwap_series?.length){
-          const s=chart.addLineSeries({color:'#A78BFA',lineWidth:1});
-          s.setData(cdata.vwap_series);
-        }
-        if(inds.ema9 && cdata.ema9_series?.length){
-          const s=chart.addLineSeries({color:'#FBBF24',lineWidth:1});
-          s.setData(cdata.ema9_series);
-        }
-        if(inds.ema20 && cdata.ema20_series?.length){
-          const s=chart.addLineSeries({color:'#38BDF8',lineWidth:1});
-          s.setData(cdata.ema20_series);
-        }
-        if(inds.boll && cdata.boll_series?.length){
-          const u=chart.addLineSeries({color:'#A78BFA50',lineWidth:1});
-          const m=chart.addLineSeries({color:'#A78BFA80',lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed});
-          const l=chart.addLineSeries({color:'#A78BFA50',lineWidth:1});
-          u.setData(cdata.boll_series.map(b=>({time:b.time,value:b.upper})));
-          m.setData(cdata.boll_series.map(b=>({time:b.time,value:b.middle})));
-          l.setData(cdata.boll_series.map(b=>({time:b.time,value:b.lower})));
+        if (inds.vwap && cdata.vwap_series?.length){const s=chart.addLineSeries({color:'#A78BFA',lineWidth:1});s.setData(cdata.vwap_series);}
+        if (inds.ema9 && cdata.ema9_series?.length){const s=chart.addLineSeries({color:'#FBBF24',lineWidth:1});s.setData(cdata.ema9_series);}
+        if (inds.ema20 && cdata.ema20_series?.length){const s=chart.addLineSeries({color:'#38BDF8',lineWidth:1});s.setData(cdata.ema20_series);}
+        if (inds.boll && cdata.boll_series?.length){
+          const u=chart.addLineSeries({color:'#A78BFA50',lineWidth:1});u.setData(cdata.boll_series.map(b=>({time:b.time,value:b.upper})));
+          const m=chart.addLineSeries({color:'#A78BFA80',lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dashed});m.setData(cdata.boll_series.map(b=>({time:b.time,value:b.middle})));
+          const l=chart.addLineSeries({color:'#A78BFA50',lineWidth:1});l.setData(cdata.boll_series.map(b=>({time:b.time,value:b.lower})));
         }
         chart.timeScale().fitContent();
-        const ro=new ResizeObserver(()=>{ if(chartRef.current) chart.applyOptions({width:chartRef.current.clientWidth}); });
+        const ro = new ResizeObserver(()=>{if(chartRef.current) chart.applyOptions({width:chartRef.current.clientWidth});});
         ro.observe(chartRef.current);
         return ()=>ro.disconnect();
-      },[cdata,inds]);
+      }, [cdata, inds]);
 
-      if(!chips.length) return null;
       const toggle = k => setInds(p=>({...p,[k]:!p[k]}));
+
       return (
         <div className="card fade-up">
-          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',padding:'8px 12px',background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}>
-            <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--dim)'}}>SYM:</span>
-            {chips.map(sym=>(
-              <button key={sym} onClick={()=>select(sym)} style={{padding:'3px 10px',borderRadius:12,fontFamily:'"Fira Code",monospace',fontSize:'.65rem',cursor:'pointer',border:'1px solid '+(selected===sym?'rgba(56,189,248,.35)':'var(--border)'),background:selected===sym?'var(--blue-bg)':'transparent',color:selected===sym?'var(--blue)':'var(--muted)'}}>{sym}</button>
-            ))}
-            <QuickScan />
-          </div>
-          <div className="ch">
-            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-              <span className="ct">{selected||'Simbolo'}</span>
-              {cdata?.atr!=null && <span className="tag tag-neutral">ATR {fmt.n(cdata.atr,2)}</span>}
-              {cdata?.volume_relative!=null && <span className="tag tag-neutral">RVOL {fmt.n(cdata.volume_relative,1)}x</span>}
-              {['volume','vwap','ema9','ema20','boll','rsi','macd'].map(ind=>(
-                <button key={ind} onClick={()=>toggle(ind)} style={{padding:'2px 6px',borderRadius:3,fontFamily:'"Fira Code",monospace',fontSize:'.6rem',cursor:'pointer',background:inds[ind]?'var(--blue-bg)':'transparent',color:inds[ind]?'var(--blue)':'var(--dim)',border:`1px solid ${inds[ind]?'rgba(56,189,248,.3)':'var(--border)'}`}}>{ind.toUpperCase()}</button>
-              ))}
+          <div className="ch" style={{cursor:'pointer'}} onClick={()=>setOpen(o=>!o)}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:'1rem',lineHeight:1}}>{open?'▾':'▸'}</span>
+              <span className="ct">📈 Gráfica</span>
+              {selected && <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.1rem',color:'var(--blue)',marginLeft:4}}>{selected}</span>}
             </div>
-            <div className="tabs">
-              {[['intraday','Hoy 5min'],['daily','30D']].map(([t,l])=>(
-                <button key={t} className={'tab'+(tab===t?' on':'')} onClick={()=>switchTab(t)}>{l}</button>
-              ))}
-            </div>
+            {!open && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.75rem',color:'var(--dim)'}}>
+              {chips.all.length} símbolos — click para expandir
+            </span>}
           </div>
-          <div className="cb" style={{padding:'8px 12px',minHeight:260}}>
-            {loading && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.7rem',color:'var(--dim)'}}>cargando...</span>}
-            {!loading && !cdata && selected && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.7rem',color:'var(--dim)'}}>// sin datos para {selected}</span>}
-            {!loading && !selected && <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.7rem',color:'var(--dim)'}}>// selecciona un simbolo</span>}
-            <div ref={chartRef} style={{width:'100%',display:cdata?.bars?.length&&!loading?'block':'none'}} />
-            {inds.rsi && cdata?.rsi_series?.length && !loading && (
-              <div style={{marginTop:6,fontFamily:'"Fira Code",monospace',fontSize:'.68rem'}}>
-                <span style={{color:'var(--dim)'}}>RSI(14): </span>
-                <span style={{color:cdata.rsi_series.at(-1).value>70?'var(--red)':cdata.rsi_series.at(-1).value<30?'var(--green)':'var(--text)'}}>{fmt.n(cdata.rsi_series.at(-1).value,1)}</span>
+          {open && (
+            <>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',padding:'8px 12px',borderBottom:'1px solid var(--border)',alignItems:'center',background:'var(--surface2)'}}>
+                {chips.all.map(sym=>(
+                  <button key={sym} onClick={e=>{e.stopPropagation();selectSym(sym);}}
+                    style={{padding:'3px 10px',borderRadius:12,fontFamily:'"Fira Code",monospace',fontSize:'.78rem',cursor:'pointer',
+                      border:'1px solid '+(selected===sym?'rgba(56,189,248,.35)':'var(--border)'),
+                      background:selected===sym?'var(--blue-bg)':'transparent',
+                      color:selected===sym?'var(--blue)':'var(--muted)',position:'relative'}}>
+                    {sym}
+                    {chips.open.has(sym) && <span style={{position:'absolute',top:-3,right:-3,width:6,height:6,borderRadius:'50%',background:'var(--amber)'}}/>}
+                  </button>
+                ))}
               </div>
-            )}
-            {inds.macd && cdata?.macd_series?.length && !loading && (
-              <div style={{marginTop:4,fontFamily:'"Fira Code",monospace',fontSize:'.68rem'}}>
-                <span style={{color:'var(--dim)'}}>MACD: </span>
-                <span style={{color:cdata.macd_series.at(-1).histogram>0?'var(--green)':'var(--red)'}}>{fmt.n(cdata.macd_series.at(-1).macd,3)} / Signal {fmt.n(cdata.macd_series.at(-1).signal,3)}</span>
+              <div className="ch">
+                <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                  <span className="ct">{selected||'Símbolo'}</span>
+                  {cdata?.atr!=null && <span className="tag tag-neutral">ATR {fmt.n(cdata.atr,2)}</span>}
+                  {cdata?.volume_relative!=null && <span className="tag tag-neutral">RVOL {fmt.n(cdata.volume_relative,1)}x</span>}
+                  {['volume','vwap','ema9','ema20','boll','rsi','macd'].map(ind=>(
+                    <button key={ind} onClick={()=>toggle(ind)}
+                      style={{padding:'2px 7px',borderRadius:3,fontFamily:'"Fira Code",monospace',fontSize:'.72rem',cursor:'pointer',
+                        background:inds[ind]?'var(--blue-bg)':'transparent',color:inds[ind]?'var(--blue)':'var(--dim)',
+                        border:`1px solid ${inds[ind]?'rgba(56,189,248,.3)':'var(--border)'}`}}>
+                      {ind.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <div className="tabs">
+                  {PERIODS.map(([t,l])=>(
+                    <button key={t} className={'tab'+(tab===t?' on':'')} onClick={e=>{e.stopPropagation();switchTab(t);}}>{l}</button>
+                  ))}
+                </div>
               </div>
-            )}
-            {/* Levels panel */}
-            {cdata && selected && (
-              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:8,fontFamily:'"Fira Code",monospace',fontSize:'.62rem'}}>
-                {cdata.premarket_high!=null && <span className="tag tag-neutral">PreH {fmt.n(cdata.premarket_high,2)}</span>}
-                {cdata.premarket_low!=null && <span className="tag tag-neutral">PreL {fmt.n(cdata.premarket_low,2)}</span>}
-                {cdata.prev_high!=null && <span className="tag tag-neutral">PrevH {fmt.n(cdata.prev_high,2)}</span>}
-                {cdata.prev_low!=null && <span className="tag tag-neutral">PrevL {fmt.n(cdata.prev_low,2)}</span>}
-                {cdata.day_high!=null && <span className="tag tag-neutral">DayH {fmt.n(cdata.day_high,2)}</span>}
-                {cdata.day_low!=null && <span className="tag tag-neutral">DayL {fmt.n(cdata.day_low,2)}</span>}
+              <div className="cb" style={{padding:'8px 12px',minHeight:280}}>
+                {loading && <span className="empty">cargando {selected}...</span>}
+                {!loading && !cdata && selected && <span className="empty">// sin datos para {selected}</span>}
+                {!loading && !selected && <span className="empty">// selecciona un símbolo arriba</span>}
+                <div ref={chartRef} style={{width:'100%',display:cdata?.bars?.length&&!loading?'block':'none'}}/>
+                {inds.rsi && cdata?.rsi_series?.length && !loading && (
+                  <div style={{marginTop:6,fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}>
+                    <span style={{color:'var(--dim)'}}>RSI(14): </span>
+                    <span style={{color:cdata.rsi_series.at(-1).value>70?'var(--red)':cdata.rsi_series.at(-1).value<30?'var(--green)':'var(--text)'}}>
+                      {fmt.n(cdata.rsi_series.at(-1).value,1)}
+                    </span>
+                  </div>
+                )}
+                {inds.macd && cdata?.macd_series?.length && !loading && (
+                  <div style={{marginTop:4,fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}>
+                    <span style={{color:'var(--dim)'}}>MACD: </span>
+                    <span style={{color:cdata.macd_series.at(-1).histogram>0?'var(--green)':'var(--red)'}}>
+                      {fmt.n(cdata.macd_series.at(-1).macd,3)} / Signal {fmt.n(cdata.macd_series.at(-1).signal,3)}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       );
     }
@@ -942,7 +962,7 @@ def render_dashboard_html() -> str:
                   const color=(pct??0)>=0?'var(--green)':'var(--red)';
                   return (
                     <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}>
-                      <span style={{width:36,color:'var(--text)',fontWeight:600}}>{r.symbol}</span>
+                      <span style={{width:36,color:'var(--text)',fontWeight:600,cursor:'pointer'}} onClick={()=>window._chartBus.emit(r.symbol)}>{r.symbol}</span>
                       <span style={{width:72,color:'var(--muted)',fontSize:'.72rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>
                       <div style={{flex:1,height:6,borderRadius:3,background:'rgba(255,255,255,.04)',overflow:'hidden'}}>
                         <div style={{height:'100%',width:`${Math.min(Math.abs(pct??0)*10,100)}%`,background:color,borderRadius:3}}/></div>
@@ -957,7 +977,10 @@ def render_dashboard_html() -> str:
               const vr=r.volume_ratio==null?null:parseFloat(r.volume_ratio);
               return (
                 <div key={i} style={{display:'grid',gridTemplateColumns:'52px 1fr 56px 50px 60px',alignItems:'center',padding:'7px 0',borderBottom:'1px solid var(--border)',gap:6,fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}>
-                  <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.1rem',color:'var(--text)'}}>{r.symbol}</span>
+                  <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.1rem',color:'var(--text)',cursor:'pointer'}}
+                        onClick={()=>window._chartBus.emit(r.symbol)}>
+                    {r.symbol}
+                  </span>
                   <span style={{color:'var(--muted)',fontSize:'.72rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name||''}</span>
                   <span style={{color:(pct??0)>=0?'var(--green)':'var(--red)',fontWeight:600}}>{pct==null?'—':`${pct>=0?'+':''}${fmt.n(pct,1)}%`}</span>
                   <span className="tag" style={{fontSize:'.65rem',background:(vr??0)>2?'var(--green-bg)':'var(--amber-bg)',color:(vr??0)>2?'var(--green)':'var(--amber)',borderColor:(vr??0)>2?'rgba(16,185,129,.25)':'rgba(251,191,36,.2)'}}>{vr==null?'—':`${fmt.n(vr,1)}x`}</span>
@@ -1008,7 +1031,7 @@ def render_dashboard_html() -> str:
               <tbody>
                 {pageSyms.map(s=>(
                   <tr key={s.symbol}>
-                    <td className="sym">{s.symbol}{s.is_open&&<span className="tag tag-buy" style={{marginLeft:4,fontSize:'.55rem'}}>OPEN</span>}</td>
+                    <td className="sym" style={{cursor:'pointer'}} onClick={()=>window._chartBus.emit(s.symbol)}>{s.symbol}{s.is_open&&<span className="tag tag-buy" style={{marginLeft:4,fontSize:'.55rem'}}>OPEN</span>}</td>
                     <td>{s.backtest_calibrated?<span className="tag tag-buy" style={{fontSize:'.55rem'}}>backtest</span>:<span className="tag tag-neutral" style={{fontSize:'.55rem'}}>default</span>}</td>
                     <td>{fmt.n((s.stop_loss_pct||0)*100,1)}%</td>
                     <td>{fmt.n((s.take_profit_pct||0)*100,1)}%</td>
