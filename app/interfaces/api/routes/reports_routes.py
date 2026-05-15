@@ -17,37 +17,6 @@ def get_logs(lines: int = 100):
         return {"lines": []}
 
 
-@router.get("/dashboard", response_class=HTMLResponse)
-def dashboard():
-    from app.dashboard.html import DASHBOARD_HTML
-    return DASHBOARD_HTML
-
-
-@router.get("/dashboard/data")
-def dashboard_data():
-    from app.infrastructure.db.compat import get_open_trades, get_daily_pnl, get_pending_signals
-    from app.ibkr.market_permissions import get_permissions_report
-    return {
-        "open_trades": [{"symbol": t.symbol, "action": t.action, "quantity": t.quantity,
-                         "entry_price": t.entry_price, "stop_loss_price": t.stop_loss_price,
-                         "take_profit_price": t.take_profit_price, "pnl_pct": t.pnl_pct} for t in get_open_trades()],
-        "daily_pnl_usd": get_daily_pnl(),
-        "pending_signals": len(get_pending_signals()),
-        "market_permissions": get_permissions_report(),
-    }
-
-
-@router.get("/dashboard/symbol/{symbol}")
-def dashboard_symbol(symbol: str):
-    from app.infrastructure.db.compat import get_patterns_for_symbol, get_closed_trades_by_symbol, get_or_create_symbol_parameters
-    return {
-        "patterns": [{"text": p.pattern_text, "wins": p.win_count, "losses": p.loss_count}
-                     for p in get_patterns_for_symbol(symbol.upper())],
-        "trades": [{"action": t.action, "pnl_pct": t.pnl_pct, "exit_reason": t.exit_reason}
-                   for t in get_closed_trades_by_symbol(symbol.upper())],
-        "parameters": get_or_create_symbol_parameters(symbol.upper()).__dict__,
-    }
-
 
 @router.get("/reports/list")
 def reports_list():
