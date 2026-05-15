@@ -180,6 +180,14 @@ def render_control_html() -> str:
       if (isPaused) dotColor = 'var(--amber)';
       if (!ibConn) dotColor = 'var(--red)';
 
+      const navLinks = [
+        {href:'/dashboard', label:'Dashboard'},
+        {href:'/control',   label:'Control'},
+        {href:'/reports',   label:'Reportes'},
+        {href:'/docs',      label:'API Docs'},
+      ];
+      const path = window.location.pathname;
+
       return (
         <div className="status-bar">
           <span className="dot" style={{background:dotColor,boxShadow:dotColor==='var(--red)'?'none':'0 0 5px '+dotColor}} className={err?'':'pulse'}></span>
@@ -188,8 +196,21 @@ def render_control_html() -> str:
           <span style={{color:isPaused?'var(--amber)':'var(--green)'}}>{isPaused ? '● Pausado' : '● Activo'}</span>
           <span style={{color:pnl>=0?'var(--green)':'var(--red)'}}>| P&L: {f.usd(pnl)}</span>
           <span style={{color:ibConn?'var(--green)':'var(--red)'}}>| IB: {ibConn ? '✓' : '✗'}</span>
-          <a href="/control">[→ /control]</a>
-          {err && <span style={{color:'var(--red)',marginLeft:8}}>⚠ offline</span>}
+          {err && <span style={{color:'var(--red)'}}>⚠ offline</span>}
+          <span style={{flex:1}}></span>
+          <nav style={{display:'flex',gap:2}}>
+            {navLinks.map(({href,label})=>{
+              const active = path===href || (href!=='/dashboard' && path.startsWith(href));
+              return <a key={href} href={href} style={{
+                fontFamily:'"Barlow Condensed",sans-serif',
+                fontWeight: active?600:500, fontSize:'.8rem', letterSpacing:'.04em',
+                color: active?'var(--text)':'var(--dim)', textDecoration:'none',
+                padding:'2px 10px', borderRadius:4,
+                background: active?'var(--surface)':'transparent',
+                border: active?'1px solid var(--border)':'1px solid transparent',
+              }}>{label}</a>;
+            })}
+          </nav>
         </div>
       );
     }
