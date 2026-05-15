@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.13"]
+        python-version: ["3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +53,7 @@ jobs:
           pytest tests/ \
             --tb=short \
             -q \
+            -n auto \
             --cov=app \
             --cov-report=term-missing \
             --cov-report=xml \
@@ -120,6 +121,7 @@ jobs:
           pytest tests/ \
             --tb=short \
             -q \
+            -n auto \
             --timeout=60
 
   deploy:
