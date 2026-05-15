@@ -29,12 +29,14 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv pip install -r requirements.txt --system
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
 
       - name: Run Alembic migrations (SQLite)
         env:
           DATABASE_URL: sqlite:///./ci_test.db
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
 
       - name: Run tests with coverage
         env:
@@ -42,7 +44,7 @@ jobs:
           CONTROL_KEY: ci-test-key
           ADMIN_KEY: ci-test-admin-key
         run: |
-          pytest tests/ \
+          uv run pytest tests/ \
             --tb=short \
             -q \
             -n auto \
@@ -88,12 +90,14 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv pip install -r requirements.txt --system
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
 
       - name: Run Alembic migrations (PostgreSQL)
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
 
       - name: Run live tests against PostgreSQL
         env:
@@ -102,7 +106,7 @@ jobs:
           CONTROL_KEY: ci-test-key
           ADMIN_KEY: ci-test-admin-key
         run: |
-          pytest tests/ \
+          uv run pytest tests/ \
             --tb=short \
             -q \
             -n auto \
