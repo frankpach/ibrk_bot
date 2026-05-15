@@ -255,7 +255,7 @@ def render_dashboard_html() -> str:
       );
     }
 
-    function Header({ data, onTogglePause, onRefresh, interval, onTick }) {
+    function Header({ data, onTogglePause, onRefresh, interval, onTick, headerSym, setHeaderSym, setAnalyzeTarget }) {
       const st = data?.status || {};
       const isLive = (st.mode || 'paper').toUpperCase() === 'LIVE';
       const ib = data?.ib_connected;
@@ -267,6 +267,9 @@ def render_dashboard_html() -> str:
         {href:'/reports', label:'Reportes'},
         {href:'/docs', label:'API Docs'},
       ];
+      function commitSym() {
+        if (headerSym) { setAnalyzeTarget(headerSym); setHeaderSym(''); }
+      }
       return (
         <div className="header">
           <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -274,6 +277,26 @@ def render_dashboard_html() -> str:
             <span className="logo">IBKR AI Trader</span>
             <span className={'badge ' + (isLive ? 'badge-live' : 'badge-paper')}>{isLive ? 'LIVE' : 'PAPER'}</span>
             {st.paused && <span className="tag tag-neutral">PAUSADO</span>}
+          </div>
+          <div className="qs-box" style={{flex:1,maxWidth:340,display:'flex',gap:6,alignItems:'center'}}>
+            <input
+              className="qs-input"
+              placeholder="Buscar símbolo... (AAPL)"
+              value={headerSym}
+              onChange={e=>setHeaderSym(e.target.value.toUpperCase())}
+              onKeyDown={e=>{ if(e.key==='Enter') commitSym(); }}
+              style={{flex:1}}
+            />
+            <button
+              className="btn btn-primary"
+              style={{whiteSpace:'nowrap',fontSize:'.78rem'}}
+              onClick={commitSym}
+            >
+              + Analizar
+            </button>
+            <button className="btn" style={{fontSize:'.78rem',whiteSpace:'nowrap'}} onClick={()=>setAnalyzeTarget('__custom__')}>
+              🔍 Símbolo
+            </button>
           </div>
           <nav style={{display:'flex',alignItems:'center',gap:2}}>
             {nav.map(({href,label})=>{
@@ -316,11 +339,16 @@ def render_dashboard_html() -> str:
       );
     }
 
-    function QuickScan() {
+    function QuickScan({ onSelect, compact = false }) {
       const [sym, setSym] = useState('');
       const [loading, setLoading] = useState(false);
-      async function analyze() {
+      async function run() {
         if (!sym.trim()) return;
+        if (onSelect) {
+          onSelect(sym.trim().toUpperCase());
+          setSym('');
+          return;
+        }
         setLoading(true);
         try {
           const s = sym.trim().toUpperCase();
@@ -331,9 +359,9 @@ def render_dashboard_html() -> str:
       }
       return (
         <div className="qs-box">
-          <span className="ct">Quick Scan</span>
-          <input className="qs-input" placeholder="SYMBOL" value={sym} onChange={e=>setSym(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&analyze()}/>
-          <button className="btn btn-primary" disabled={loading||!sym.trim()} onClick={analyze}>{loading?'...':'Analizar'}</button>
+          {!compact && <span className="ct">Quick Scan</span>}
+          <input className="qs-input" placeholder="SYMBOL" value={sym} onChange={e=>setSym(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&run()}/>
+          <button className="btn btn-primary" disabled={loading||!sym.trim()} onClick={run}>{loading?'...':'Analizar'}</button>
         </div>
       );
     }
@@ -830,14 +858,35 @@ def render_dashboard_html() -> str:
     }
 
     function AnalyzeModal({ symbol, onClose }) {
-      const [phase, setPhase] = useState('idle'); // idle | analyzing | done | error | approving | approved
+      const [sym, setSym] = useState(symbol || '');
+      const [phase, setPhase] = useState('idle'); // idle | checking | analyzing | done | error | approving | approved
       const [result, setResult] = useState(null);
       const [err, setErr] = useState(null);
 
-      async function runAnalysis() {
-        setPhase('analyzing'); setErr(null);
+      async function verifyAccess(s) {
         try {
-          const r = await fetch('/candidate-analysis/'+symbol);
+          const res = await fetch(`/price/free/${s}`);
+          if (!res.ok) return { ok: false, reason: 'Sin acceso de mercado para ' + s };
+          const d = await res.json();
+          if (d.error) return { ok: false, reason: d.error };
+          return { ok: true };
+        } catch(e) {
+          return { ok: false, reason: 'No se pudo verificar: ' + String(e) };
+        }
+      }
+
+      async function runAnalysis() {
+        if (!sym.trim()) return;
+        setPhase('checking'); setErr(null);
+        const access = await verifyAccess(sym.trim().toUpperCase());
+        if (!access.ok) {
+          setErr('🚫 ' + access.reason);
+          setPhase('error');
+          return;
+        }
+        setPhase('analyzing');
+        try {
+          const r = await fetch('/candidate-analysis/'+sym.trim().toUpperCase());
           const j = await r.json();
           const jobId = j.job_id;
           // poll until done
@@ -855,7 +904,7 @@ def render_dashboard_html() -> str:
       async function approve() {
         setPhase('approving');
         try {
-          await fetch('/symbols/approve/'+symbol, {method:'POST', headers:{'X-Control-Key': window._controlKey||''}});
+          await fetch('/symbols/approve/'+sym.trim().toUpperCase(), {method:'POST', headers:{'X-Control-Key': window._controlKey||''}});
           setPhase('approved');
         } catch(e) { setErr(String(e)); setPhase('error'); }
       }
@@ -868,19 +917,43 @@ def render_dashboard_html() -> str:
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onClose}>
           <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:8,padding:24,width:340,maxWidth:'90vw'}} onClick={e=>e.stopPropagation()}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.4rem',color:'var(--text)'}}>{symbol}</span>
+              <span style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.4rem',color:'var(--text)'}}>{sym || 'Analizar Símbolo'}</span>
               <button onClick={onClose} style={{background:'none',border:'none',color:'var(--dim)',cursor:'pointer',fontSize:'1.2rem'}}>✕</button>
             </div>
 
-            {phase==='idle' && (
+            {!sym && phase==='idle' && (
+              <div>
+                <input
+                  value={sym}
+                  onChange={e=>setSym(e.target.value.toUpperCase())}
+                  onKeyDown={e=>e.key==='Enter'&&sym&&runAnalysis()}
+                  placeholder="AAPL, TSLA..."
+                  style={{width:'100%',marginBottom:8,background:'var(--surface)',color:'var(--text)',
+                          border:'1px solid var(--border)',borderRadius:5,padding:'8px 10px',
+                          fontFamily:'"Fira Code",monospace',fontSize:'.85rem'}}
+                  autoFocus
+                />
+                <button onClick={runAnalysis} className="btn btn-primary" style={{width:'100%',fontSize:'.85rem',padding:'8px'}}>
+                  🔍 Analizar
+                </button>
+              </div>
+            )}
+
+            {sym && phase==='idle' && (
               <button onClick={runAnalysis} className="btn btn-primary" style={{width:'100%',fontSize:'.85rem',padding:'8px'}}>
                 🔍 Analizar con IA
               </button>
             )}
 
+            {phase==='checking' && (
+              <div style={{textAlign:'center',padding:'16px 0',fontFamily:'"Fira Code",monospace',fontSize:'.8rem',color:'var(--dim)'}}>
+                Verificando acceso a {sym}...
+              </div>
+            )}
+
             {phase==='analyzing' && (
               <div style={{textAlign:'center',padding:'16px 0',fontFamily:'"Fira Code",monospace',fontSize:'.8rem',color:'var(--dim)'}}>
-                <div className="pulse" style={{marginBottom:8}}>⚡ Analizando {symbol}...</div>
+                <div className="pulse" style={{marginBottom:8}}>⚡ Analizando {sym}...</div>
                 <div style={{fontSize:'.7rem',color:'var(--dimmer)'}}>puede tardar 30-60s</div>
               </div>
             )}
@@ -915,13 +988,13 @@ def render_dashboard_html() -> str:
 
             {phase==='approving' && (
               <div style={{textAlign:'center',padding:'16px 0',fontFamily:'"Fira Code",monospace',fontSize:'.8rem',color:'var(--dim)'}}>
-                Aprobando {symbol}...
+                Aprobando {sym}...
               </div>
             )}
 
             {phase==='approved' && (
               <div style={{textAlign:'center',padding:'16px 0'}}>
-                <div style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.4rem',color:'var(--green)',marginBottom:8}}>✓ {symbol} AGREGADO</div>
+                <div style={{fontFamily:'"Bebas Neue",cursive',fontSize:'1.4rem',color:'var(--green)',marginBottom:8}}>✓ {sym} AGREGADO</div>
                 <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.75rem',color:'var(--dim)',marginBottom:12}}>Ya está en tu universo de trading</div>
                 <button onClick={onClose} className="btn" style={{fontSize:'.82rem',padding:'7px 16px'}}>Cerrar</button>
               </div>
@@ -1099,6 +1172,8 @@ def render_dashboard_html() -> str:
       const [data,setData]=useState(null);
       const [err,setErr]=useState(null);
       const [tick,setTick]=useState(0);
+      const [analyzeTarget,setAnalyzeTarget]=useState(null);
+      const [headerSym,setHeaderSym]=useState('');
       const load = useCallback(async ()=>{
         try {
           const res=await fetch('/dashboard/data');
@@ -1114,9 +1189,10 @@ def render_dashboard_html() -> str:
 
       return (
         <div style={{minHeight:'100vh',background:'var(--bg)'}}>
+          {analyzeTarget && <AnalyzeModal symbol={analyzeTarget==='__custom__'?'':analyzeTarget} onClose={()=>setAnalyzeTarget(null)} />}
           <MarketContextBar data={data} />
           <SystemStatusBar data={data} />
-          <Header data={data} interval={interval} onTick={()=>setTick(k=>k+1)} onTogglePause={togglePause} onRefresh={refresh}/>
+          <Header data={data} interval={interval} onTick={()=>setTick(k=>k+1)} onTogglePause={togglePause} onRefresh={refresh} headerSym={headerSym} setHeaderSym={setHeaderSym} setAnalyzeTarget={setAnalyzeTarget}/>
           <div className="page">
             <StatCards data={data} />
             <div className="row-2">
