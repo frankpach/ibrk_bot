@@ -12,6 +12,8 @@ from app.infrastructure.broker.ibkr_adapter import IBKRBrokerAdapter
 from app.infrastructure.notifications.telegram_adapter import TelegramNotificationAdapter
 from app.application.event_bus import EventBus
 from app.infrastructure.system.persisted_state import AuditLogHandler
+from app.infrastructure.system.secret_manager import SecretManager
+from app.infrastructure.db.engine import get_engine, reset_engine
 from app.domain.trading.events import (
     CircuitBreakerTriggered,
     ControlSettingChanged,
@@ -24,12 +26,22 @@ from app.domain.trading.events import (
 
 
 class Container:
-    def __init__(self, broker: IBrokerPort = None, notifier: INotificationPort = None, event_bus: EventBus = None):
+    def __init__(
+        self,
+        broker: IBrokerPort = None,
+        notifier: INotificationPort = None,
+        event_bus: EventBus = None,
+        engine=None,
+    ):
         self.broker = broker or IBKRBrokerAdapter()
         self.notifier = notifier or TelegramNotificationAdapter()
         self.event_bus = event_bus or EventBus()
         self.risk_service = RiskService()
         self.position_service = PositionService()
+        from app.alerts.manager import AlertManager
+        self.alert_manager = AlertManager(broker=self.broker)
+        self.secret_manager = self._init_secret_manager()
+        self.engine = engine or get_engine()
         self.place_order_use_case = PlaceOrderUseCase(
             broker=self.broker, notifier=self.notifier, risk_service=self.risk_service,
         )
@@ -37,6 +49,12 @@ class Container:
             broker=self.broker, notifier=self.notifier,
         )
         self._register_event_handlers()
+
+    def _init_secret_manager(self) -> SecretManager | None:
+        try:
+            return SecretManager()
+        except RuntimeError:
+            return None
 
     def _register_event_handlers(self) -> None:
         """Wire domain events to their handlers."""
@@ -60,7 +78,8 @@ class Container:
 
     def _on_trading_mode_switched(self, event: TradingModeSwitched) -> None:
         self.notifier.notify(
-            f"Modo cambiado: {event.old_mode} → {event.new_mode} (por {event.changed_by})"
+            f"Modo cambiado: {event.old_mode} → {event.new_mode} "
+            f"(por {event.changed_by})"
         )
 
     def _on_system_paused(self, event: SystemPaused) -> None:
@@ -76,7 +95,8 @@ class Container:
 
     def _on_position_closed(self, event: PositionClosed) -> None:
         self.notifier.notify(
-            f"Posicion cerrada: {event.symbol} P&L: {event.pnl_pct:.2%} (${event.pnl_usd:.2f})"
+            f"Posicion cerrada: {event.symbol} "
+            f"P&L: {event.pnl_pct:.2%} (${event.pnl_usd:.2f})"
         )
 
 
@@ -89,4 +109,11 @@ def test_container() -> Container:
     """Return a container with all mock adapters for testing."""
     from tests.mocks.mock_broker import MockBrokerAdapter
     from tests.mocks.mock_notifications import MockNotificationAdapter
-    return Container(broker=MockBrokerAdapter(), notifier=MockNotificationAdapter(), event_bus=EventBus())
+    reset_engine()
+    engine = get_engine("sqlite:///:memory:")
+    return Container(
+        broker=MockBrokerAdapter(),
+        notifier=MockNotificationAdapter(),
+        event_bus=EventBus(),
+        engine=engine,
+    )

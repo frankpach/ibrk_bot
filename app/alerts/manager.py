@@ -3,17 +3,14 @@
 Gestiona alertas de precio configuradas por el usuario via Telegram.
 Verifica cada 2 minutos si el precio se movio mas del umbral.
 """
-import logging
+import structlog
 from dataclasses import dataclass
 from typing import Optional
 
-import httpx
-
 from app.notifications.telegram import notify
+from app.application.ports.broker_port import IBrokerPort
 
-logger = logging.getLogger(__name__)
-
-from app.config.settings import API_BASE  # noqa: F401
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -22,6 +19,49 @@ class AlertConfig:
     symbol: str
     threshold_pct: float  # ej: 0.05 = 5%
 
+
+class AlertManager:
+    """Stateless alert checker. Broker injected via constructor."""
+
+    def __init__(self, broker: IBrokerPort) -> None:
+        self._broker = broker
+
+    def get_price_and_prev_close(self, symbol: str) -> tuple[float, float]:
+        """Obtiene precio actual y cierre anterior via IBrokerPort."""
+        try:
+            price = float(self._broker.get_price(symbol))
+            prev_close = float(self._broker.get_prev_close(symbol))
+            return price, prev_close
+        except Exception as e:
+            logger.error(f"Could not fetch price for {symbol}: {e}")
+            return 0.0, 0.0
+
+    def check_all(self, db_get_alerts, db_mark_triggered) -> None:
+        """
+        Verifica todas las alertas activas y notifica las que se dispararon.
+        db_get_alerts: callable -> list[AlertConfig]
+        db_mark_triggered: callable(alert_id) -> None
+        """
+        alerts = db_get_alerts()
+        if not alerts:
+            return
+        for alert in alerts:
+            current_price, prev_close = self.get_price_and_prev_close(alert.symbol)
+            if current_price <= 0:
+                continue
+            triggered, pct_change = check_alert_triggered(alert, current_price, prev_close)
+            if triggered:
+                direction = "subio" if pct_change > 0 else "bajo"
+                notify(
+                    f"ALERTA: <b>{alert.symbol}</b> {direction} {abs(pct_change):.1%}\n"
+                    f"Precio: ${current_price:.2f}\n"
+                    f"Umbral configurado: {alert.threshold_pct:.0%}"
+                )
+                db_mark_triggered(alert.id)
+                logger.info(f"Alert triggered for {alert.symbol}: {pct_change:.1%}")
+
+
+# --- Pure functions (no broker dependency) ---
 
 def parse_alert_command(symbol: str, threshold_str: str) -> Optional[AlertConfig]:
     """
@@ -54,41 +94,9 @@ def check_alert_triggered(
     return triggered, round(pct_change, 4)
 
 
-def _get_price_and_prev_close(symbol: str) -> tuple[float, float]:
-    """Obtiene precio actual y cierre anterior via FastAPI."""
-    try:
-        data = httpx.get(f"{API_BASE}/price/free/{symbol}", timeout=15).json()
-        current = float(data.get("market_price", 0.0) or 0.0)
-        prev_close = float(data.get("close", current) or current)
-        return current, prev_close
-    except Exception as e:
-        logger.error(f"Could not fetch price for {symbol}: {e}")
-        return 0.0, 0.0
+# --- APScheduler entry point shim ---
 
-
-def check_all_alerts(db_get_alerts, db_mark_triggered):
-    """
-    Verifica todas las alertas activas y notifica las que se dispararon.
-    db_get_alerts: callable -> list[AlertConfig]
-    db_mark_triggered: callable(alert_id) -> None
-    """
-    alerts = db_get_alerts()
-    if not alerts:
-        return
-
-    for alert in alerts:
-        current_price, prev_close = _get_price_and_prev_close(alert.symbol)
-        if current_price <= 0:
-            continue
-
-        triggered, pct_change = check_alert_triggered(alert, current_price, prev_close)
-
-        if triggered:
-            direction = "subio" if pct_change > 0 else "bajo"
-            notify(
-                f"ALERTA: <b>{alert.symbol}</b> {direction} {abs(pct_change):.1%}\n"
-                f"Precio: ${current_price:.2f}\n"
-                f"Umbral configurado: {alert.threshold_pct:.0%}"
-            )
-            db_mark_triggered(alert.id)
-            logger.info(f"Alert triggered for {alert.symbol}: {pct_change:.1%}")
+def check_all_alerts(db_get_alerts, db_mark_triggered) -> None:
+    """Called by APScheduler. Uses Container's broker — lazy import avoids circular deps."""
+    from app.container import get_container
+    get_container().alert_manager.check_all(db_get_alerts, db_mark_triggered)

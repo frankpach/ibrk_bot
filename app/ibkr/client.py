@@ -137,6 +137,45 @@ class IBKRClient:
                 self._get_price_async(symbol, sec_type, exchange, currency)
             )
 
+    async def _get_prev_close_async(
+        self,
+        symbol: str,
+        sec_type: str = "STK",
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> float:
+        """Returns yesterday's official closing price via IB historical data."""
+        await self._connect_async()
+        contract = build_contract(symbol, sec_type, exchange, currency)
+        await self.ib.qualifyContractsAsync(contract)
+        bars = await self.ib.reqHistoricalDataAsync(
+            contract,
+            endDateTime="",
+            durationStr="2 D",
+            barSizeSetting="1 day",
+            whatToShow="TRADES",
+            useRTH=True,
+            formatDate=1,
+        )
+        # bars[-1] is today's (potentially incomplete) session; bars[-2] is yesterday's close
+        if len(bars) >= 2:
+            return _safe_number(bars[-2].close)
+        if len(bars) == 1:
+            return _safe_number(bars[0].close)
+        return 0.0
+
+    def get_prev_close(
+        self,
+        symbol: str,
+        sec_type: str = "STK",
+        exchange: str = "SMART",
+        currency: str = "USD",
+    ) -> float:
+        with self._lock:
+            return self._run_sync(
+                self._get_prev_close_async(symbol, sec_type, exchange, currency)
+            )
+
     async def _get_account_async(self) -> dict:
         await self._connect_async()
         summary = await self.ib.accountSummaryAsync()
