@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy.sh — Despliega ibkr-bot en aiutox-pi via SSH
+# deploy.sh — Despliega ibkr-bot en aiutox-pi via SSH (git pull + restart)
 #
 # Uso:
 #   ./scripts/deploy.sh            # deploy normal
@@ -11,12 +11,11 @@ set -euo pipefail
 
 REMOTE="aiutox-pi"
 REMOTE_DIR="/home/frankpach/ibkr-bot"
-SERVICE="ibkr-trader"
+SERVICE="ibkr-api.service"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 SHA=$(git rev-parse --short HEAD)
 MIGRATE=false
 
-# Parsear argumentos
 for arg in "$@"; do
   case $arg in
     --migrate) MIGRATE=true ;;
@@ -35,31 +34,23 @@ echo ""
 echo "--- Verificando conexión SSH..."
 ssh -q "$REMOTE" "echo 'SSH OK'"
 
-# 2. Sincronizar código (rsync excluye venv, db, logs, .env*)
-echo "--- Sincronizando archivos..."
-rsync -az --delete \
-  --exclude='.git/' \
-  --exclude='venv/' \
-  --exclude='__pycache__/' \
-  --exclude='*.pyc' \
-  --exclude='*.db' \
-  --exclude='.env*' \
-  --exclude='logs/' \
-  --exclude='*.egg-info/' \
-  --exclude='.claude/' \
-  --exclude='docs/' \
-  ./ "$REMOTE:$REMOTE_DIR/"
+# 2. Git pull en el Pi
+echo "--- Actualizando código..."
+ssh "$REMOTE" "
+  cd $REMOTE_DIR
+  git fetch origin
+  git checkout $BRANCH
+  git reset --hard origin/$BRANCH
+"
 
-# 3. Instalar dependencias en el venv remoto
+# 3. Instalar dependencias si cambiaron
 echo "--- Instalando dependencias..."
 ssh "$REMOTE" "
   cd $REMOTE_DIR
-  python3 -m venv venv
-  venv/bin/pip install -q --upgrade pip
-  venv/bin/pip install -q -r requirements.txt
+  ~/.local/bin/uv pip install -r requirements.txt --python venv/bin/python -q
 "
 
-# 4. Correr migraciones si se solicitó
+# 4. Migraciones si se solicitaron
 if [ "$MIGRATE" = true ]; then
   echo "--- Ejecutando migraciones Alembic..."
   ssh "$REMOTE" "
@@ -68,23 +59,14 @@ if [ "$MIGRATE" = true ]; then
   "
 fi
 
-# 5. Reiniciar el servicio
+# 5. Reiniciar servicio
 echo "--- Reiniciando servicio $SERVICE..."
-ssh "$REMOTE" "sudo systemctl restart $SERVICE"
+ssh "$REMOTE" "sudo systemctl restart $SERVICE --no-pager"
 
-# 6. Esperar y verificar que levantó
-echo "--- Verificando estado del servicio..."
-sleep 3
-ssh "$REMOTE" "
-  if systemctl is-active --quiet $SERVICE; then
-    echo 'Servicio activo OK'
-    systemctl status $SERVICE --no-pager -l | tail -8
-  else
-    echo 'ERROR: servicio no levantó'
-    journalctl -u $SERVICE -n 30 --no-pager
-    exit 1
-  fi
-"
+# 6. Esperar y verificar
+echo "--- Esperando 30s para que el servicio levante..."
+sleep 30
+ssh "$REMOTE" "sudo systemctl status $SERVICE --no-pager"
 
 echo ""
 echo "=== Deploy completado: $SHA ==="
