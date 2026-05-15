@@ -107,6 +107,41 @@ def _migrate_trades_state_machine(conn) -> None:
         pass
 
 
+def _migrate_audit_log(conn) -> None:
+    """Migrate audit_log table to the new schema (old_value, new_value, changed_by, ip_address, occurred_at)."""
+    try:
+        # Check if the old schema exists by probing the 'symbol' column
+        cursor = conn.execute("PRAGMA table_info(audit_log)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "symbol" not in columns:
+            # Already migrated or created with new schema
+            return
+
+        # Rename old table, create new, migrate data
+        conn.execute("ALTER TABLE audit_log RENAME TO audit_log_old")
+        conn.execute("""
+            CREATE TABLE audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                entity_type TEXT,
+                entity_id INTEGER,
+                old_value TEXT,
+                new_value TEXT,
+                changed_by TEXT,
+                ip_address TEXT,
+                occurred_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO audit_log (id, event_type, entity_type, entity_id, old_value, new_value, changed_by, occurred_at)
+            SELECT id, event_type, entity_type, entity_id, NULL, details, NULL, created_at FROM audit_log_old
+        """)
+        conn.execute("DROP TABLE audit_log_old")
+        conn.commit()
+    except Exception as exc:
+        logger.warning(f"audit_log migration skipped or failed: {exc}")
+
+
 def _seed_symbol_universe(conn) -> None:
     from datetime import timezone
     now = datetime.now(timezone.utc).isoformat()
@@ -184,15 +219,24 @@ def init_db():
                 event_type TEXT NOT NULL,
                 entity_type TEXT,
                 entity_id INTEGER,
-                symbol TEXT,
-                details TEXT DEFAULT '{}',
-                created_at TEXT NOT NULL
+                old_value TEXT,
+                new_value TEXT,
+                changed_by TEXT,
+                ip_address TEXT,
+                occurred_at TEXT NOT NULL
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_open_symbol ON trades(symbol) WHERE status='OPEN';
-            CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log(event_type, created_at);
+            CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log(event_type, occurred_at);
+
+            CREATE TABLE IF NOT EXISTS control_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
         """)
         _migrate_symbol_config(conn)
         _migrate_trades_state_machine(conn)
+        _migrate_audit_log(conn)
         _seed_symbol_universe(conn)
     finally:
         conn.close()
@@ -1275,3 +1319,56 @@ def mark_watchlist_alerted(symbol: str, date: str) -> None:
     conn.execute("UPDATE daily_watchlist SET alerted=1 WHERE symbol=? AND date=?", (symbol, date))
     conn.commit()
     conn.close()
+
+
+# --- control_settings CRUD ---
+
+def init_control_settings() -> None:
+    """Bootstrap control_settings from environment if table is empty."""
+    import app.config.settings as s
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM control_settings").fetchone()
+        if row[0] == 0:
+            now = datetime.utcnow().isoformat()
+            trading_mode = "paper" if s.PAPER_TRADING_ONLY else "live"
+            is_paused = "1" if False else "0"
+            conn.executemany(
+                "INSERT INTO control_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                [
+                    ("trading_mode", trading_mode, now),
+                    ("is_paused", is_paused, now),
+                ],
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_control_settings() -> dict:
+    """Return all control_settings as a dict."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT key, value FROM control_settings").fetchall()
+        result = {r["key"]: r["value"] for r in rows}
+        # Cast booleans for convenience
+        if "is_paused" in result:
+            result["is_paused"] = result["is_paused"] in ("1", "true", "True", "TRUE", True)
+        return result
+    finally:
+        conn.close()
+
+
+def update_control_setting(key: str, value: str) -> None:
+    """Upsert a control setting value."""
+    conn = get_connection()
+    try:
+        now = datetime.utcnow().isoformat()
+        conn.execute(
+            "INSERT INTO control_settings (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            (key, str(value), now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
