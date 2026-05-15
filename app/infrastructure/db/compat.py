@@ -1284,6 +1284,56 @@ def delete_report(report_id: int) -> bool:
     return cur.rowcount > 0
 
 
+def cleanup_inactive_symbols(days: int = 90) -> list[str]:
+    """Deactivate symbols with no interaction in the last `days` days.
+
+    Activity is defined as any of:
+      - a trade opened or closed
+      - a signal generated
+      - a candidate decision recorded
+      - a feature snapshot captured
+
+    Protected symbols (SPY, QQQ) are never deactivated.
+    Returns list of deactivated symbols.
+    """
+    from datetime import timedelta
+    PROTECTED = {"SPY", "QQQ"}
+    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    conn = get_connection()
+    try:
+        approved = [r["symbol"] for r in
+                    conn.execute("SELECT symbol FROM symbol_config WHERE approved=1").fetchall()]
+        deactivated = []
+        for symbol in approved:
+            if symbol in PROTECTED:
+                continue
+            # Check last activity across all interaction tables
+            last = conn.execute("""
+                SELECT MAX(last_seen) AS last_seen FROM (
+                    SELECT MAX(opened_at) AS last_seen FROM trades WHERE symbol=?
+                    UNION ALL
+                    SELECT MAX(closed_at)            FROM trades WHERE symbol=? AND closed_at IS NOT NULL
+                    UNION ALL
+                    SELECT MAX(created_at)           FROM signals WHERE symbol=?
+                    UNION ALL
+                    SELECT MAX(decision_date)        FROM candidate_decisions WHERE symbol=?
+                    UNION ALL
+                    SELECT MAX(timestamp)            FROM feature_snapshots WHERE symbol=?
+                )
+            """, (symbol, symbol, symbol, symbol, symbol)).fetchone()
+            last_seen = last["last_seen"] if last else None
+            if last_seen is None or last_seen < cutoff:
+                conn.execute(
+                    "UPDATE symbol_config SET approved=0 WHERE symbol=?", (symbol,)
+                )
+                deactivated.append(symbol)
+        if deactivated:
+            conn.commit()
+        return deactivated
+    finally:
+        conn.close()
+
+
 def _cleanup_old_reports(days: int = 3) -> None:
     from datetime import timedelta
     cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")

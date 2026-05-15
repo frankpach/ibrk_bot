@@ -152,6 +152,24 @@ class SchedulerJobs:
         except Exception as e:
             logger.error(f"Learning cycle error: {e}")
 
+    def run_symbol_inactivity_cleanup(self):
+        """Deactivate symbols with no activity in the last 90 days."""
+        try:
+            from app.infrastructure.db.compat import cleanup_inactive_symbols
+            deactivated = cleanup_inactive_symbols(days=90)
+            if deactivated:
+                symbols_str = ", ".join(deactivated)
+                notify(
+                    f"🧹 Limpieza semanal de universo\n"
+                    f"{len(deactivated)} símbolo(s) desactivado(s) por inactividad (+90 días):\n"
+                    f"{symbols_str}"
+                )
+                logger.info(f"Symbol inactivity cleanup: deactivated {len(deactivated)} symbols: {deactivated}")
+            else:
+                logger.info("Symbol inactivity cleanup: no inactive symbols found")
+        except Exception as e:
+            logger.error(f"Symbol inactivity cleanup error: {e}")
+
     def safe_select_top_symbols(self, market_key: str, session_date=None):
         client = self._ref["client"]
         dl = self._ref["data_layer"]
@@ -184,6 +202,7 @@ def register_scheduler_jobs(scheduler, ib_client_ref, data_layer):
     scheduler.add_job(lambda: check_all_alerts(get_active_alerts, mark_alert_triggered), "interval", minutes=POSITION_CHECK_MINUTES, id="alert_checker")
     scheduler.add_job(lambda: send_weekly_report(get_operating_capital((ib_client_ref["client"].get_account() if ib_client_ref["client"] else {}).get("net_liquidation", CAPITAL_CAP))), "cron", day_of_week="mon", hour=8, minute=0, timezone=MARKET_TZ, id="weekly_report")
     scheduler.add_job(jobs.send_digest, "cron", hour="10,14", minute=0, timezone=MARKET_TZ, id="digest_job", replace_existing=True)
+    scheduler.add_job(jobs.run_symbol_inactivity_cleanup, "cron", day_of_week="mon", hour=17, minute=30, timezone=MARKET_TZ, id="symbol_inactivity_cleanup", replace_existing=True)
     scheduler.add_job(jobs.run_news_fetch, "interval", minutes=30, id="news_fetch", replace_existing=True)
     scheduler.add_job(jobs.run_scanner_fetch, "interval", minutes=15, id="scanner_fetch", replace_existing=True)
     scheduler.add_job(jobs.run_opportunity_scan, "interval", minutes=60, id="opportunity_scan", replace_existing=True)
