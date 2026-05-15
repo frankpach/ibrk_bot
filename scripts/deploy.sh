@@ -43,11 +43,15 @@ ssh "$REMOTE" "
   git reset --hard origin/$BRANCH
 "
 
-# 3. Instalar dependencias si cambiaron
+# 3. Crear venv si no existe e instalar dependencias
 echo "--- Instalando dependencias..."
 ssh "$REMOTE" "
   cd $REMOTE_DIR
-  ~/.local/bin/uv pip install -r requirements.txt --python venv/bin/python -q
+  if [ ! -f venv/bin/python3 ]; then
+    echo 'Creando venv...'
+    python3 -m venv venv
+  fi
+  ~/.local/bin/uv pip install -r requirements.txt --python venv/bin/python3 -q
 "
 
 # 4. Migraciones si se solicitaron
@@ -64,9 +68,17 @@ echo "--- Reiniciando servicio $SERVICE..."
 ssh "$REMOTE" "sudo systemctl restart $SERVICE --no-pager"
 
 # 6. Esperar y verificar
-echo "--- Esperando 30s para que el servicio levante..."
-sleep 30
-ssh "$REMOTE" "sudo systemctl status $SERVICE --no-pager"
+echo "--- Esperando que el servicio levante..."
+ssh "$REMOTE" "
+  for i in \$(seq 1 24); do
+    state=\$(systemctl is-active $SERVICE)
+    echo \"  [\$i] \$state\"
+    if [ \"\$state\" = 'active' ]; then break; fi
+    if [ \"\$state\" = 'failed' ]; then break; fi
+    sleep 5
+  done
+  sudo systemctl status $SERVICE --no-pager
+"
 
 echo ""
 echo "=== Deploy completado: $SHA ==="
