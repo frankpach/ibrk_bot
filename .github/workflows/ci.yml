@@ -51,7 +51,6 @@ jobs:
           ADMIN_KEY: ci-test-admin-key
         run: |
           pytest tests/ \
-            --ignore=tests/db/test_symbol_config_migration.py \
             --tb=short \
             -q \
             --cov=app \
@@ -65,3 +64,32 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+
+  deploy:
+    name: Deploy to aiutox-pi
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AIUTOX_PI_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.AIUTOX_PI_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Add SSH host entry
+        run: |
+          cat >> ~/.ssh/config <<EOF
+          Host aiutox-pi
+            HostName ${{ secrets.AIUTOX_PI_HOST }}
+            User frankpach
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking yes
+          EOF
+
+      - name: Deploy
+        run: bash scripts/deploy.sh
