@@ -11,6 +11,7 @@ set -euo pipefail
 
 REMOTE="aiutox-pi"
 REMOTE_DIR="/home/frankpach/ibkr-bot"
+VENV="$REMOTE_DIR/.venv"
 SERVICE="ibkr-api.service"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 SHA=$(git rev-parse --short HEAD)
@@ -47,25 +48,22 @@ ssh "$REMOTE" "
 echo "--- Instalando dependencias..."
 ssh "$REMOTE" "
   cd $REMOTE_DIR
-  if [ ! -f venv/bin/python3 ]; then
+  if [ ! -f $VENV/bin/python3 ]; then
     echo 'Creando venv...'
-    python3 -m venv venv
+    python3 -m venv $VENV
   fi
-  ~/.local/bin/uv pip install -r requirements.txt --python venv/bin/python3 -q
+  VIRTUAL_ENV=$VENV ~/.local/bin/uv pip install -r requirements.txt -q
 "
 
 # 4. Migraciones si se solicitaron
 if [ "$MIGRATE" = true ]; then
   echo "--- Ejecutando migraciones Alembic..."
-  ssh "$REMOTE" "
-    cd $REMOTE_DIR
-    venv/bin/alembic upgrade head
-  "
+  ssh "$REMOTE" "cd $REMOTE_DIR && $VENV/bin/alembic upgrade head"
 fi
 
 # 5. Reiniciar servicio
 echo "--- Reiniciando servicio $SERVICE..."
-ssh "$REMOTE" "sudo systemctl restart $SERVICE --no-pager"
+ssh "$REMOTE" "sudo systemctl restart $SERVICE"
 
 # 6. Esperar y verificar
 echo "--- Esperando que el servicio levante..."
