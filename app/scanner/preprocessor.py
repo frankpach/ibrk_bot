@@ -98,7 +98,7 @@ def scan_symbol(symbol: str, ib_client=None, symbol_meta: dict | None = None) ->
 
     now = datetime.now(timezone.utc)
     if not is_liquid_at(now, meta.get("liquid_hours")):
-        logger.debug(f"Outside liquid hours for {symbol} ({meta.get("liquid_hours")})")
+        logger.debug(f"Outside liquid hours for {symbol} ({meta.get('liquid_hours')})")
         return {"symbol": symbol, "skipped": True, "reason": "not_liquid"}
 
     try:
