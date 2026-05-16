@@ -139,9 +139,11 @@ class IBDataLayer:
                 return None
 
             df = pd.DataFrame([{
-                "open": b.open, "high": b.high, "low": b.low,
+                "date": b.date, "open": b.open, "high": b.high, "low": b.low,
                 "close": b.close, "volume": b.volume
             } for b in bars])
+            df["date"] = pd.to_datetime(df["date"], utc=True)
+            df = df.set_index("date")
             self._set_cached(key, df, context_str)
             return df
         except Exception as e:
