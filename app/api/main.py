@@ -748,12 +748,12 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
         result: dict = {"symbol": symbol.upper(), "period": period, "bars": []}
         df = None
         PERIOD_CONFIG = {
-            "intraday": ("1 D",   "5 mins"),
-            "1h":       ("5 D",   "1 hour"),
-            "4h":       ("20 D",  "4 hours"),
-            "daily":    ("30 D",  "1 day"),
-            "weekly":   ("180 D", "1 week"),
-            "monthly":  ("2 Y",   "1 month"),
+            "intraday": ("7 D",   "5 mins"),
+            "1h":       ("30 D",  "1 hour"),
+            "4h":       ("100 D", "4 hours"),
+            "daily":    ("365 D", "1 day"),
+            "weekly":   ("3 Y",   "1 week"),
+            "monthly":  ("8 Y",   "1 month"),
         }
         try:
             duration, bar_size = PERIOD_CONFIG.get(period, PERIOD_CONFIG["daily"])
