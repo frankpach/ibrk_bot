@@ -1,6 +1,7 @@
 # app/api/main.py
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Depends, Request
@@ -23,7 +24,15 @@ from app.infrastructure.db.compat import (
 )
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="IBKR AI Trader API")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="IBKR AI Trader API", lifespan=lifespan)
 
 # CORS — restrict to configured origin(s); default is restrictive (no public access)
 _ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
@@ -90,10 +99,6 @@ class SymbolProposalRequest(BaseModel):
     symbol: str
     reason: str
 
-
-@app.on_event("startup")
-def startup():
-    init_db()
 
 
 @app.get("/health")
