@@ -6,7 +6,8 @@ from app.analysis.data import IBDataLayer, TTL
 
 
 def _make_bar(open=100, high=101, low=99, close=100.5, volume=1000):
-    return MagicMock(open=open, high=high, low=low, close=close, volume=volume)
+    return MagicMock(open=open, high=high, low=low, close=close, volume=volume,
+                     date="2026-01-15 10:00:00")
 
 
 # ---------- cache ----------
