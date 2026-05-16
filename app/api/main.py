@@ -753,7 +753,7 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
             "4h":       ("20 D",  "4 hours"),
             "daily":    ("30 D",  "1 day"),
             "weekly":   ("180 D", "1 week"),
-            "monthly":  ("730 D", "1 month"),
+            "monthly":  ("2 Y",   "1 month"),
         }
         try:
             duration, bar_size = PERIOD_CONFIG.get(period, PERIOD_CONFIG["daily"])
@@ -848,8 +848,8 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
         # Intraday extras: premarket H/L, prev day H/L, RVOL
         if period == "intraday" and df is not None and len(df) > 0:
             # Premarket approx: bars before the highest volume bar (market open)
-            vol_idx = int(df["volume"].idxmax()) if df["volume"].max() > 0 else len(df) // 3
-            pre = df.iloc[:vol_idx]
+            vol_pos = df["volume"].argmax() if df["volume"].max() > 0 else len(df) // 3
+            pre = df.iloc[:vol_pos]
             result["premarket_high"] = round(float(pre["high"].max()), 4) if len(pre) else None
             result["premarket_low"] = round(float(pre["low"].min()), 4) if len(pre) else None
             result["day_high"] = round(float(df["high"].max()), 4)
