@@ -599,7 +599,13 @@ def render_dashboard_html() -> str:
         return { all, open: new Set(openSyms) };
       }, [data]);
 
-      const handleBus = useCallback((sym) => { setOpen(true); selectSym(sym); }, [tab]);
+      const tabRef = useRef(tab);
+      useEffect(() => { tabRef.current = tab; }, [tab]);
+      const handleBus = useCallback((sym) => {
+        setOpen(true);
+        setSelected(sym);
+        load(sym, tabRef.current);
+      }, []);
       useChartBus(handleBus);
 
       const PERIODS = [
@@ -630,7 +636,7 @@ def render_dashboard_html() -> str:
           grid:{vertLines:{color:grid},horzLines:{color:grid}},
           crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
           rightPriceScale:{borderColor:grid},
-          timeScale:{borderColor:grid,timeVisible:false},
+          timeScale:{borderColor:grid,timeVisible:true,secondsVisible:false},
           width:chartRef.current.clientWidth, height:260,
         });
         tvRef.current = chart;

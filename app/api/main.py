@@ -763,16 +763,21 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
         if df is not None and len(df) > 0:
             result["bars"] = [
                 {
-                    "time": i,
+                    "time": int(idx.timestamp()) if hasattr(idx, 'timestamp') else i,
                     "open": round(float(r.get("open", r["close"])), 4),
                     "high": round(float(r.get("high", r["close"])), 4),
                     "low": round(float(r.get("low", r["close"])), 4),
                     "close": round(float(r["close"]), 4),
                     "volume": int(r.get("volume", 0)),
                 }
-                for i, (_, r) in enumerate(df.iterrows())
+                for i, (idx, r) in enumerate(df.iterrows())
             ]
         if df is not None and len(df) >= 15:
+            # Helper: convert df index position to Unix timestamp
+            def _ts(pos):
+                idx = df.index[pos]
+                return int(idx.timestamp()) if hasattr(idx, 'timestamp') else pos
+
             from app.analysis.indicators import _compute_rsi
             # RSI series
             rsi_series = []
@@ -780,7 +785,7 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
                 slice_df = df.iloc[:i + 1]
                 rsi = _compute_rsi(slice_df)
                 if rsi is not None:
-                    rsi_series.append({"time": i, "value": round(rsi, 2)})
+                    rsi_series.append({"time": _ts(i), "value": round(rsi, 2)})
             result["rsi_series"] = rsi_series
 
             # MACD series
@@ -791,7 +796,7 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
             macd_series = []
             for i in range(26, len(df)):
                 macd_series.append({
-                    "time": i,
+                    "time": _ts(i),
                     "macd": round(float(macd_line.iloc[i]), 4),
                     "signal": round(float(signal_line.iloc[i]), 4),
                     "histogram": round(float(macd_line.iloc[i] - signal_line.iloc[i]), 4),
@@ -805,7 +810,7 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
             for i in range(20, len(df)):
                 if not pd.isna(sma20.iloc[i]):
                     boll_series.append({
-                        "time": i,
+                        "time": _ts(i),
                         "upper": round(float(sma20.iloc[i] + 2 * std20.iloc[i]), 4),
                         "middle": round(float(sma20.iloc[i]), 4),
                         "lower": round(float(sma20.iloc[i] - 2 * std20.iloc[i]), 4),
@@ -816,11 +821,11 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
             ema9 = df["close"].ewm(span=9, adjust=False).mean()
             ema20_line = df["close"].ewm(span=20, adjust=False).mean()
             result["ema9_series"] = [
-                {"time": i, "value": round(float(v), 4)}
+                {"time": _ts(i), "value": round(float(v), 4)}
                 for i, v in enumerate(ema9) if not pd.isna(v)
             ]
             result["ema20_series"] = [
-                {"time": i, "value": round(float(v), 4)}
+                {"time": _ts(i), "value": round(float(v), 4)}
                 for i, v in enumerate(ema20_line) if not pd.isna(v)
             ]
 
@@ -828,7 +833,7 @@ def dashboard_symbol_data(symbol: str, period: str = "intraday"):
             typical = (df["high"] + df["low"] + df["close"]) / 3
             vwap = (typical * df["volume"]).cumsum() / df["volume"].cumsum()
             result["vwap_series"] = [
-                {"time": i, "value": round(float(v), 4)}
+                {"time": _ts(i), "value": round(float(v), 4)}
                 for i, v in enumerate(vwap) if not pd.isna(v)
             ]
 
