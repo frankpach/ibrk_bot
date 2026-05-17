@@ -404,10 +404,12 @@ def test_symbol_parameter_has_new_fields():
 
 def test_save_and_get_report():
     """Save a report and retrieve it by id and in listing."""
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     report_id = save_report(
         "pre_market",
-        "2026-05-13",
-        "Pre-Mercado 2026-05-13 — 5 simbolos",
+        today,
+        f"Pre-Mercado {today} — 5 simbolos",
         "# Test\n\nContenido de prueba.",
     )
     assert report_id is not None
@@ -418,7 +420,7 @@ def test_save_and_get_report():
     assert report is not None
     assert report["id"] == report_id
     assert report["report_type"] == "pre_market"
-    assert report["report_date"] == "2026-05-13"
+    assert report["report_date"] == today
     assert "Test" in report["content_md"]
 
     # get_reports includes the new report
@@ -435,10 +437,12 @@ def test_get_report_by_id_not_found():
 
 def test_delete_report():
     """Save then delete a report; verify it's gone."""
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     report_id = save_report(
         "daily_ops",
-        "2026-05-13",
-        "Operaciones 2026-05-13",
+        today,
+        f"Operaciones {today}",
         "## Resumen\n\nSin operaciones.",
     )
     deleted = delete_report(report_id)
