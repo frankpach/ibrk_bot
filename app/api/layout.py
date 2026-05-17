@@ -15,15 +15,20 @@ _SHARED_CSS = """
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: var(--bg); color: var(--text);
+    background: radial-gradient(ellipse at 30% 20%, #0A1628 0%, #06090F 60%);
+    background-attachment: fixed;
+    color: var(--text);
     font-family: "Barlow Condensed", sans-serif;
     min-height: 100vh; display: flex; flex-direction: column;
   }
 
   /* ── Top nav bar ─────────────────────────────── */
   .layout-header {
-    background: var(--surface);
+    background: rgba(12,20,33,.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
+    border-top: 2px solid var(--blue);
     padding: 0 20px;
     height: 46px;
     display: flex; align-items: center; gap: 16px;
@@ -104,6 +109,7 @@ _SHARED_CSS = """
   .card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.03);
   }
   .card-header { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 12px; }
   .empty { color: var(--dimmer); font-family: "Fira Code", monospace; padding: 40px; text-align: center; }

@@ -34,12 +34,13 @@ def render_dashboard_html() -> str:
       --green-bg:rgba(5,150,105,.1);--red-bg:rgba(220,38,38,.08);
       --blue-bg:rgba(2,132,199,.1);--amber-bg:rgba(217,119,6,.08);
     }
-    body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
+    body{background:radial-gradient(ellipse at 30% 20%,#0A1628 0%,#06090F 60%);background-attachment:fixed;color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
     ::-webkit-scrollbar{width:3px;height:3px}
     ::-webkit-scrollbar-track{background:var(--bg)}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
     @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
     .pulse{animation:pulse 2s ease-in-out infinite}
     .fade-up{animation:fadeUp .35s ease both}
 
@@ -52,13 +53,16 @@ def render_dashboard_html() -> str:
     @media(max-width:640px){.row-2,.row-3,.row-4{grid-template-columns:1fr}}
 
     /* Cards */
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
-    .ch{background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-    .ct{font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.03)}
+    .ch{background:var(--surface2);border-bottom:1px solid var(--border);border-left:2px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;transition:border-left-color .2s}
+    .card:hover .ch{border-left-color:rgba(56,189,248,.35)}
+    .ct{font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
     .cb{padding:12px}
 
     /* Stat card */
-    .sc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative;overflow:hidden}
+    .sc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.03)}
+    .sc.sc-green{border-left:2px solid rgba(16,185,129,.3)}
+    .sc.sc-red{border-left:2px solid rgba(244,63,94,.3)}
     .sl{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
     .sv{font-family:"Bebas Neue",cursive;font-size:2rem;line-height:1.05}
     .ss{font-family:"Fira Code",monospace;font-size:.78rem;color:var(--muted);margin-top:3px}
@@ -100,7 +104,7 @@ def render_dashboard_html() -> str:
     .btn:disabled{opacity:.4;cursor:not-allowed}
 
     /* Header */
-    .header{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:20}
+    .header{background:rgba(12,20,33,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border);border-top:2px solid var(--blue);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:20}
     .logo{font-family:"Bebas Neue",cursive;font-size:1.25rem;letter-spacing:.1em;color:var(--text)}
     .badge{padding:2px 8px;border-radius:4px;font-family:"Fira Code",monospace;font-size:.65rem}
     .badge-paper{background:var(--green-bg);color:var(--green);border:1px solid rgba(16,185,129,.3)}
@@ -120,6 +124,14 @@ def render_dashboard_html() -> str:
 
     /* Empty */
     .empty{color:var(--dimmer);font-family:"Fira Code",monospace;font-size:.82rem;padding:1.4rem 0;text-align:center;letter-spacing:.04em}
+
+    /* Stale data overlay */
+    .stale{opacity:.62;filter:saturate(.35);transition:opacity .4s,filter .4s}
+
+    /* Skeleton shimmer */
+    .skel{height:.9em;border-radius:3px;background:linear-gradient(90deg,var(--border) 25%,var(--surface2) 50%,var(--border) 75%);background-size:200% 100%;animation:shimmer 1.4s ease infinite;margin:4px 0}
+    .skel-sm{height:.65em;width:60%}
+    .skel-lg{height:1.8em;width:45%}
 
     /* Timeline */
     .tl{display:flex;flex-direction:column;gap:0}
@@ -367,6 +379,17 @@ def render_dashboard_html() -> str:
     }
 
     function StatCards({ data }) {
+      if (!data) return (
+        <div className="row-4">
+          {[...Array(6)].map((_,i) => (
+            <div key={i} className="sc">
+              <div className="skel skel-sm" style={{width:'50%',marginBottom:8}}/>
+              <div className="skel skel-lg"/>
+              <div className="skel skel-sm" style={{marginTop:6}}/>
+            </div>
+          ))}
+        </div>
+      );
       const st = data?.status || {};
       const acct = data?.latest_account || {};
       const netLiq = acct.net_liquidation || st.operating_capital || st.simulated_capital || 0;
@@ -379,6 +402,10 @@ def render_dashboard_html() -> str:
       const maxDd = st.max_drawdown_pct || 0;
       const comm = st.daily_commissions_usd || 0;
       const overnight = st.overnight_count || 0;
+      const pnlGlow = intraday >= 0
+        ? {textShadow:'0 0 20px rgba(16,185,129,.3)'}
+        : {textShadow:'0 0 20px rgba(244,63,94,.25)'};
+      const ddColor = dd > 5 ? 'var(--red)' : dd > 2 ? 'var(--amber)' : 'var(--green)';
       return (
         <div className="row-4">
           <div className="sc fade-up">
@@ -386,9 +413,9 @@ def render_dashboard_html() -> str:
             <div className="sv blue">{fmt.usd(netLiq)}</div>
             <div className="ss">{st.ib_data_live ? 'IBKR snapshot · hoy' : 'ultimo snapshot'}</div>
           </div>
-          <div className="sc fade-up">
+          <div className={'sc fade-up ' + (intraday >= 0 ? 'sc-green' : 'sc-red')}>
             <div className="sl">P&L Intradia</div>
-            <div className={'sv ' + (intraday >= 0 ? 'green' : 'red')}>{fmt.usd(intraday)}</div>
+            <div className={'sv ' + (intraday >= 0 ? 'green' : 'red')} style={pnlGlow}>{fmt.usd(intraday)}</div>
             <div className="ss" style={{display:'flex',gap:8}}>
               <span style={{color:'var(--green)'}}>R {fmt.usd(realized)}</span>
               <span style={{color:unrealized>=0?'var(--green)':'var(--red)'}}>UR {fmt.usd(unrealized)}</span>
@@ -399,9 +426,9 @@ def render_dashboard_html() -> str:
             <div className="sv" style={{color:'var(--text)'}}>{fmt.usd(buyPow)}</div>
             <div className="ss">disponible</div>
           </div>
-          <div className="sc fade-up">
+          <div className={'sc fade-up ' + (dd > 2 ? 'sc-red' : 'sc-green')}>
             <div className="sl">Drawdown / Peak</div>
-            <div className="sv" style={{color: dd > 5 ? 'var(--red)' : dd > 2 ? 'var(--amber)' : 'var(--green)'}}>{fmt.n(dd)}%</div>
+            <div className="sv" style={{color:ddColor,textShadow:dd>2?'0 0 18px rgba(244,63,94,.2)':'0 0 18px rgba(16,185,129,.2)'}}>{fmt.n(dd)}%</div>
             <div className="ss">max {fmt.n(maxDd)}% · peak {fmt.usd(st.peak_net_liq)}</div>
             <DrawdownBar pct={dd} />
           </div>
@@ -1180,26 +1207,33 @@ def render_dashboard_html() -> str:
       const [tick,setTick]=useState(0);
       const [analyzeTarget,setAnalyzeTarget]=useState(null);
       const [headerSym,setHeaderSym]=useState('');
+      const [lastFetch,setLastFetch]=useState(Date.now());
+      const [isStale,setIsStale]=useState(false);
       const load = useCallback(async ()=>{
         try {
           const res=await fetch('/dashboard/data');
           if(!res.ok) throw new Error('HTTP '+res.status);
-          setData(await res.json()); setErr(null);
-        } catch(e){ setErr(e.message); }
+          setData(await res.json()); setErr(null); setLastFetch(Date.now()); setIsStale(false);
+        } catch(e){ setErr(e.message); setIsStale(true); }
       },[]);
       useEffect(()=>{ load(); },[tick,load]);
       const interval = data?.open_trades?.length>0?15:60;
+      // Mark stale if fetch hasn't succeeded in 2× the poll interval
+      useEffect(()=>{
+        const id=setInterval(()=>{ if(Date.now()-lastFetch>interval*2000) setIsStale(true); },5000);
+        return ()=>clearInterval(id);
+      },[lastFetch,interval]);
       const ib = data?.ib_connected;
       async function togglePause(){ if(!ib) return; const ep=data?.status?.paused?'/system/resume':'/system/pause'; await fetch(ep,{method:'POST'}).catch(()=>{}); load(); }
       async function refresh(){ try{await fetch('/refresh',{method:'POST'});}catch(e){} setTick(k=>k+1); }
 
       return (
-        <div style={{minHeight:'100vh',background:'var(--bg)'}}>
+        <div style={{minHeight:'100vh'}}>
           {analyzeTarget && <AnalyzeModal symbol={analyzeTarget==='__custom__'?'':analyzeTarget} onClose={()=>setAnalyzeTarget(null)} />}
           <MarketContextBar data={data} />
           <SystemStatusBar data={data} />
           <Header data={data} interval={interval} onTick={()=>setTick(k=>k+1)} onTogglePause={togglePause} onRefresh={refresh} headerSym={headerSym} setHeaderSym={setHeaderSym} setAnalyzeTarget={setAnalyzeTarget}/>
-          <div className="page">
+          <div className={'page'+(isStale?' stale':'')}>
             <StatCards data={data} />
             <div className="row-2">
               <div className="card fade-up">

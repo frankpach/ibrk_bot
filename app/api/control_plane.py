@@ -27,12 +27,13 @@ def render_control_html() -> str:
       --green-bg:rgba(16,185,129,.12);--red-bg:rgba(244,63,94,.1);
       --blue-bg:rgba(56,189,248,.1);--amber-bg:rgba(251,191,36,.08);
     }
-    body{background:var(--bg);color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
+    body{background:radial-gradient(ellipse at 30% 20%,#0A1628 0%,#06090F 60%);background-attachment:fixed;color:var(--text);font-family:"Barlow Condensed",sans-serif;font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
     ::-webkit-scrollbar{width:4px;height:4px}
     ::-webkit-scrollbar-track{background:var(--bg)}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
     @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
     .pulse{animation:pulse 2s ease-in-out infinite}
     .fade-up{animation:fadeUp .35s ease both}
 
@@ -40,8 +41,10 @@ def render_control_html() -> str:
     .status-bar{
       padding:6px 16px;display:flex;align-items:center;gap:12px;
       font-family:"Fira Code",monospace;font-size:.7rem;
-      background:var(--surface2);border-bottom:1px solid var(--border);
+      background:rgba(12,20,33,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);border-top:2px solid var(--blue);
       flex-wrap:wrap;
+      position:sticky;top:0;z-index:30;
     }
     .status-bar .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
     .status-bar a{color:var(--blue);text-decoration:none;margin-left:auto}
@@ -56,19 +59,25 @@ def render_control_html() -> str:
     .sidebar-item{
       padding:8px 16px;font-family:"Barlow Condensed",sans-serif;font-size:.85rem;
       color:var(--muted);cursor:pointer;border:none;background:transparent;text-align:left;
-      letter-spacing:.02em;font-weight:600;
+      letter-spacing:.02em;font-weight:600;border-left:3px solid transparent;
     }
     .sidebar-item:hover{color:var(--text);background:var(--surface2)}
-    .sidebar-item.active{color:var(--blue);background:var(--blue-bg);border-right:2px solid var(--blue)}
+    .sidebar-item.active{color:var(--blue);background:rgba(56,189,248,.08);border-left:3px solid var(--blue);box-shadow:inset 3px 0 8px rgba(56,189,248,.1)}
+    .sidebar-item.active::before{content:'▸ '}
     .main{flex:1;padding:16px;overflow-y:auto;max-width:900px}
 
     /* ─── Cards ──────────────────────────────────────── */
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:12px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.03)}
     .ch{
-      background:var(--surface2);border-bottom:1px solid var(--border);
+      background:var(--surface2);border-bottom:1px solid var(--border);border-left:2px solid var(--border);
       padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+      transition:border-left-color .2s;
     }
-    .ct{font-size:.67rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+    .card:hover .ch{border-left-color:rgba(56,189,248,.35)}
+    .ct{font-size:.67rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+
+    /* ─── Skeleton shimmer ───────────────────────────── */
+    .skel{height:.9em;border-radius:3px;background:linear-gradient(90deg,var(--border) 25%,var(--surface2) 50%,var(--border) 75%);background-size:200% 100%;animation:shimmer 1.4s ease infinite;margin:4px 0}
     .cb{padding:12px}
 
     /* ─── Forms ──────────────────────────────────────── */
@@ -138,7 +147,8 @@ def render_control_html() -> str:
         padding:8px 12px;font-size:.8rem;border-bottom:none;
         border-right:1px solid var(--border);flex-shrink:0;
       }
-      .sidebar-item.active{border-bottom:2px solid var(--blue)!important;border-right:none}
+      .sidebar-item.active{border-bottom:2px solid var(--blue)!important;border-right:none;border-left:3px solid transparent!important;box-shadow:none!important}
+      .sidebar-item.active::before{content:''}
       .main{padding:8px}
     }
     @media(min-width:769px){
