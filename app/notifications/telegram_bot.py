@@ -818,13 +818,15 @@ _MARKET_SCHEDULE = {
 
 
 def _get_operable_market_keys() -> list[str]:
-    """Return market_keys the account can currently operate, from DB permissions cache."""
+    """Return market_keys the account can currently operate, from DB permissions cache.
+    Falls back to the full schedule list if the DB has no data yet."""
     try:
         from app.infrastructure.db.compat import get_market_permissions
         perms = get_market_permissions()
         available_keys = {p["key"] for p in perms if p.get("available")}
-        # Return only keys we have a schedule for (i.e. we actually trade)
-        return [k for k in _MARKET_SCHEDULE if k in available_keys]
+        result = [k for k in _MARKET_SCHEDULE if k in available_keys]
+        # Empty means no permission data yet — show all scheduled markets as default
+        return result if result else list(_MARKET_SCHEDULE.keys())
     except Exception:
         return list(_MARKET_SCHEDULE.keys())
 

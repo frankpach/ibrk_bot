@@ -65,8 +65,15 @@ def test_get_operable_filters_unavailable():
 def test_get_operable_fallback_on_db_error():
     with patch("app.infrastructure.db.compat.get_market_permissions", side_effect=Exception("db down")):
         keys = _get_operable_market_keys()
-    # Should return the full default list, not raise
     assert isinstance(keys, list)
+    assert len(keys) > 0
+
+
+def test_get_operable_fallback_when_table_empty():
+    """Empty permissions table must return full default list, not []."""
+    with patch("app.infrastructure.db.compat.get_market_permissions", return_value=[]):
+        keys = _get_operable_market_keys()
+    assert "STK_US" in keys
     assert len(keys) > 0
 
 
