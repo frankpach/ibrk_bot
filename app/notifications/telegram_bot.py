@@ -480,6 +480,21 @@ async def cmd_diagnostico(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_only_owner
 async def cmd_ayuda(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    # Build dynamic market list from DB permissions cache
+    operable = _get_operable_market_keys()
+    if operable:
+        market_lines = "\n".join(
+            f"    {k} — {_MARKET_LABELS.get(k, k)} "
+            f"(auto: {_MARKET_SCHEDULE.get(k, '?')})"
+            for k in operable
+        )
+        market_section = (
+            "📋 Mercados operables en esta cuenta:\n"
+            f"{market_lines}\n\n"
+        )
+    else:
+        market_section = ""
+
     await update.message.reply_text(
         "Comandos disponibles:\n\n"
         "📊 Informacion:\n"
@@ -489,7 +504,12 @@ async def cmd_ayuda(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "  /historial — ultimas 5 operaciones\n"
         "  /senales — senales pendientes\n"
         "  /simbolos — universo de trading aprobado\n"
-        "  /mercados — estado de mercados por asset class\n\n"
+        "  /mercados — permisos de mercado de la cuenta\n\n"
+        "📊 Reportes:\n"
+        "  /reporte — informe pre-mercado del proximo mercado a abrir\n"
+        "  /reporte MARKET — informe de un mercado especifico\n"
+        f"      Mercados: {', '.join(operable) if operable else 'STK_US FUT_US CASH_FX CRYPTO'}\n\n"
+        f"{market_section}"
         "⚙️ Control:\n"
         "  /pausar — detener el scanner\n"
         "  /reanudar — reactivar el scanner\n"
@@ -567,10 +587,21 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Build response message
     score_str = f"{result.score.total:.0f}/100" if result.score else "N/A"
     rec_emoji_map = {
-        "PRIORITY": "\U0001f7e2", "PROPOSE": "\U0001f535", "WATCHLIST": "\U0001f7e1",
-        "REJECTED": "\U0001f534", "BUY": "\U0001f7e2", "SELL": "\U0001f7e0", "IGNORE": "⚪",
+        "PRIORITY": "🟢", "PROPOSE": "🔵", "WATCHLIST": "🟡",
+        "REJECTED": "🔴", "BUY": "🟢", "SELL": "🔴", "IGNORE": "⚪",
     }
     rec_emoji = rec_emoji_map.get(result.recommendation, "⚪")
+
+    direction_map = {
+        "BUY": "📈 Dirección: COMPRA",
+        "PRIORITY": "📈 Dirección: COMPRA",
+        "SELL": "📉 Dirección: VENTA",
+        "PROPOSE": "📊 Dirección: POSIBLE ENTRADA",
+        "WATCHLIST": "👀 En vigilancia",
+        "REJECTED": "🚫 No operar",
+        "IGNORE": "⚪ Sin señal",
+    }
+    direction_line = direction_map.get(result.recommendation, "")
 
     # Dimension breakdown for transparency
     dim_lines = []
@@ -588,6 +619,10 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     msg_parts = [
         f"{rec_emoji} <b>{symbol}</b> — Score: {score_str} [{result.recommendation}]",
+    ]
+    if direction_line:
+        msg_parts.append(direction_line)
+    msg_parts += [
         f"Confidence: {result.llm_confidence:.0%}",
         "",
     ]
@@ -613,14 +648,18 @@ async def cmd_analizar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         msg_parts.append(f"❌ Error en análisis: {result.failed_at_step or 'unknown'}")
         msg_parts.append("Reintenta con /analizar o revisa /diagnostico")
 
-    if not result.in_universe and result.recommendation in ("PROPOSE", "PRIORITY"):
+    if result.recommendation == "SELL" and result.in_universe:
         msg_parts.append("")
-        msg_parts.append("\U0001f4a1 Add to universe?")
+        msg_parts.append("📉 Señal de salida. Considera cerrar posición:")
+        msg_parts.append(f"<code>/vender {symbol}</code>")
+    elif not result.in_universe and result.recommendation in ("PROPOSE", "PRIORITY"):
+        msg_parts.append("")
+        msg_parts.append("💡 ¿Agregar al universo?")
         msg_parts.append(f"<code>/proponer {symbol} score_{score_str}_favorable</code>")
     elif result.in_universe and result.recommendation in ("BUY", "PRIORITY"):
         msg_parts.append("")
-        msg_parts.append("\U0001f4c8 Execute? Use:")
-        msg_parts.append("<code>/si</code> to place order")
+        msg_parts.append("📈 ¿Ejecutar? Usa:")
+        msg_parts.append("<code>/si</code> para colocar orden")
 
     final_text = "\n".join(msg_parts)
     await update.message.reply_text(final_text, parse_mode="HTML")
@@ -759,6 +798,209 @@ async def cmd_mercados(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines.append("Usa /mercados refresh para forzar actualizacion.")
     await update.message.reply_text("\n".join(lines))
 
+# Market key → human label (same as in market_permissions _PROBE_CONTRACTS)
+_MARKET_LABELS = {
+    "STK_US": "Acciones US",
+    "FUT_US": "Futuros US",
+    "CASH_FX": "Forex",
+    "CRYPTO": "Crypto",
+    "OPT_US": "Options US",
+    "STK_EU": "Acciones Europa",
+}
+
+# Maps market_key to the cron schedule description for user info
+_MARKET_SCHEDULE = {
+    "STK_US":  "09:15 ET lun-vie",
+    "FUT_US":  "17:45 ET dom-jue",
+    "CASH_FX": "16:45 ET dom-jue",
+    "CRYPTO":  "23:45 UTC diario",
+}
+
+
+def _get_operable_market_keys() -> list[str]:
+    """Return market_keys the account can currently operate, from DB permissions cache."""
+    try:
+        from app.infrastructure.db.compat import get_market_permissions
+        perms = get_market_permissions()
+        available_keys = {p["key"] for p in perms if p.get("available")}
+        # Return only keys we have a schedule for (i.e. we actually trade)
+        return [k for k in _MARKET_SCHEDULE if k in available_keys]
+    except Exception:
+        return list(_MARKET_SCHEDULE.keys())
+
+
+@_only_owner
+async def cmd_reporte(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    /reporte [MARKET_KEY]
+    Genera el informe pre-mercado del mercado indicado (o el más próximo a abrir)
+    de forma asíncrona. El bot confirma el inicio y envía el informe al terminar.
+    """
+    from app.container import get_container
+
+    operable = _get_operable_market_keys()
+
+    # Determine which market to report
+    if ctx.args:
+        market_key = ctx.args[0].upper()
+        if market_key not in _MARKET_SCHEDULE:
+            labels = "\n".join(
+                f"  {k} — {_MARKET_LABELS.get(k, k)}" for k in operable
+            )
+            await update.message.reply_text(
+                f"Mercado '{market_key}' no reconocido.\n\nMercados disponibles:\n{labels}"
+            )
+            return
+    else:
+        # Auto-select: pick the market whose pre-open time is soonest / most recent
+        import datetime as _dt
+        import pytz
+        now_et = _dt.datetime.now(pytz.timezone("America/New_York"))
+        now_utc = _dt.datetime.now(pytz.utc)
+        weekday = now_et.weekday()  # 0=Mon … 6=Sun
+
+        # Simple heuristic: if it's a weekday during/after US market hours → STK_US
+        # otherwise pick the most recently scheduled market
+        if weekday < 5 and now_et.hour >= 9:
+            market_key = "STK_US"
+        elif weekday < 4 and now_et.hour >= 17:
+            market_key = "FUT_US"
+        else:
+            market_key = "STK_US"
+
+        if market_key not in operable and operable:
+            market_key = operable[0]
+
+    label = _MARKET_LABELS.get(market_key, market_key)
+    schedule_hint = _MARKET_SCHEDULE.get(market_key, "")
+    await update.message.reply_text(
+        f"⏳ Generando informe pre-mercado <b>{label}</b>...\n"
+        f"(Schedule automático: {schedule_hint})\n"
+        f"Te aviso cuando esté listo.",
+        parse_mode="HTML",
+    )
+
+    loop = asyncio.get_event_loop()
+
+    def _run_report():
+        _c = get_container()
+        ib_client = _c.broker if hasattr(_c, "broker") else None
+
+        from app.reports.generator import generate_pre_market_report
+
+        # Import the builder — it lives inside setup_scheduler closure so we
+        # replicate it here using the same public DB functions.
+        from app.infrastructure.db.compat import (
+            get_open_trades, get_scanner_results, get_approved_symbols_with_meta,
+        )
+
+        seen: set = set()
+        result: list = []
+
+        # Layer 1 — open positions
+        try:
+            for t in get_open_trades():
+                if t.symbol in seen:
+                    continue
+                seen.add(t.symbol)
+                result.append({
+                    "symbol": t.symbol, "score": None,
+                    "recommendation": "POSICIÓN ABIERTA",
+                    "narrative": (
+                        f"Posición abierta: {t.action} {t.quantity} acc "
+                        f"@ ${t.entry_price:.2f}."
+                    ),
+                    "rsi": None, "volume_ratio": None,
+                    "weekly_trend": "NEUTRAL", "layer": "open_position",
+                })
+        except Exception:
+            pass
+
+        if ib_client:
+            try:
+                for pos in ib_client.ib.positions():
+                    if pos.position == 0 or pos.contract.symbol in seen:
+                        continue
+                    seen.add(pos.contract.symbol)
+                    result.append({
+                        "symbol": pos.contract.symbol, "score": None,
+                        "recommendation": "POSICIÓN ABIERTA",
+                        "narrative": f"Posición IB: {pos.position:.0f} acc @ ${pos.avgCost:.2f}.",
+                        "rsi": None, "volume_ratio": None,
+                        "weekly_trend": "NEUTRAL", "layer": "open_position",
+                    })
+            except Exception:
+                pass
+
+        # Layer 2 — market movers
+        for scan_type in ("most_active", "gainers", "losers"):
+            if len(result) >= 10:
+                break
+            try:
+                for row in get_scanner_results(scan_type):
+                    if len(result) >= 10:
+                        break
+                    sym = row.get("symbol", "")
+                    if not sym or sym in seen:
+                        continue
+                    change = row.get("change_pct") or 0.0
+                    vr = row.get("volume_ratio") or 1.0
+                    seen.add(sym)
+                    result.append({
+                        "symbol": sym, "score": None,
+                        "recommendation": "WATCHLIST",
+                        "narrative": (
+                            f"Mover del mercado ({scan_type}): {change:+.1f}% hoy, "
+                            f"vol {vr:.1f}x."
+                        ),
+                        "rsi": None, "volume_ratio": vr,
+                        "weekly_trend": "BULLISH" if change >= 0 else "BEARISH",
+                        "layer": "market_mover",
+                    })
+            except Exception:
+                pass
+
+        # Layer 3 — universe fill
+        if len(result) < 10:
+            try:
+                universe = [
+                    m for m in get_approved_symbols_with_meta()
+                    if m.get("market_key") == market_key and m["symbol"] not in seen
+                ]
+                for meta in universe[:10 - len(result)]:
+                    seen.add(meta["symbol"])
+                    result.append({
+                        "symbol": meta["symbol"], "score": None,
+                        "recommendation": "UNIVERSO",
+                        "narrative": f"Símbolo del universo ({market_key}). Sin señal activa reciente.",
+                        "rsi": None, "volume_ratio": None,
+                        "weekly_trend": "NEUTRAL", "layer": "universe",
+                    })
+            except Exception:
+                pass
+
+        return generate_pre_market_report(result, ib_client, market_key=market_key)
+
+    try:
+        report_id = await loop.run_in_executor(None, _run_report)
+        if report_id:
+            try:
+                from app.config.settings import API_BASE
+                report_url = API_BASE.replace("127.0.0.1", "aiutox-pi.tail2a2cda.ts.net")
+                await update.message.reply_text(
+                    f"📊 Reporte <b>{label}</b> listo\n"
+                    f"→ {report_url}/reports/{report_id}",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                await update.message.reply_text(f"📊 Reporte {label} listo (id={report_id})")
+        else:
+            await update.message.reply_text(f"⚠️ No se pudo generar el reporte {label}. Revisa /diagnostico.")
+    except Exception as e:
+        logger.error(f"cmd_reporte error: {e}")
+        await update.message.reply_text(f"❌ Error generando reporte: {e}")
+
+
 def start_bot(scheduler):
     """Arranca el bot en un nuevo event loop en thread separado.
     Compatible con Python 3.13 y python-telegram-bot 21.x.
@@ -786,6 +1028,7 @@ def start_bot(scheduler):
     application.add_handler(CommandHandler("analizar", cmd_analizar))
     application.add_handler(CommandHandler("proponer", cmd_proponer))
     application.add_handler(CommandHandler("mercados", cmd_mercados))
+    application.add_handler(CommandHandler("reporte", cmd_reporte))
     application.add_handler(CommandHandler("backtest", cmd_backtest))
     application.add_handler(CommandHandler("notificaciones", cmd_notificaciones))
     application.add_handler(CommandHandler("silencio", cmd_silencio))

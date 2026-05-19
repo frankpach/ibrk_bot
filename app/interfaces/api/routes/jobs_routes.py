@@ -41,13 +41,17 @@ def _run_llm_analysis(symbol: str) -> dict:
     from app.analysis.pipeline import AnalysisPipeline, AnalysisContext
     from app.llm.agent import get_data_layer
     from app.container import get_container
-    data_layer = get_data_layer()
-    context = AnalysisContext(mode="on_demand")
-    _c = get_container()
-    pipeline = AnalysisPipeline(symbol.upper(), data_layer, context, notify_fn=None,
-                                broker=_c.broker, event_bus=_c.event_bus)
-    result = pipeline.run()
-    return result.to_dict()
+    try:
+        data_layer = get_data_layer()
+        context = AnalysisContext(mode="on_demand")
+        _c = get_container()
+        pipeline = AnalysisPipeline(symbol.upper(), data_layer, context, notify_fn=None,
+                                    broker=_c.broker, event_bus=_c.event_bus)
+        result = pipeline.run()
+        return result.to_dict()
+    except Exception as e:
+        logger.exception(f"LLM analysis failed for {symbol}")
+        raise
 
 
 def _run_backtest(symbol: str, days: int) -> dict:

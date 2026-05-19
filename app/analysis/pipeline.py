@@ -255,11 +255,18 @@ class AnalysisPipeline:
                 "earnings_in_days": self._result.hard_rules.earnings_in_days,
             }
 
+            context_hint = (
+                "The symbol IS currently in the portfolio — evaluate if it should be SOLD."
+                if self._result.in_universe else
+                "The symbol is NOT in the portfolio — evaluate if it's worth BUYING."
+            )
+
             prompt = (
                 f"You are a swing trading analyst. Analyze this symbol and provide interpretation.\n\n"
                 f"SYMBOL: {self.symbol}\n"
                 f"CATEGORY: {category}\n"
-                f"STRATEGY: {strategy}\n\n"
+                f"STRATEGY: {strategy}\n"
+                f"CONTEXT: {context_hint}\n\n"
                 f"QUANT_SCORE: {score.total:.1f}/100 [{score.recommendation}]\n"
                 f"Dimensions: momentum={score.momentum:.2f} trend={score.trend:.2f} "
                 f"volume={score.volume:.2f} volatility={score.volatility:.2f} "

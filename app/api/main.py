@@ -912,14 +912,18 @@ def candidate_analysis_endpoint(symbol: str):
     """Queue an LLM analysis job. Returns immediately with job_id."""
     from app.application.services.job_runner import get_global_runner
     from app.interfaces.api.routes.jobs_routes import _run_llm_analysis
-    runner = get_global_runner()
-    job_id = runner.submit(
-        job_type="llm-analysis",
-        fn=_run_llm_analysis,
-        timeout_seconds=60,
-        symbol=symbol.upper(),
-    )
-    return {"job_id": job_id}
+    try:
+        runner = get_global_runner()
+        job_id = runner.submit(
+            job_type="llm-analysis",
+            fn=_run_llm_analysis,
+            timeout_seconds=60,
+            symbol=symbol.upper(),
+        )
+        return {"job_id": job_id}
+    except Exception as e:
+        logger.exception(f"Failed to queue LLM analysis for {symbol}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue analysis: {str(e)}")
 
 
 @app.get("/analysis/indicator/{symbol}/{indicator_name}")

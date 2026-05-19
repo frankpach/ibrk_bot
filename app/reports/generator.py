@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 
-def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None:
+def generate_pre_market_report(symbols_data: list, ib_client=None, market_key: str = "STK_US") -> int | None:
     """
     Generate a pre-market analysis report for the selected symbols.
-    symbols_data: list of dicts with symbol analysis results
+    symbols_data: list of dicts with symbol analysis results (built by _build_report_symbols_data)
     Returns the report id (for Telegram link), or None on failure.
     """
     try:
@@ -30,8 +30,20 @@ def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None
         sectors = get_scanner_results("sector")
 
         # Build markdown report
+        market_labels = {
+            "STK_US": "Acciones US", "FUT_US": "Futuros US",
+            "CASH_FX": "Forex", "CRYPTO": "Crypto",
+        }
+        market_label = market_labels.get(market_key, market_key)
+
+        layer_labels = {
+            "open_position": "📌 Posición Abierta",
+            "market_mover": "📈 Market Mover",
+            "universe": "🔵 Universo",
+        }
+
         lines = [
-            f"# Reporte Pre-Mercado — {today}",
+            f"# Reporte Pre-Mercado — {market_label} — {today}",
             f"*Generado: {now_str}*",
             "",
             "---",
@@ -83,16 +95,19 @@ def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None
             rsi = item.get("rsi")
             vol = item.get("volume_ratio")
             weekly = item.get("weekly_trend", "NEUTRAL")
+            layer = item.get("layer", "")
 
             rec_emoji = {
                 "BUY": "COMPRA", "SELL": "VENTA", "WATCHLIST": "VIGILA",
-                "PROPOSE": "PROPONE", "REJECTED": "RECHAZADO", "IGNORE": "IGNORAR"
+                "PROPOSE": "PROPONE", "REJECTED": "RECHAZADO", "IGNORE": "IGNORAR",
+                "POSICIÓN ABIERTA": "ABIERTA", "UNIVERSO": "UNIVERSO",
             }.get(rec, rec)
 
             score_str = f"{score:.1f}/100" if score is not None else "N/A"
+            layer_tag = layer_labels.get(layer, "")
 
             lines += [
-                f"### {symbol} — {rec_emoji}",
+                f"### {symbol} — {rec_emoji} {layer_tag}",
                 f"**Score:** {score_str} | **Trend:** {weekly}",
             ]
             if rsi is not None:
@@ -129,7 +144,7 @@ def generate_pre_market_report(symbols_data: list, ib_client=None) -> int | None
             pass
 
         content_md = "\n".join(l for l in lines if l is not None)
-        title = f"Pre-Mercado {today} — {len(symbols_data)} simbolos"
+        title = f"Pre-Mercado {market_label} {today} — {len(symbols_data)} simbolos"
         report_id = save_report("pre_market", today, title, content_md)
         logger.info(f"Pre-market report saved: id={report_id}")
         return report_id

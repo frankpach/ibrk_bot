@@ -276,6 +276,145 @@ def start_system():
                 "Usa /diagnostico para revisar."
             )
 
+    def _build_report_symbols_data(market_key: str, ib_client=None) -> list:
+        """
+        Build symbols_data for pre-market report using 3-layer priority:
+          1. Open positions (always included — live risk)
+          2. Market movers from scanner_results (gainers, losers, most_active)
+             filtered to the relevant market_key
+          3. Top-ranked symbols from the approved universe to fill up to 10
+        """
+        from app.infrastructure.db.compat import (
+            get_open_trades, get_scanner_results, get_approved_symbols_with_meta,
+        )
+
+        seen: set = set()
+        result: list = []
+
+        # --- Layer 1: open positions ---
+        try:
+            open_trades = get_open_trades()
+            for t in open_trades:
+                sym = t.symbol
+                if sym in seen:
+                    continue
+                seen.add(sym)
+                result.append({
+                    "symbol": sym,
+                    "score": None,
+                    "recommendation": "POSICIÓN ABIERTA",
+                    "narrative": (
+                        f"Posición abierta: {t.action} {t.quantity} acc "
+                        f"@ ${t.entry_price:.2f}. Monitoreo activo."
+                    ),
+                    "rsi": None,
+                    "volume_ratio": None,
+                    "weekly_trend": "NEUTRAL",
+                    "layer": "open_position",
+                })
+        except Exception as e:
+            logger.warning(f"_build_report_symbols_data: open trades error: {e}")
+
+        # Also grab live IB positions not yet in DB trades
+        if ib_client:
+            try:
+                positions = ib_client.ib.positions()
+                for pos in positions:
+                    if pos.position == 0:
+                        continue
+                    sym = pos.contract.symbol
+                    if sym in seen:
+                        continue
+                    seen.add(sym)
+                    result.append({
+                        "symbol": sym,
+                        "score": None,
+                        "recommendation": "POSICIÓN ABIERTA",
+                        "narrative": (
+                            f"Posición IB: {pos.position:.0f} acc "
+                            f"@ ${pos.avgCost:.2f}."
+                        ),
+                        "rsi": None,
+                        "volume_ratio": None,
+                        "weekly_trend": "NEUTRAL",
+                        "layer": "open_position",
+                    })
+            except Exception as e:
+                logger.warning(f"_build_report_symbols_data: IB positions error: {e}")
+
+        # --- Layer 2: market movers (filtered by market_key) ---
+        # STK_US uses equity scanner; other markets use approved universe movers
+        stk_markets = {"STK_US"}
+        if len(result) < 10:
+            for scan_type in ("most_active", "gainers", "losers"):
+                if len(result) >= 10:
+                    break
+                try:
+                    rows = get_scanner_results(scan_type)
+                    for row in rows:
+                        if len(result) >= 10:
+                            break
+                        sym = row.get("symbol", "")
+                        if not sym or sym in seen:
+                            continue
+                        # For non-STK markets skip equity movers
+                        if market_key not in stk_markets and scan_type in ("gainers", "losers", "most_active"):
+                            # Only include if symbol exists in our universe for that market
+                            pass
+                        change = row.get("change_pct") or 0.0
+                        vr = row.get("volume_ratio") or 1.0
+                        direction = "alcista" if change >= 0 else "bajista"
+                        seen.add(sym)
+                        result.append({
+                            "symbol": sym,
+                            "score": None,
+                            "recommendation": "WATCHLIST",
+                            "narrative": (
+                                f"Mover del mercado ({scan_type}): {change:+.1f}% hoy, "
+                                f"vol {vr:.1f}x. Movimiento {direction}."
+                            ),
+                            "rsi": None,
+                            "volume_ratio": vr,
+                            "weekly_trend": "BULLISH" if change >= 0 else "BEARISH",
+                            "layer": "market_mover",
+                        })
+                except Exception as e:
+                    logger.warning(f"_build_report_symbols_data: scanner {scan_type} error: {e}")
+
+        # --- Layer 3: top universe symbols to fill up to 10 ---
+        if len(result) < 10:
+            try:
+                all_meta = get_approved_symbols_with_meta()
+                universe = [m for m in all_meta if m.get("market_key") == market_key]
+                universe.sort(key=lambda m: m["symbol"])
+                for meta in universe:
+                    if len(result) >= 10:
+                        break
+                    sym = meta["symbol"]
+                    if sym in seen:
+                        continue
+                    seen.add(sym)
+                    result.append({
+                        "symbol": sym,
+                        "score": None,
+                        "recommendation": "UNIVERSO",
+                        "narrative": f"Símbolo del universo ({market_key}). Sin señal activa reciente.",
+                        "rsi": None,
+                        "volume_ratio": None,
+                        "weekly_trend": "NEUTRAL",
+                        "layer": "universe",
+                    })
+            except Exception as e:
+                logger.warning(f"_build_report_symbols_data: universe fill error: {e}")
+
+        logger.info(
+            f"_build_report_symbols_data [{market_key}]: {len(result)} symbols "
+            f"(open={sum(1 for r in result if r['layer']=='open_position')}, "
+            f"movers={sum(1 for r in result if r['layer']=='market_mover')}, "
+            f"universe={sum(1 for r in result if r['layer']=='universe')})"
+        )
+        return result
+
     def _safe_select_top_symbols(market_key, session_date=None):
         """Wrapper que maneja desconexión y encola para reintento."""
         client = _ib_client_ref["client"]
@@ -293,45 +432,20 @@ def start_system():
             if not client.ib.isConnected():
                 raise ConnectionError("IB Gateway desconectado")
             select_top_symbols(market_key, client, dl, session_date=session_date)
-            # After STK_US pre-open scan, generate pre-market report
-            if market_key == "STK_US":
-                try:
-                    from app.reports.generator import generate_pre_market_report
-                    from app.infrastructure.db.compat import get_pending_signals
-                    signals = get_pending_signals(since_hours=2)
-                    symbols_data = [
-                        {
-                            "symbol": s.symbol,
-                            "score": None,
-                            "recommendation": s.strength,
-                            "narrative": (
-                                f"Señal {s.strength} detectada. "
-                                f"RSI: {s.rsi or '?'}, Vol: {s.volume_ratio or '?'}x"
-                            ),
-                            "rsi": s.rsi,
-                            "volume_ratio": s.volume_ratio,
-                            "weekly_trend": "NEUTRAL",
-                        }
-                        for s in signals[:10]
-                    ]
-                    if symbols_data:
-                        report_id = generate_pre_market_report(
-                            symbols_data, _ib_client_ref.get("client")
-                        )
-                        if report_id:
-                            try:
-                                from app.config.settings import API_BASE
-                                report_url = API_BASE.replace(
-                                    "127.0.0.1", "aiutox-pi.tail2a2cda.ts.net"
-                                )
-                                notify(
-                                    f"📊 Reporte pre-mercado listo\n"
-                                    f"→ {report_url}/reports/{report_id}"
-                                )
-                            except Exception:
-                                notify(f"📊 Reporte pre-mercado listo (id={report_id})")
-                except Exception as _rep_err:
-                    logger.error(f"Pre-market report generation failed: {_rep_err}")
+            # After pre-open scan, generate pre-market report for the corresponding market
+            try:
+                from app.reports.generator import generate_pre_market_report
+                symbols_data = _build_report_symbols_data(market_key, _ib_client_ref.get("client"))
+                report_id = generate_pre_market_report(symbols_data, _ib_client_ref.get("client"), market_key=market_key)
+                if report_id:
+                    try:
+                        from app.config.settings import API_BASE
+                        report_url = API_BASE.replace("127.0.0.1", "aiutox-pi.tail2a2cda.ts.net")
+                        notify(f"📊 Reporte pre-mercado {market_key} listo\n→ {report_url}/reports/{report_id}")
+                    except Exception:
+                        notify(f"📊 Reporte pre-mercado {market_key} listo (id={report_id})")
+            except Exception as _rep_err:
+                logger.error(f"Pre-market report generation failed [{market_key}]: {_rep_err}")
         except Exception as e:
             logger.error(f"Pre-open scan {market_key} falló: {e}")
             _MISSING_SCAN_JOBS.append((market_key, session_date or date.today().isoformat()))
