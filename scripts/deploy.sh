@@ -61,18 +61,49 @@ if [ "$MIGRATE" = true ]; then
   ssh "$REMOTE" "cd $REMOTE_DIR && $VENV/bin/alembic upgrade head"
 fi
 
-# 5. Reiniciar servicio
-echo "--- Reiniciando servicio $SERVICE..."
-ssh "$REMOTE" "sudo systemctl restart $SERVICE"
+# 5. Instalar/actualizar el unit file desde el repo
+echo "--- Instalando unit file $SERVICE..."
+ssh "$REMOTE" "
+  sudo cp $REMOTE_DIR/systemd/$SERVICE /etc/systemd/system/$SERVICE
+  sudo systemctl daemon-reload
+"
 
-# 6. Esperar y verificar
+# 6. Parar limpiamente y matar huérfanos antes de reiniciar
+echo "--- Deteniendo servicio y limpiando procesos huérfanos..."
+ssh "$REMOTE" "
+  sudo systemctl stop $SERVICE 2>/dev/null || true
+  sleep 3
+  # Matar cualquier proceso python de ibkr-bot que haya quedado huérfano
+  PIDS=\$(pgrep -f '$REMOTE_DIR/run.py' 2>/dev/null || true)
+  if [ -n \"\$PIDS\" ]; then
+    echo \"  Matando huérfanos: \$PIDS\"
+    sudo kill -9 \$PIDS 2>/dev/null || true
+    sleep 2
+  fi
+  # Verificar que el puerto quedó libre
+  if sudo ss -tlnp | grep -q ':8088'; then
+    echo '  WARN: puerto 8088 aún ocupado, forzando...'
+    sudo fuser -k 8088/tcp 2>/dev/null || true
+    sleep 2
+  fi
+  echo '  Puerto 8088 libre: OK'
+"
+
+# 7. Reiniciar servicio
+echo "--- Iniciando servicio $SERVICE..."
+ssh "$REMOTE" "sudo systemctl start $SERVICE"
+
+# 8. Esperar y verificar
 echo "--- Esperando que el servicio levante..."
 ssh "$REMOTE" "
   for i in \$(seq 1 24); do
     state=\$(systemctl is-active $SERVICE)
     echo \"  [\$i] \$state\"
     if [ \"\$state\" = 'active' ]; then break; fi
-    if [ \"\$state\" = 'failed' ]; then break; fi
+    if [ \"\$state\" = 'failed' ]; then
+      sudo journalctl -u $SERVICE -n 20 --no-pager
+      exit 1
+    fi
     sleep 5
   done
   sudo systemctl status $SERVICE --no-pager
