@@ -70,23 +70,26 @@ ssh "$REMOTE" "
 
 # 6. Parar limpiamente y matar huérfanos antes de reiniciar
 echo "--- Deteniendo servicio y limpiando procesos huérfanos..."
+ssh "$REMOTE" "sudo systemctl stop $SERVICE 2>/dev/null || true"
+sleep 4
+
+# Liberar puerto 8088 si quedó ocupado por algún huérfano.
+# fuser -k actúa sobre el socket, no sobre el PID del shell SSH — seguro.
 ssh "$REMOTE" "
-  sudo systemctl stop $SERVICE 2>/dev/null || true
-  sleep 3
-  # Matar cualquier proceso python de ibkr-bot que haya quedado huérfano
-  PIDS=\$(pgrep -f '$REMOTE_DIR/run.py' 2>/dev/null || true)
-  if [ -n \"\$PIDS\" ]; then
-    echo \"  Matando huérfanos: \$PIDS\"
-    sudo kill -9 \$PIDS 2>/dev/null || true
-    sleep 2
-  fi
-  # Verificar que el puerto quedó libre
   if sudo ss -tlnp | grep -q ':8088'; then
-    echo '  WARN: puerto 8088 aún ocupado, forzando...'
+    echo '  Huérfano en puerto 8088 — liberando...'
     sudo fuser -k 8088/tcp 2>/dev/null || true
     sleep 2
   fi
-  echo '  Puerto 8088 libre: OK'
+  # Doble check: cualquier run.py que haya sobrevivido (excluir PID de este shell)
+  SSH_PID=\$\$
+  PIDS=\$(pgrep -f '$REMOTE_DIR/run.py' 2>/dev/null | grep -vxF \"\$SSH_PID\" || true)
+  if [ -n \"\$PIDS\" ]; then
+    echo \"  Huérfanos adicionales: \$PIDS\"
+    echo \"\$PIDS\" | xargs -r sudo kill -9 2>/dev/null || true
+    sleep 2
+  fi
+  sudo ss -tlnp | grep ':8088' && echo '  WARN: puerto 8088 aún ocupado' || echo '  Puerto 8088 libre: OK'
 "
 
 # 7. Reiniciar servicio
