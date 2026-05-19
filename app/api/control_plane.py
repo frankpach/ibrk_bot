@@ -785,6 +785,156 @@ def render_control_html() -> str:
       );
     }
 
+    /* ── Markets Panel ── */
+    function MarketsPanel() {
+      const [markets, setMarkets] = useState([]);
+      const [loading, setLoading] = useState({});
+      const [refreshing, setRefreshing] = useState(false);
+      const [permAge, setPermAge] = useState(null);
+
+      function load() {
+        setRefreshing(true);
+        fetch('/control/markets')
+          .then(r=>r.json())
+          .then(d=>{
+            setMarkets(d.markets||[]);
+            setRefreshing(false);
+          })
+          .catch(()=>setRefreshing(false));
+      }
+
+      useEffect(()=>{ load(); }, []);
+
+      async function trigger(jobId) {
+        setLoading(prev=>({...prev,[jobId]:true}));
+        try {
+          const r = await fetch(`/control/jobs/${jobId}/trigger`, {
+            method:'POST',
+            headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}
+          });
+          if (r.ok) { setTimeout(load, 1200); }
+        } catch(e){}
+        setLoading(prev=>({...prev,[jobId]:false}));
+      }
+
+      function fmtNext(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = d - now;
+        if (diff < 0) return 'pendiente';
+        const h = Math.floor(diff/3600000);
+        const m = Math.floor((diff%3600000)/60000);
+        const dateStr = d.toLocaleString('es', {weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+        const countdown = h > 0 ? `en ${h}h ${m}m` : `en ${m}m`;
+        return `${dateStr} (${countdown})`;
+      }
+
+      function fmtLast(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return d.toLocaleString('es', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+      }
+
+      function operableTag(op) {
+        if (op === null) return <span style={{color:'var(--amber)',fontFamily:'"Fira Code",monospace',fontSize:'.7rem'}}>⚠ sin datos IB</span>;
+        if (op) return <span style={{color:'var(--green)',fontFamily:'"Fira Code",monospace',fontSize:'.7rem'}}>✓ operable</span>;
+        return <span style={{color:'var(--red)',fontFamily:'"Fira Code",monospace',fontSize:'.7rem'}}>✗ no autorizado</span>;
+      }
+
+      return (
+        <div>
+          <div className="card">
+            <div className="ch" style={{borderLeftColor:'var(--blue)'}}>
+              <span className="ct">Mercados Pre-Apertura</span>
+              <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+                <span style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--dimmer)'}}>
+                  permisos desde IB cache
+                </span>
+                <button className="btn btn-secondary" style={{fontSize:'.72rem',padding:'3px 8px'}} onClick={load} disabled={refreshing}>
+                  {refreshing ? '⟳' : '↺ Actualizar'}
+                </button>
+              </div>
+            </div>
+            <div className="cb" style={{padding:'0'}}>
+              {markets.length === 0 && (
+                <div style={{padding:'20px',textAlign:'center',color:'var(--dimmer)',fontFamily:'"Fira Code",monospace',fontSize:'.75rem'}}>
+                  // cargando mercados...
+                </div>
+              )}
+              {markets.map(m => {
+                const rowBg = m.operable === false ? 'rgba(244,63,94,.04)' : m.operable === null ? 'rgba(251,191,36,.04)' : 'transparent';
+                return (
+                  <div key={m.job_id} style={{
+                    padding:'14px 16px',borderBottom:'1px solid var(--border)',
+                    background:rowBg, display:'grid',
+                    gridTemplateColumns:'1fr 1fr 1fr auto',
+                    gap:'12px', alignItems:'start',
+                  }}>
+                    {/* Col 1: identidad */}
+                    <div>
+                      <div style={{fontWeight:700,fontSize:'1rem',letterSpacing:'.03em'}}>{m.label}</div>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--dim)',marginTop:'2px'}}>{m.market_key}</div>
+                      <div style={{marginTop:'6px'}}>{operableTag(m.operable)}</div>
+                    </div>
+                    {/* Col 2: horario */}
+                    <div>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.78rem',color:'var(--blue)'}}>
+                        🕐 {m.schedule}
+                      </div>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--dim)',marginTop:'3px'}}>
+                        {m.days}
+                      </div>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',color:'var(--dimmer)',marginTop:'2px'}}>
+                        tz: {m.timezone}
+                      </div>
+                    </div>
+                    {/* Col 3: ejecuciones */}
+                    <div>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--muted)'}}>
+                        <span style={{color:'var(--dimmer)'}}>próxima: </span>{fmtNext(m.next_run)}
+                      </div>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--muted)',marginTop:'4px'}}>
+                        <span style={{color:'var(--dimmer)'}}>última: </span>{fmtLast(m.last_run)}
+                      </div>
+                    </div>
+                    {/* Col 4: acción */}
+                    <div style={{display:'flex',flexDirection:'column',gap:'6px',alignItems:'flex-end'}}>
+                      <button
+                        className="btn"
+                        disabled={loading[m.job_id]}
+                        onClick={()=>trigger(m.job_id)}
+                        title="Ejecutar ahora — genera el informe pre-mercado inmediatamente"
+                        style={{fontSize:'.78rem',padding:'5px 14px',whiteSpace:'nowrap'}}
+                      >
+                        {loading[m.job_id] ? '⟳ ejecutando...' : '▶ Generar ahora'}
+                      </button>
+                      <a
+                        href="/reports"
+                        style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',color:'var(--blue)',textDecoration:'none'}}
+                      >
+                        ver reportes →
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="ch"><span className="ct">Leyenda</span></div>
+            <div className="cb" style={{fontFamily:'"Fira Code",monospace',fontSize:'.68rem',color:'var(--muted)',lineHeight:'1.7'}}>
+              <div><span style={{color:'var(--green)'}}>✓ operable</span> — IB Gateway confirmó que la cuenta tiene permiso para este mercado</div>
+              <div><span style={{color:'var(--red)'}}>✗ no autorizado</span> — IB Gateway no tiene contrato activo para este mercado en esta cuenta</div>
+              <div><span style={{color:'var(--amber)'}}>⚠ sin datos IB</span> — cache de permisos vacía, usa /mercados en Telegram para actualizar</div>
+              <div style={{marginTop:'8px'}}>El botón <b>▶ Generar ahora</b> ejecuta el scan de símbolos y genera el informe pre-mercado inmediatamente, sin esperar al horario automático.</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     /* ── Main ControlPlaneApp ── */
     function ControlPlaneApp() {
       const [section, setSection] = useState('operational');
@@ -817,6 +967,7 @@ def render_control_html() -> str:
       const items = [
         {id:'operational',label:'Operativo'},
         {id:'risk',label:'Riesgo'},
+        {id:'markets',label:'📈 Mercados'},
         {id:'symbols',label:'Símbolos'},
         {id:'infra',label:'Infraestructura'},
         {id:'jobs',label:'Jobs'},
@@ -845,6 +996,7 @@ def render_control_html() -> str:
             <div className="main">
               {section==='operational' && <OperationalPanel status={status} refresh={loadStatus} />}
               {section==='risk' && <RiskPanel />}
+              {section==='markets' && <MarketsPanel />}
               {section==='symbols' && <SymbolsPanel />}
               {section==='infra' && <InfraPanel />}
               {section==='jobs' && <JobsPanel />}

@@ -163,6 +163,103 @@ def control_jobs_list():
     return {"jobs": query.execute()}
 
 
+# Metadata for each pre-open market job: label, schedule description, days, timezone
+_PREOPEN_META = {
+    "preopen_stk_us": {
+        "market_key": "STK_US",
+        "label": "Acciones US",
+        "schedule": "09:15 ET",
+        "days": "Lun – Vie",
+        "timezone": "America/New_York",
+        "ib_key": "STK_US",
+    },
+    "preopen_fut_us": {
+        "market_key": "FUT_US",
+        "label": "Futuros US",
+        "schedule": "17:45 ET",
+        "days": "Dom – Jue",
+        "timezone": "America/New_York",
+        "ib_key": "FUT_US",
+    },
+    "preopen_cash_fx": {
+        "market_key": "CASH_FX",
+        "label": "Forex",
+        "schedule": "16:45 ET",
+        "days": "Dom – Jue",
+        "timezone": "America/New_York",
+        "ib_key": "CASH_FX",
+    },
+    "preopen_crypto": {
+        "market_key": "CRYPTO",
+        "label": "Crypto",
+        "schedule": "23:45 UTC",
+        "days": "Diario",
+        "timezone": "UTC",
+        "ib_key": "CRYPTO",
+    },
+}
+
+
+@router.get("/markets")
+def control_markets_list():
+    """
+    Returns pre-open market jobs enriched with:
+    - Account permission (operable by this account per IB Gateway cache)
+    - Cron schedule description
+    - Next scheduled run
+    - Last run timestamp
+    """
+    from app.infrastructure.db.compat import get_market_permissions, get_control_setting
+
+    scheduler = _get_scheduler()
+
+    # Build permission map from DB cache {key -> available bool}
+    try:
+        perms_rows = get_market_permissions()
+        perm_map = {r["key"]: r.get("available", False) for r in perms_rows}
+    except Exception:
+        perm_map = {}
+
+    markets = []
+    for job_id, meta in _PREOPEN_META.items():
+        # Scheduler info
+        next_run = None
+        if scheduler:
+            job = scheduler.get_job(job_id)
+            if job and job.next_run_time:
+                next_run = job.next_run_time.isoformat()
+
+        # Last run from control_settings
+        last_run = None
+        try:
+            row = get_control_setting(f"job_status_{job_id}")
+            if row:
+                last_run = row.get("updated_at")
+        except Exception:
+            pass
+
+        # Operable: True if IB permissions cache says yes, or cache is empty (unknown)
+        ib_key = meta["ib_key"]
+        if perm_map:
+            operable = perm_map.get(ib_key, False)
+        else:
+            operable = None  # unknown — no cache yet
+
+        markets.append({
+            "job_id": job_id,
+            "market_key": meta["market_key"],
+            "label": meta["label"],
+            "schedule": meta["schedule"],
+            "days": meta["days"],
+            "timezone": meta["timezone"],
+            "operable": operable,
+            "next_run": next_run,
+            "last_run": last_run,
+        })
+
+    return {"markets": markets}
+
+
 @router.post("/jobs/{job_id}/trigger", dependencies=[Depends(require_control_key)])
 def control_job_trigger(job_id: str):
     """Control Key required — manually triggers a scheduled job."""

@@ -668,9 +668,22 @@ def start_system():
     )
 
     # Pre-open symbol selection jobs (usando wrapper seguro)
+    # Funciones nombradas para que APScheduler muestre nombres legibles en /control/jobs
+    def _preopen_stk_us():
+        _safe_select_top_symbols("STK_US")
+
+    def _preopen_fut_us():
+        _safe_select_top_symbols("FUT_US")
+
+    def _preopen_cash_fx():
+        _safe_select_top_symbols("CASH_FX")
+
+    def _preopen_crypto():
+        _safe_select_top_symbols("CRYPTO")
+
     # STK_US: 09:15 ET, Mon-Fri
     scheduler.add_job(
-        lambda: _safe_select_top_symbols("STK_US"),
+        _preopen_stk_us,
         trigger="cron",
         hour=9,
         minute=15,
@@ -682,7 +695,7 @@ def start_system():
 
     # FUT_US: 17:45 ET, Sun-Thu (APScheduler: sun=6, mon=0, thu=3)
     scheduler.add_job(
-        lambda: _safe_select_top_symbols("FUT_US"),
+        _preopen_fut_us,
         trigger="cron",
         hour=17,
         minute=45,
@@ -694,7 +707,7 @@ def start_system():
 
     # CASH_FX: 16:45 ET, Sun-Thu (APScheduler: sun=6, mon=0, thu=3)
     scheduler.add_job(
-        lambda: _safe_select_top_symbols("CASH_FX"),
+        _preopen_cash_fx,
         trigger="cron",
         hour=16,
         minute=45,
@@ -706,7 +719,7 @@ def start_system():
 
     # CRYPTO: 23:45 UTC, daily
     scheduler.add_job(
-        lambda: _safe_select_top_symbols("CRYPTO"),
+        _preopen_crypto,
         trigger="cron",
         hour=23,
         minute=45,
