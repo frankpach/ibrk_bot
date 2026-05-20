@@ -238,6 +238,62 @@ def render_control_html() -> str:
       );
     }
 
+    /* ── KeyPrompt — floats bottom-right when ctrlKey missing ── */
+    function KeyPrompt() {
+      const [visible, setVisible] = useState(false);
+      const [val, setVal] = useState('');
+
+      useEffect(() => {
+        if (!localStorage.getItem('ctrlKey')) setVisible(true);
+      }, []);
+
+      function save() {
+        if (!val.trim()) return;
+        localStorage.setItem('ctrlKey', val.trim());
+        setVisible(false);
+      }
+
+      if (!visible) return (
+        <button
+          onClick={() => setVisible(true)}
+          title="Cambiar Control Key"
+          style={{
+            position:'fixed',bottom:'12px',right:'12px',
+            background:'var(--surface)',border:'1px solid var(--border)',
+            borderRadius:'50%',width:'28px',height:'28px',
+            color:'var(--dimmer)',fontSize:'.8rem',cursor:'pointer',
+            fontFamily:'"Fira Code",monospace',zIndex:90,
+          }}>🔑</button>
+      );
+
+      return (
+        <div style={{
+          position:'fixed',bottom:'12px',right:'12px',
+          background:'var(--surface)',border:'1px solid var(--border)',
+          borderRadius:'8px',padding:'12px 14px',zIndex:90,
+          boxShadow:'0 4px 16px rgba(0,0,0,.5)',minWidth:'240px',
+        }}>
+          <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.7rem',color:'var(--muted)',marginBottom:'8px'}}>
+            Control Key requerida para acciones
+          </div>
+          <div style={{display:'flex',gap:'6px'}}>
+            <input
+              type="password"
+              autoFocus
+              placeholder="X-Control-Key"
+              value={val}
+              onChange={e=>setVal(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&save()}
+              style={{flex:1,padding:'5px 8px',borderRadius:'4px',background:'var(--surface2)',
+                border:'1px solid var(--border)',color:'var(--text)',
+                fontFamily:'"Fira Code",monospace',fontSize:'.78rem'}}
+            />
+            <button className="btn" style={{padding:'5px 10px',fontSize:'.78rem'}} onClick={save}>OK</button>
+          </div>
+        </div>
+      );
+    }
+
     /* ── Toast ── */
     function Toast({ msg, onClose, isError }) {
       useEffect(() => {
@@ -1055,6 +1111,7 @@ def render_control_html() -> str:
       return (
         <div>
           <SystemStatusBar />
+          <KeyPrompt />
           <div className="ctrl-page">
             <div className="sidebar">
               <div style={{padding:'8px 16px 12px',fontFamily:'"Bebas Neue",cursive',fontSize:'1.1rem',letterSpacing:'.06em',color:'var(--text)'}}>
