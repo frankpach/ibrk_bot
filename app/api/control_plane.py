@@ -6,7 +6,17 @@ No build step — React + Tailwind via CDN.
 
 
 def render_control_html() -> str:
-    return r"""<!DOCTYPE html>
+    from app.config.settings import API_CONTROL_KEY, API_ADMIN_KEY
+    _ctrl = (API_CONTROL_KEY or "").replace("\\", "\\\\").replace('"', '\\"')
+    _admin = (API_ADMIN_KEY or "").replace("\\", "\\\\").replace('"', '\\"')
+    _key_bootstrap = f"""
+  <script>
+    (function(){{
+      if ("{_ctrl}") sessionStorage.setItem('ctrlKey', "{_ctrl}");
+      if ("{_admin}") sessionStorage.setItem('adminKey', "{_admin}");
+    }})();
+  </script>"""
+    html = r"""<!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8">
@@ -156,6 +166,7 @@ def render_control_html() -> str:
     }
   </style>
 </head>
+<IBKR_KEY_BOOTSTRAP>
 <body>
   <div id="root"></div>
   <script>
@@ -1146,3 +1157,5 @@ def render_control_html() -> str:
   </script>
 </body>
 </html>"""
+    html = html.replace("<IBKR_KEY_BOOTSTRAP>", _key_bootstrap)
+    return html
