@@ -162,32 +162,33 @@ def control_bootstrap_keys():
     No auth required — only reachable via Tailscale/local network.
     Reads from SecretManager (DB) with fallback to env vars.
     """
-    ctrl = ""
-    admin = ""
+    from app.config.settings import API_CONTROL_KEY, API_ADMIN_KEY
+
+    # Start with env vars (always available if set in .env.secret)
+    ctrl = API_CONTROL_KEY or ""
+    admin = API_ADMIN_KEY or ""
+
+    # If DB has encrypted overrides, prefer those
     try:
         sm = _get_secret_manager()
         if sm:
             from app.infrastructure.db.compat import get_control_setting
-            for db_key, target in [("control_key", "ctrl"), ("admin_key", "admin")]:
+            for db_key, attr in [("control_key", "ctrl"), ("admin_key", "admin")]:
                 row = get_control_setting(db_key)
                 if row and row.get("value"):
                     val = row["value"]
                     if sm.is_encrypted(val):
                         try:
                             val = sm.decrypt(val)
+                            if attr == "ctrl":
+                                ctrl = val
+                            else:
+                                admin = val
                         except Exception:
-                            val = ""
-                    if target == "ctrl":
-                        ctrl = val
-                    else:
-                        admin = val
+                            pass
     except Exception:
         pass
-    # Fallback to env vars if DB has nothing
-    if not ctrl or not admin:
-        from app.config.settings import API_CONTROL_KEY, API_ADMIN_KEY
-        ctrl = ctrl or API_CONTROL_KEY or ""
-        admin = admin or API_ADMIN_KEY or ""
+
     return {"ctrl": ctrl, "admin": admin}
 
 
