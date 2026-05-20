@@ -244,12 +244,12 @@ def render_control_html() -> str:
       const [val, setVal] = useState('');
 
       useEffect(() => {
-        if (!localStorage.getItem('ctrlKey')) setVisible(true);
+        if (!sessionStorage.getItem('ctrlKey')) setVisible(true);
       }, []);
 
       function save() {
         if (!val.trim()) return;
-        localStorage.setItem('ctrlKey', val.trim());
+        sessionStorage.setItem('ctrlKey', val.trim());
         setVisible(false);
       }
 
@@ -343,7 +343,7 @@ def render_control_html() -> str:
         setLoadingPause(true);
         try {
           const ep = status?.paused || status?.is_paused ? '/control/resume' : '/control/pause';
-          const res = await fetch(ep, {method:'POST', headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}});
+          const res = await fetch(ep, {method:'POST', headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||''}});
           if (!res.ok) throw new Error('HTTP ' + res.status);
           setToast({msg: '✓ Estado actualizado', err: false});
           refresh();
@@ -354,7 +354,7 @@ def render_control_html() -> str:
       async function resetCircuit() {
         setLoadingReset(true);
         try {
-          const res = await fetch('/control/circuit-breaker/reset', {method:'POST', headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}});
+          const res = await fetch('/control/circuit-breaker/reset', {method:'POST', headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||''}});
           if (!res.ok) throw new Error('HTTP ' + res.status);
           setToast({msg: '✓ Circuit breaker reset', err: false});
           refresh();
@@ -366,7 +366,7 @@ def render_control_html() -> str:
         try {
           const res = await fetch('/control/mode/live', {
             method:'POST',
-            headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||'','X-Admin-Key':adminKey}
+            headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||'','X-Admin-Key':adminKey}
           });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           setToast({msg: '✓ Modo cambiado a LIVE', err: false});
@@ -449,7 +449,7 @@ def render_control_html() -> str:
         try {
           const res = await fetch(`/control/settings/${key}`, {
             method:'PUT',
-            headers:{'Content-Type':'application/json','X-Control-Key':localStorage.getItem('ctrlKey')||''},
+            headers:{'Content-Type':'application/json','X-Control-Key':sessionStorage.getItem('ctrlKey')||''},
             body: JSON.stringify({value: String(settings[key])})
           });
           const data = await res.json();
@@ -510,7 +510,7 @@ def render_control_html() -> str:
         try {
           const res = await fetch(`/control/settings/${key}`, {
             method:'PUT',
-            headers:{'Content-Type':'application/json','X-Control-Key':localStorage.getItem('ctrlKey')||'','X-Admin-Key':localStorage.getItem('adminKey')||''},
+            headers:{'Content-Type':'application/json','X-Control-Key':sessionStorage.getItem('ctrlKey')||'','X-Admin-Key':sessionStorage.getItem('adminKey')||''},
             body: JSON.stringify({value: String(settings[key]||'')})
           });
           if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -563,7 +563,7 @@ def render_control_html() -> str:
         try {
           const res = await fetch(`/control/settings/${key}`, {
             method:'PUT',
-            headers:{'Content-Type':'application/json','X-Control-Key':localStorage.getItem('ctrlKey')||'','X-Admin-Key':localStorage.getItem('adminKey')||''},
+            headers:{'Content-Type':'application/json','X-Control-Key':sessionStorage.getItem('ctrlKey')||'','X-Admin-Key':sessionStorage.getItem('adminKey')||''},
             body: JSON.stringify({value: String(editing[key]||'')})
           });
           if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -637,7 +637,7 @@ def render_control_html() -> str:
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              'X-Control-Key': localStorage.getItem('ctrlKey') || '',
+              'X-Control-Key': sessionStorage.getItem('ctrlKey') || '',
             },
             body: JSON.stringify({ value: String(settings[key] || '') }),
           });
@@ -699,7 +699,7 @@ def render_control_html() -> str:
         try {
           await fetch(`/control/jobs/${jobId}/trigger`, {
             method:'POST',
-            headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}
+            headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||''}
           });
           load();
         } catch(e) {}
@@ -744,7 +744,7 @@ def render_control_html() -> str:
       const limit = 50;
 
       function load(o) {
-        fetch(`/control/audit?limit=${limit}&offset=${o}`, {headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}})
+        fetch(`/control/audit?limit=${limit}&offset=${o}`, {headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||''}})
           .then(r=>r.json()).then(d=>{setEntries(d.entries||[]);setTotal(d.total||0);}).catch(()=>{});
       }
 
@@ -798,7 +798,7 @@ def render_control_html() -> str:
 
       async function approve(sym) {
         try {
-          await fetch(`/symbols/approve/${sym}`, {method:'POST', headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}});
+          await fetch(`/symbols/approve/${sym}`, {method:'POST', headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||''}});
           fetch('/symbols/proposals').then(r=>r.json()).then(d=>setProposals(d||[])).catch(()=>{});
         } catch(e) {}
       }
@@ -881,7 +881,7 @@ def render_control_html() -> str:
         try {
           const r = await fetch(`/control/jobs/${jobId}/trigger`, {
             method:'POST',
-            headers:{'X-Control-Key':localStorage.getItem('ctrlKey')||''}
+            headers:{'X-Control-Key':sessionStorage.getItem('ctrlKey')||''}
           });
           if (r.ok) { setTimeout(load, 1200); }
         } catch(e){}
@@ -902,7 +902,7 @@ def render_control_html() -> str:
         try {
           const r = await fetch(`/control/markets/${jobId}/schedule`, {
             method:'PUT',
-            headers:{'Content-Type':'application/json','X-Control-Key':localStorage.getItem('ctrlKey')||''},
+            headers:{'Content-Type':'application/json','X-Control-Key':sessionStorage.getItem('ctrlKey')||''},
             body: JSON.stringify({hour: h, minute: m}),
           });
           const data = await r.json();
