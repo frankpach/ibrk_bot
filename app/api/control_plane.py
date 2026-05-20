@@ -6,15 +6,17 @@ No build step — React + Tailwind via CDN.
 
 
 def render_control_html() -> str:
-    from app.config.settings import API_CONTROL_KEY, API_ADMIN_KEY
-    _ctrl = (API_CONTROL_KEY or "").replace("\\", "\\\\").replace('"', '\\"')
-    _admin = (API_ADMIN_KEY or "").replace("\\", "\\\\").replace('"', '\\"')
-    _key_bootstrap = f"""
+    _key_bootstrap = """
   <script>
-    (function(){{
-      if ("{_ctrl}") sessionStorage.setItem('ctrlKey', "{_ctrl}");
-      if ("{_admin}") sessionStorage.setItem('adminKey', "{_admin}");
-    }})();
+    (function(){
+      fetch('/control/bootstrap-keys')
+        .then(r=>r.ok?r.json():null)
+        .then(d=>{
+          if(!d) return;
+          if(d.ctrl) sessionStorage.setItem('ctrlKey', d.ctrl);
+          if(d.admin) sessionStorage.setItem('adminKey', d.admin);
+        }).catch(()=>{});
+    })();
   </script>"""
     html = r"""<!DOCTYPE html>
 <html lang="es" data-theme="dark">

@@ -1,12 +1,17 @@
 # tests/test_ibkr_client.py
+import asyncio
+import threading
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 
 
 @pytest.fixture
 def client():
-    """Return a mocked IBKRClient that never touches the network."""
+    """Return a mocked IBKRClient with its own event loop (safe under pytest-xdist)."""
     from app.ibkr.client import IBKRClient
+
+    loop = asyncio.new_event_loop()
+
     with patch("app.ibkr.client.IB") as MockIB:
         mock_ib = MagicMock()
         mock_ib.isConnected.return_value = True
@@ -21,7 +26,12 @@ def client():
         MockIB.return_value = mock_ib
         c = IBKRClient(client_id=11)
         c.ib = mock_ib
+        c._lock = threading.Lock()
+        # Override _run_sync to use our isolated loop
+        c._run_sync = lambda coro: loop.run_until_complete(coro)
         yield c
+
+    loop.close()
 
 
 def test_get_account_returns_expected_keys(client):
