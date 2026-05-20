@@ -789,15 +789,30 @@ def render_control_html() -> str:
     function MarketsPanel() {
       const [markets, setMarkets] = useState([]);
       const [loading, setLoading] = useState({});
+      const [saving, setSaving] = useState({});
+      const [scheduleEdit, setScheduleEdit] = useState({});  // {job_id: {hour, minute}}
+      const [saveMsg, setSaveMsg] = useState({});            // {job_id: string}
       const [refreshing, setRefreshing] = useState(false);
-      const [permAge, setPermAge] = useState(null);
 
       function load() {
         setRefreshing(true);
         fetch('/control/markets')
           .then(r=>r.json())
           .then(d=>{
-            setMarkets(d.markets||[]);
+            const mks = d.markets||[];
+            setMarkets(mks);
+            // Init schedule edit state from current schedule (e.g. "09:15 ET" -> {hour:9,minute:15})
+            const init = {};
+            mks.forEach(m => {
+              const parts = m.schedule.split(':');
+              if (parts.length >= 2) {
+                const h = parseInt(parts[0], 10);
+                const minPart = parts[1].replace(/[^0-9]/g,'');
+                const min = parseInt(minPart, 10);
+                if (!isNaN(h) && !isNaN(min)) init[m.job_id] = {hour: h, minute: min};
+              }
+            });
+            setScheduleEdit(prev => ({...init, ...prev}));
             setRefreshing(false);
           })
           .catch(()=>setRefreshing(false));
@@ -817,6 +832,36 @@ def render_control_html() -> str:
         setLoading(prev=>({...prev,[jobId]:false}));
       }
 
+      async function saveSchedule(jobId) {
+        const ed = scheduleEdit[jobId];
+        if (!ed) return;
+        const h = parseInt(ed.hour, 10);
+        const m = parseInt(ed.minute, 10);
+        if (isNaN(h)||isNaN(m)||h<0||h>23||m<0||m>59) {
+          setSaveMsg(prev=>({...prev,[jobId]:'⚠ hora 0-23, minuto 0-59'}));
+          return;
+        }
+        setSaving(prev=>({...prev,[jobId]:true}));
+        setSaveMsg(prev=>({...prev,[jobId]:''}));
+        try {
+          const r = await fetch(`/control/markets/${jobId}/schedule`, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json','X-Control-Key':localStorage.getItem('ctrlKey')||''},
+            body: JSON.stringify({hour: h, minute: m}),
+          });
+          const data = await r.json();
+          if (r.ok) {
+            setSaveMsg(prev=>({...prev,[jobId]:`✓ guardado — próxima: ${fmtNext(data.next_run)}`}));
+            setTimeout(load, 600);
+          } else {
+            setSaveMsg(prev=>({...prev,[jobId]:`✗ ${data.detail||'error'}`}));
+          }
+        } catch(e) {
+          setSaveMsg(prev=>({...prev,[jobId]:'✗ error de red'}));
+        }
+        setSaving(prev=>({...prev,[jobId]:false}));
+      }
+
       function fmtNext(iso) {
         if (!iso) return '—';
         const d = new Date(iso);
@@ -832,8 +877,7 @@ def render_control_html() -> str:
 
       function fmtLast(iso) {
         if (!iso) return '—';
-        const d = new Date(iso);
-        return d.toLocaleString('es', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+        return new Date(iso).toLocaleString('es', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
       }
 
       function operableTag(op) {
@@ -864,11 +908,12 @@ def render_control_html() -> str:
               )}
               {markets.map(m => {
                 const rowBg = m.operable === false ? 'rgba(244,63,94,.04)' : m.operable === null ? 'rgba(251,191,36,.04)' : 'transparent';
+                const ed = scheduleEdit[m.job_id] || {hour:'',minute:''};
                 return (
                   <div key={m.job_id} style={{
-                    padding:'14px 16px',borderBottom:'1px solid var(--border)',
+                    padding:'14px 16px', borderBottom:'1px solid var(--border)',
                     background:rowBg, display:'grid',
-                    gridTemplateColumns:'1fr 1fr 1fr auto',
+                    gridTemplateColumns:'1fr 1.4fr 1fr auto',
                     gap:'12px', alignItems:'start',
                   }}>
                     {/* Col 1: identidad */}
@@ -877,18 +922,50 @@ def render_control_html() -> str:
                       <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--dim)',marginTop:'2px'}}>{m.market_key}</div>
                       <div style={{marginTop:'6px'}}>{operableTag(m.operable)}</div>
                     </div>
-                    {/* Col 2: horario */}
+
+                    {/* Col 2: horario actual + editor inline */}
                     <div>
-                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.78rem',color:'var(--blue)'}}>
-                        🕐 {m.schedule}
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.78rem',color:'var(--blue)',marginBottom:'6px'}}>
+                        🕐 {m.schedule} &nbsp;<span style={{color:'var(--dimmer)',fontSize:'.65rem'}}>{m.days}</span>
                       </div>
-                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--dim)',marginTop:'3px'}}>
-                        {m.days}
-                      </div>
-                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',color:'var(--dimmer)',marginTop:'2px'}}>
+                      <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',color:'var(--dimmer)',marginBottom:'8px'}}>
                         tz: {m.timezone}
                       </div>
+                      {/* Inline schedule editor */}
+                      <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'wrap'}}>
+                        <input
+                          type="number" min="0" max="23"
+                          value={ed.hour}
+                          onChange={e=>setScheduleEdit(prev=>({...prev,[m.job_id]:{...ed,hour:e.target.value}}))}
+                          style={{width:'42px',padding:'3px 5px',borderRadius:'4px',background:'var(--surface2)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:'"Fira Code",monospace',fontSize:'.78rem',textAlign:'center'}}
+                          placeholder="HH"
+                        />
+                        <span style={{color:'var(--dim)',fontFamily:'"Fira Code",monospace'}}>:</span>
+                        <input
+                          type="number" min="0" max="59"
+                          value={ed.minute}
+                          onChange={e=>setScheduleEdit(prev=>({...prev,[m.job_id]:{...ed,minute:e.target.value}}))}
+                          style={{width:'42px',padding:'3px 5px',borderRadius:'4px',background:'var(--surface2)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:'"Fira Code",monospace',fontSize:'.78rem',textAlign:'center'}}
+                          placeholder="MM"
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          disabled={saving[m.job_id]}
+                          onClick={()=>saveSchedule(m.job_id)}
+                          style={{fontSize:'.72rem',padding:'3px 8px'}}
+                          title="Guardar nuevo horario (persiste entre reinicios)"
+                        >
+                          {saving[m.job_id] ? '...' : 'Guardar'}
+                        </button>
+                      </div>
+                      {saveMsg[m.job_id] && (
+                        <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',marginTop:'4px',
+                          color: saveMsg[m.job_id].startsWith('✓') ? 'var(--green)' : 'var(--amber)'}}>
+                          {saveMsg[m.job_id]}
+                        </div>
+                      )}
                     </div>
+
                     {/* Col 3: ejecuciones */}
                     <div>
                       <div style={{fontFamily:'"Fira Code",monospace',fontSize:'.65rem',color:'var(--muted)'}}>
@@ -898,6 +975,7 @@ def render_control_html() -> str:
                         <span style={{color:'var(--dimmer)'}}>última: </span>{fmtLast(m.last_run)}
                       </div>
                     </div>
+
                     {/* Col 4: acción */}
                     <div style={{display:'flex',flexDirection:'column',gap:'6px',alignItems:'flex-end'}}>
                       <button
@@ -907,13 +985,10 @@ def render_control_html() -> str:
                         title="Ejecutar ahora — genera el informe pre-mercado inmediatamente"
                         style={{fontSize:'.78rem',padding:'5px 14px',whiteSpace:'nowrap'}}
                       >
-                        {loading[m.job_id] ? '⟳ ejecutando...' : '▶ Generar ahora'}
+                        {loading[m.job_id] ? '⟳...' : '▶ Ahora'}
                       </button>
-                      <a
-                        href="/reports"
-                        style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',color:'var(--blue)',textDecoration:'none'}}
-                      >
-                        ver reportes →
+                      <a href="/reports" style={{fontFamily:'"Fira Code",monospace',fontSize:'.62rem',color:'var(--blue)',textDecoration:'none'}}>
+                        reportes →
                       </a>
                     </div>
                   </div>
@@ -924,11 +999,12 @@ def render_control_html() -> str:
 
           <div className="card">
             <div className="ch"><span className="ct">Leyenda</span></div>
-            <div className="cb" style={{fontFamily:'"Fira Code",monospace',fontSize:'.68rem',color:'var(--muted)',lineHeight:'1.7'}}>
-              <div><span style={{color:'var(--green)'}}>✓ operable</span> — IB Gateway confirmó que la cuenta tiene permiso para este mercado</div>
-              <div><span style={{color:'var(--red)'}}>✗ no autorizado</span> — IB Gateway no tiene contrato activo para este mercado en esta cuenta</div>
-              <div><span style={{color:'var(--amber)'}}>⚠ sin datos IB</span> — cache de permisos vacía, usa /mercados en Telegram para actualizar</div>
-              <div style={{marginTop:'8px'}}>El botón <b>▶ Generar ahora</b> ejecuta el scan de símbolos y genera el informe pre-mercado inmediatamente, sin esperar al horario automático.</div>
+            <div className="cb" style={{fontFamily:'"Fira Code",monospace',fontSize:'.68rem',color:'var(--muted)',lineHeight:'1.9'}}>
+              <div><span style={{color:'var(--green)'}}>✓ operable</span> — IB Gateway confirmó permiso para este mercado en esta cuenta</div>
+              <div><span style={{color:'var(--red)'}}>✗ no autorizado</span> — IB Gateway rechaza contratos de este tipo para esta cuenta</div>
+              <div><span style={{color:'var(--amber)'}}>⚠ sin datos IB</span> — cache vacía; usa <code>/mercados refresh</code> en Telegram para actualizar</div>
+              <div style={{marginTop:'6px'}}><b>Editar horario:</b> cambia HH:MM y pulsa Guardar — se aplica inmediatamente y persiste al reiniciar</div>
+              <div><b>▶ Ahora:</b> ejecuta el scan y genera el informe sin esperar el horario automático</div>
             </div>
           </div>
         </div>

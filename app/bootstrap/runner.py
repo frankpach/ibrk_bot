@@ -681,36 +681,53 @@ def start_system():
     def _preopen_crypto():
         _safe_select_top_symbols("CRYPTO")
 
-    # STK_US: 09:15 ET, Mon-Fri
+    def _preopen_schedule(job_id: str, default_hour: int, default_minute: int) -> tuple[int, int]:
+        """Returns (hour, minute) from control_settings override, or the defaults."""
+        try:
+            from app.infrastructure.db.compat import get_control_setting_value
+            val = get_control_setting_value(f"preopen_schedule_{job_id}", default=None)
+            if val:
+                h, m = map(int, val.split(":"))
+                if 0 <= h <= 23 and 0 <= m <= 59:
+                    logger.info(f"preopen schedule override [{job_id}]: {h:02d}:{m:02d}")
+                    return h, m
+        except Exception as e:
+            logger.warning(f"Could not read preopen_schedule_{job_id}: {e}")
+        return default_hour, default_minute
+
+    # STK_US: 09:15 ET, Mon-Fri (overridable from control_settings)
+    _h, _m = _preopen_schedule("preopen_stk_us", 9, 15)
     scheduler.add_job(
         _preopen_stk_us,
         trigger="cron",
-        hour=9,
-        minute=15,
+        hour=_h,
+        minute=_m,
         day_of_week="mon-fri",
         timezone=MARKET_TZ,
         id="preopen_stk_us",
         replace_existing=True,
     )
 
-    # FUT_US: 17:45 ET, Sun-Thu (APScheduler: sun=6, mon=0, thu=3)
+    # FUT_US: 17:45 ET, Sun-Thu
+    _h, _m = _preopen_schedule("preopen_fut_us", 17, 45)
     scheduler.add_job(
         _preopen_fut_us,
         trigger="cron",
-        hour=17,
-        minute=45,
+        hour=_h,
+        minute=_m,
         day_of_week="0-3,6",
         timezone=MARKET_TZ,
         id="preopen_fut_us",
         replace_existing=True,
     )
 
-    # CASH_FX: 16:45 ET, Sun-Thu (APScheduler: sun=6, mon=0, thu=3)
+    # CASH_FX: 16:45 ET, Sun-Thu
+    _h, _m = _preopen_schedule("preopen_cash_fx", 16, 45)
     scheduler.add_job(
         _preopen_cash_fx,
         trigger="cron",
-        hour=16,
-        minute=45,
+        hour=_h,
+        minute=_m,
         day_of_week="0-3,6",
         timezone=MARKET_TZ,
         id="preopen_cash_fx",
@@ -718,11 +735,12 @@ def start_system():
     )
 
     # CRYPTO: 23:45 UTC, daily
+    _h, _m = _preopen_schedule("preopen_crypto", 23, 45)
     scheduler.add_job(
         _preopen_crypto,
         trigger="cron",
-        hour=23,
-        minute=45,
+        hour=_h,
+        minute=_m,
         timezone="UTC",
         id="preopen_crypto",
         replace_existing=True,

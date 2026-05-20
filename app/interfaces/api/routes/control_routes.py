@@ -260,6 +260,70 @@ def control_markets_list():
     return {"markets": markets}
 
 
+class RescheduleRequest(BaseModel):
+    hour: int    # 0-23
+    minute: int  # 0-59
+
+
+@router.put("/markets/{job_id}/schedule", dependencies=[Depends(require_control_key)])
+def control_market_reschedule(job_id: str, req: RescheduleRequest):
+    """
+    Control Key required — changes the cron hour/minute for a pre-open market job.
+    Takes effect immediately (hot reschedule via APScheduler) and persists in
+    control_settings so the new schedule survives service restarts.
+    """
+    from app.infrastructure.db.compat import update_control_setting_full
+
+    if job_id not in _PREOPEN_META:
+        raise HTTPException(status_code=404, detail=f"Market job '{job_id}' not found")
+    if not (0 <= req.hour <= 23) or not (0 <= req.minute <= 59):
+        raise HTTPException(status_code=422, detail="hour must be 0-23, minute must be 0-59")
+
+    scheduler = _get_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+
+    job = scheduler.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not registered in scheduler")
+
+    meta = _PREOPEN_META[job_id]
+    # Keep existing day_of_week and timezone — only change hour/minute
+    trigger_kwargs = {
+        "trigger": "cron",
+        "hour": req.hour,
+        "minute": req.minute,
+        "timezone": meta["timezone"],
+    }
+    # day_of_week differs per market
+    dow_map = {
+        "preopen_stk_us":  "mon-fri",
+        "preopen_fut_us":  "0-3,6",
+        "preopen_cash_fx": "0-3,6",
+        "preopen_crypto":  "*",
+    }
+    if dow_map.get(job_id, "*") != "*":
+        trigger_kwargs["day_of_week"] = dow_map[job_id]
+
+    job.reschedule(**trigger_kwargs)
+
+    # Persist so runner.py picks it up on restart
+    schedule_str = f"{req.hour:02d}:{req.minute:02d}"
+    update_control_setting_full(
+        key=f"preopen_schedule_{job_id}",
+        value=schedule_str,
+        updated_by="control_key",
+    )
+
+    next_run = job.next_run_time.isoformat() if job.next_run_time else None
+    return {
+        "job_id": job_id,
+        "label": meta["label"],
+        "schedule": f"{req.hour:02d}:{req.minute:02d} {meta['timezone'].split('/')[-1]}",
+        "next_run": next_run,
+    }
+
+
 @router.post("/jobs/{job_id}/trigger", dependencies=[Depends(require_control_key)])
 def control_job_trigger(job_id: str):
     """Control Key required — manually triggers a scheduled job."""
