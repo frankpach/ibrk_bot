@@ -162,11 +162,10 @@ def control_bootstrap_keys():
     No auth required — only reachable via Tailscale/local network.
     Reads from SecretManager (DB) with fallback to env vars.
     """
-    from app.config.settings import API_CONTROL_KEY, API_ADMIN_KEY
-
-    # Start with env vars (always available if set in .env.secret)
-    ctrl = API_CONTROL_KEY or ""
-    admin = API_ADMIN_KEY or ""
+    import os
+    # Read directly from process environment — avoids stale module-level cache
+    ctrl = os.environ.get("API_CONTROL_KEY", "")
+    admin = os.environ.get("API_ADMIN_KEY", "")
 
     # If DB has encrypted overrides, prefer those
     try:
